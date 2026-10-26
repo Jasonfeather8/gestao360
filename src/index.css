@@ -1,0 +1,1024 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  /* Font Family Definitions */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Inter", monospace; /* Ledger density requests using Inter for numerals */
+
+  /* Design Tokens as CSS Variables */
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-primary-container: var(--primary-container);
+  --color-on-primary-container: var(--on-primary-container);
+  --color-secondary: var(--secondary);
+  --color-on-secondary: var(--on-secondary);
+  --color-background: var(--background);
+  --color-on-background: var(--on-background);
+  --color-surface: var(--surface);
+  --color-on-surface: var(--on-surface);
+  --color-on-surface-variant: var(--on-surface-variant);
+  --color-surface-border: var(--surface-border);
+  
+  --color-surface-container-lowest: var(--surface-low-lowest);
+  --color-surface-container-low: var(--surface-low-low);
+  --color-surface-container: var(--surface-low-med);
+  --color-surface-container-high: var(--surface-low-high);
+  --color-surface-container-highest: var(--surface-low-highest);
+
+  /* Semantic Colors */
+  --color-bank-truth-green: #2E7D32;
+  --color-alert-red: #D32F2F;
+  --color-pending-amber: #FFA000;
+  --color-bpi-blue: #1976D2;
+
+  /* Custom Transitions */
+  --animate-slide-in: slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-fade-in: fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-spin-slow: spin 8s linear infinite;
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+:root {
+  /* Light Mode Color Assignments */
+  --primary: #795900;
+  --on-primary: #ffffff;
+  --primary-container: #fbc02d;
+  --on-primary-container: #6c5000;
+  --secondary: #5e5e5e;
+  --on-secondary: #ffffff;
+  
+  --background: #f9f9f9;
+  --on-background: #1a1c1c;
+  
+  --surface: #f9f9f9;
+  --on-surface: #1a1c1c;
+  --on-surface-variant: #4f4633;
+  --surface-border: #E0E0E0;
+
+  --surface-low-lowest: #ffffff;
+  --surface-low-low: #f3f3f3;
+  --surface-low-med: #eeeeee;
+  --surface-low-high: #e8e8e8;
+  --surface-low-highest: #e2e2e2;
+}
+
+.dark {
+  /* Dark Mode has been adjusted to be a beautiful Soft Warm Light theme (High-End Clara aesthetics) */
+  --primary: #795900;
+  --on-primary: #ffffff;
+  --primary-container: #fff9db;
+  --on-primary-container: #795900;
+  --secondary: #5e5e5e;
+  --on-secondary: #ffffff;
+  
+  --background: #faf9f6;
+  --on-background: #1a1c1c;
+  
+  --surface: #ffffff;
+  --on-surface: #1a1c1c;
+  --on-surface-variant: #5e5a4f;
+  --surface-border: #e2e2e2;
+
+  --surface-low-lowest: #ffffff;
+  --surface-low-low: #f5f4ef;
+  --surface-low-med: #eae8df;
+  --surface-low-high: #dfddd2;
+  --surface-low-highest: #d4d2c5;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-on-background);
+  transition: background-color 0.2s, color 0.2s;
+}
+
+/* Custom scrollbars for professional data grids */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-surface-container-high);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-surface-container-highest);
+}
+
+/* Selected-launch report: kept out of the normal UI and rendered only by the native print dialog. */
+.lancamentos-print-report {
+  display: none;
+}
+
+@media print {
+  @page lancamentos-report {
+    size: A4 landscape;
+    margin: 10mm 12mm 12mm;
+  }
+
+  body.printing-lancamentos-report {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  body.printing-lancamentos-report * {
+    visibility: hidden !important;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report,
+  body.printing-lancamentos-report .lancamentos-print-report * {
+    visibility: visible !important;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report {
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: auto !important;
+    left: 0 !important;
+    z-index: 2147483647;
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box;
+    page: lancamentos-report;
+    overflow: visible !important;
+    background: #fff;
+    color: #111;
+    font-family: Arial, sans-serif;
+    font-size: 9pt;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__sheet {
+    display: block;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0;
+    box-sizing: border-box;
+    overflow: visible;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    min-width: 0;
+    max-width: 100%;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #111;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__header > div:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__header h1 {
+    margin: 0;
+    max-width: 100%;
+    font-size: 16pt;
+    line-height: 1.2;
+    text-transform: uppercase;
+    overflow-wrap: anywhere;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__header p,
+  body.printing-lancamentos-report .lancamentos-print-report__meta {
+    margin: 4px 0 0;
+    color: #555;
+    font-size: 8pt;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__header .lancamentos-print-report__meta {
+    display: flex;
+    flex: 0 1 40%;
+    flex-direction: column;
+    align-items: flex-end;
+    max-width: 40%;
+    min-width: 0;
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__meta strong {
+    max-width: 100%;
+    color: #111;
+    overflow-wrap: anywhere;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 10px 0;
+    border-bottom: 1px solid #bbb;
+    color: #333;
+    font-size: 8pt;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__filters strong {
+    width: 100%;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__filters > span {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__table {
+    display: table;
+    width: 100% !important;
+    max-width: 100%;
+    min-width: 0;
+    height: auto !important;
+    margin-top: 14px;
+    border-collapse: collapse;
+    table-layout: fixed;
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__table thead {
+    display: table-header-group;
+    break-inside: avoid;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__table tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__table th,
+  body.printing-lancamentos-report .lancamentos-print-report__table td {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    padding: 5px 4px;
+    border-bottom: 1px solid #d5d5d5;
+    vertical-align: top;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: normal;
+    break-inside: avoid;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__table th {
+    color: #333;
+    background: #f0f0f0;
+    font-size: 7pt;
+    text-transform: uppercase;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__table td {
+    font-size: 7.5pt;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__table td:nth-child(2),
+  body.printing-lancamentos-report .lancamentos-print-report__table td:last-child {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__table .number {
+    text-align: right;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    font-variant-numeric: tabular-nums;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__table tfoot th,
+  body.printing-lancamentos-report .lancamentos-print-report__table tfoot td {
+    border-top: 2px solid #111;
+    border-bottom: 0;
+    background: #fff;
+    font-size: 8pt;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__totals {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 24px;
+    max-width: 100%;
+    min-width: 0;
+    height: auto !important;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid #bbb;
+    font-size: 8.5pt;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__totals > span {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__items {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin-top: 12px;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__item {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0 0 10px;
+    padding: 8px 0 9px;
+    border: 1px solid #bdbdbd;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__block {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__block + .lancamentos-print-report__block {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #d5d5d5;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__block h2 {
+    margin: 0 0 5px;
+    color: #333;
+    font-size: 7pt;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__grid {
+    display: grid;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    gap: 6px;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__grid--operational-identification {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 2.15fr) minmax(0, 1.35fr) minmax(0, 1.15fr) minmax(0, 1.2fr);
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__grid--operational-values {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__grid--financial-identification {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, .9fr) minmax(0, 2.25fr) minmax(0, 1.1fr) minmax(0, 1.1fr);
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__grid--financial-values {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__cell {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    max-width: 100%;
+    padding: 5px 6px;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__label {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    margin-bottom: 3px;
+    color: #555;
+    font-size: 6.5pt;
+    font-weight: 700;
+    line-height: 1.2;
+    text-transform: uppercase;
+    overflow-wrap: anywhere;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__value {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    color: #111;
+    font-size: 8pt;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__value small {
+    display: block;
+    margin-top: 2px;
+    color: #555;
+    font-size: 6.5pt;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__cell--number .lancamentos-print-report__value {
+    text-align: right;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    font-variant-numeric: tabular-nums;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__summary {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin-top: 14px;
+    padding: 8px;
+    border-top: 2px solid #111;
+    border-bottom: 1px solid #bbb;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__summary > strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 8pt;
+    text-transform: none;
+    letter-spacing: .05em;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__summary .lancamentos-print-report__cell {
+    background: #f7f7f7;
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__grid--operational-summary {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  body.printing-lancamentos-report .lancamentos-print-report__grid--financial-summary {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  @page new-document-a4 {
+    size: A4 portrait;
+    margin: 0;
+  }
+  @page new-document-58mm {
+    size: 58mm auto;
+    margin: 0;
+  }
+  @page new-document-80mm {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  body.printing-new-document {
+    margin: 0 !important;
+    padding: 0 !important;
+    min-width: 0 !important;
+    background: #fff !important;
+    overflow: visible !important;
+  }
+
+  body.printing-new-document * {
+    visibility: hidden !important;
+  }
+
+  body.printing-new-document .new-print-document,
+  body.printing-new-document .new-print-document * {
+    visibility: visible !important;
+  }
+
+  body.printing-new-document .new-print-document {
+    display: block !important;
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    box-sizing: border-box;
+    min-height: 0;
+    background: #fff !important;
+    color: #171717 !important;
+    page: new-document-a4;
+  }
+
+  body.printing-new-document .new-print-document.paper-58mm {
+    page: new-document-58mm;
+  }
+
+  body.printing-new-document .new-print-document.paper-80mm {
+    page: new-document-80mm;
+  }
+
+  body.printing-new-document .new-print-document.paper-a4 {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: 210mm !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    overflow-wrap: anywhere;
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+
+  body.printing-new-document .new-print-document.paper-a4 .new-print-header,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-recipient,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-main-value,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-details,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-warning,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-signature,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-adjustments > div,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-parcel {
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  body.printing-new-document .new-print-document.paper-a4 .new-print-header,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-recipient,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-adjustments > div,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-parcel,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-signature {
+    flex-wrap: wrap;
+  }
+
+  body.printing-new-document .new-print-document.paper-a4 .new-print-header > *,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-recipient > *,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-details > *,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-adjustments > div > *,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-parcel > *,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-signature > * {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  body.printing-new-document .new-print-document.paper-a4 .new-print-section-label,
+  body.printing-new-document .new-print-document.paper-a4 .new-print-description > small {
+    max-width: 100%;
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  body.printing-new-document .new-print-document.paper-a4 .new-print-description {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  body.printing-new-document .new-print-document.paper-a4 .new-print-description p {
+    max-width: 100%;
+    orphans: 3;
+    widows: 3;
+  }
+}
+
+.new-print-document,
+.new-print-preview {
+  width: 210mm;
+  min-height: 297mm;
+  box-sizing: border-box;
+  background: #fff;
+  color: #171717;
+  padding: 16mm;
+  font-family: Arial, sans-serif;
+  font-size: 10pt;
+}
+
+.new-print-document {
+  display: none;
+}
+
+.new-print-preview {
+  width: 210mm;
+  min-height: 297mm;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  background: #fff;
+  color: #171717;
+  padding: 16mm;
+  font-family: Arial, sans-serif;
+  font-size: 10pt;
+}
+
+.new-print-preview.paper-58mm,
+.new-print-document.paper-58mm {
+  width: 58mm;
+  padding: 5mm;
+  font-size: 8pt;
+}
+
+.new-print-preview.paper-80mm,
+.new-print-document.paper-80mm {
+  width: 80mm;
+  padding: 6mm;
+  font-size: 8.5pt;
+}
+
+.new-print-header,
+.new-print-recipient,
+.new-print-details,
+.new-print-signature,
+.new-print-parcel,
+.new-print-adjustments > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.new-print-header {
+  align-items: flex-start;
+  border-bottom: 2px solid #171717;
+  padding-bottom: 10px;
+}
+
+.new-print-header strong,
+.new-print-title strong {
+  display: block;
+  font-size: 15pt;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.new-print-header span,
+.new-print-title span,
+.new-print-details small,
+.new-print-recipient small,
+.new-print-main-value small,
+.new-print-description small,
+.new-print-section-label,
+.new-print-signature small {
+  display: block;
+  color: #626262;
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.new-print-title {
+  text-align: right;
+}
+
+.new-print-title strong {
+  font-size: 12pt;
+}
+
+.new-print-title span {
+  color: #9b1c1c;
+  margin-top: 4px;
+}
+
+.new-print-recipient {
+  border-bottom: 1px solid #cfcfcf;
+  padding: 13px 0;
+}
+
+.new-print-recipient > div:first-child {
+  min-width: 0;
+}
+
+.new-print-recipient strong,
+.new-print-details strong {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  font-size: 9pt;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.new-print-main-value {
+  margin: 14px 0;
+  border: 1px solid #cfcfcf;
+  background: #f5f5f5;
+  padding: 14px;
+}
+
+.new-print-main-value strong {
+  display: block;
+  margin: 5px 0;
+  font-family: monospace;
+  font-size: 22pt;
+  font-weight: 800;
+}
+
+.new-print-main-value span {
+  color: #555;
+  font-size: 8pt;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.new-print-details {
+  flex-wrap: wrap;
+  border-bottom: 1px solid #cfcfcf;
+  padding-bottom: 12px;
+}
+
+.new-print-details > div {
+  min-width: 28%;
+  flex: 1 1 28%;
+}
+
+.new-print-adjustments,
+.new-print-parcels,
+.new-print-description {
+  margin-top: 13px;
+}
+
+.new-print-section-label {
+  border-bottom: 1px solid #171717;
+  padding-bottom: 4px;
+  color: #171717;
+}
+
+.new-print-adjustments > div,
+.new-print-parcel {
+  border-bottom: 1px solid #e0e0e0;
+  padding: 5px 0;
+  font-size: 8pt;
+}
+
+.new-print-parcel span:last-child {
+  color: #626262;
+  text-transform: capitalize;
+}
+
+.new-print-description p {
+  margin: 5px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #444;
+  font-size: 8.5pt;
+}
+
+.new-print-warning {
+  margin-top: 14px;
+  border: 2px solid #9b1c1c;
+  padding: 8px;
+  color: #9b1c1c;
+  font-size: 9pt;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-align: center;
+}
+
+.new-print-signature {
+  margin-top: 42px;
+  align-items: flex-end;
+  text-align: center;
+}
+
+.new-print-signature > div {
+  width: 45%;
+  border-top: 1px solid #171717;
+  padding-top: 5px;
+}
+
+.new-print-signature span {
+  display: block;
+  min-height: 14px;
+  overflow-wrap: anywhere;
+  font-size: 8pt;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+@media print {
+  body.printing-new-document .new-print-document {
+    page: new-document-a4;
+  }
+
+  body.printing-new-document .new-print-document.paper-58mm {
+    page: new-document-58mm;
+  }
+
+  body.printing-new-document .new-print-document.paper-80mm {
+    page: new-document-80mm;
+  }
+}
+
+.new-print-document.paper-a4,
+.new-print-preview.paper-a4 {
+  width: 210mm;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+
+.new-print-document.paper-a4 .new-print-header,
+.new-print-preview.paper-a4 .new-print-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  justify-content: normal;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.new-print-document.paper-a4 .new-print-recipient,
+.new-print-preview.paper-a4 .new-print-recipient {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  justify-content: normal;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.new-print-document.paper-a4 .new-print-details,
+.new-print-preview.paper-a4 .new-print-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  justify-content: normal;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.new-print-document.paper-a4 .new-print-details > div,
+.new-print-preview.paper-a4 .new-print-details > div {
+  min-width: 0;
+  max-width: 100%;
+  flex: none;
+}
+
+.new-print-document.paper-a4 .new-print-adjustments,
+.new-print-preview.paper-a4 .new-print-adjustments {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.new-print-document.paper-a4 .new-print-adjustments > div:not(.new-print-section-label),
+.new-print-preview.paper-a4 .new-print-adjustments > div:not(.new-print-section-label) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  justify-content: normal;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.new-print-document.paper-a4 .new-print-parcels,
+.new-print-preview.paper-a4 .new-print-parcels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.new-print-document.paper-a4 .new-print-parcel,
+.new-print-preview.paper-a4 .new-print-parcel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.2fr);
+  align-items: start;
+  justify-content: normal;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.new-print-document.paper-a4 .new-print-signature,
+.new-print-preview.paper-a4 .new-print-signature {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+  justify-content: normal;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.new-print-document.paper-a4 .new-print-signature > div,
+.new-print-preview.paper-a4 .new-print-signature > div {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.new-print-document.paper-a4 .new-print-main-value,
+.new-print-preview.paper-a4 .new-print-main-value,
+.new-print-document.paper-a4 .new-print-description,
+.new-print-preview.paper-a4 .new-print-description {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.new-print-document.paper-a4 .new-print-header > *,
+.new-print-document.paper-a4 .new-print-recipient > *,
+.new-print-document.paper-a4 .new-print-details > *,
+.new-print-document.paper-a4 .new-print-adjustments > *,
+.new-print-document.paper-a4 .new-print-parcel > *,
+.new-print-document.paper-a4 .new-print-signature > *,
+.new-print-preview.paper-a4 .new-print-header > *,
+.new-print-preview.paper-a4 .new-print-recipient > *,
+.new-print-preview.paper-a4 .new-print-details > *,
+.new-print-preview.paper-a4 .new-print-adjustments > *,
+.new-print-preview.paper-a4 .new-print-parcel > *,
+.new-print-preview.paper-a4 .new-print-signature > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.new-print-document.paper-a4 .new-print-section-label,
+.new-print-preview.paper-a4 .new-print-section-label {
+  max-width: 100%;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.new-print-document.paper-a4 .new-print-description,
+.new-print-preview.paper-a4 .new-print-description {
+  page-break-inside: auto;
+  break-inside: auto;
+}
+
+.new-print-document.paper-a4 .new-print-description p,
+.new-print-preview.paper-a4 .new-print-description p {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  orphans: 3;
+  widows: 3;
+}
+
+@media print {
+  body.printing-new-document .new-print-document.paper-a4 .new-print-description p {
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+}

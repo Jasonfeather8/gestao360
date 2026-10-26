@@ -1,0 +1,22 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+.dyad/
+
+# Playwright test artifacts
+/e2e-tests/fixtures/dyad/preview-dns.cjs
+
+# Playwright test artifacts
+/e2e-tests/fixtures/dyad/
+/e2e-tests/tsconfig.json
+
+# Playwright test artifacts
+/test-results/
+/playwright-report/
+/playwright/.cache/
+.last-run.json

@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Gestão 360",
+  "description": "Sistema completo de gestão financeira e operacional modula com interface fluida",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
