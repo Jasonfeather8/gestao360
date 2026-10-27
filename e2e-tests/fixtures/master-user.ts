@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 
@@ -31,7 +31,7 @@ export async function createMasterTestUser(admin: SupabaseClient): Promise<Maste
   const { data: usersData, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
   if (listError) throw listError;
 
-  const existingUser = usersData.users.find((user) => user.email === MASTER_TEST_EMAIL);
+  const existingUser = (usersData.users as User[]).find((user) => user.email === MASTER_TEST_EMAIL);
   let userId: string;
 
   if (existingUser) {
