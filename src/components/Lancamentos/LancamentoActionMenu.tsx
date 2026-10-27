@@ -45,6 +45,7 @@ export default function LancamentoActionMenu({
     <div className="relative">
       <button
         ref={triggerRef}
+        data-testid="lancamento-action-menu"
         onClick={(e) => {
           e.stopPropagation();
           onToggle();
@@ -67,6 +68,7 @@ export default function LancamentoActionMenu({
             download
             target="_blank"
             rel="noreferrer"
+            data-testid="action-baixar-arquivo"
             className="w-full flex items-center gap-3 px-4 py-3 text-primary hover:bg-primary/5 rounded-xl transition-all"
           >
             <Download className="w-4 h-4" />
@@ -77,6 +79,7 @@ export default function LancamentoActionMenu({
         {isMaster && (item.status_pagamento === 'pago' || item.status_pagamento === 'pago_parcial' || item.status_pagamento === 'quitação_pendente' || item.status_pagamento === 'bpi') && (
           <button
             onClick={() => onEstornar(item.id)}
+            data-testid="action-estornar"
             className="w-full flex items-center gap-3 px-4 py-3 text-alert-red hover:bg-red-50 rounded-xl transition-all"
           >
             <History className="w-4 h-4" />
@@ -89,6 +92,7 @@ export default function LancamentoActionMenu({
         {isOperationalView && item.status_pagamento !== 'pago' && (
           <button
             onClick={() => onEdit(item)}
+            data-testid="action-avr"
             className="w-full flex items-center gap-3 px-4 py-3 text-neutral-600 hover:bg-neutral-50 rounded-xl transition-all"
           >
             <Edit className="w-4 h-4" />
@@ -99,6 +103,7 @@ export default function LancamentoActionMenu({
         {isMaster && (
           <button
             onClick={() => onDelete(item.id)}
+            data-testid="action-excluir"
             className="w-full flex items-center gap-3 px-4 py-3 text-alert-red/50 hover:text-alert-red hover:bg-red-50 rounded-xl transition-all"
           >
             <Trash2 className="w-4 h-4" />

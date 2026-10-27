@@ -37,13 +37,22 @@ async function dateInputFor(page: Page, labelText: string) {
   return page.getByText(labelText, { exact: false }).first().locator("xpath=..").locator("input[type=date]");
 }
 
+// O painel já abre com categoria e centro de custo preenchidos; escolhe os dois pelo rótulo.
+async function chooseFirstOption(page: Page, label: string): Promise<void> {
+  await page.locator("label", { hasText: label }).locator("xpath=../..").locator("xpath=./button").click();
+  const options = page.locator(".max-h-60 button");
+  await expect(options.first()).toBeVisible({ timeout: 15_000 });
+  await options.first().click();
+}
+
 async function fillLaunch(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Despesa / Saída" }).click();
   await pickSearchableOption(page, "Selecione um cliente / fornecedor");
   await page.getByPlaceholder("0,00").first().fill("50123");
   await page.getByRole("button", { name: "À Vista", exact: true }).click();
   await (await dateInputFor(page, "Data de Vencimento")).fill(futureDate());
-  await pickSearchableOption(page, /^Selecione\.\.\.$/);
+  await chooseFirstOption(page, "Categoria Contábil");
+  await chooseFirstOption(page, "Centro de Custo");
 
   const bankAccounts = page.getByRole("button").filter({ hasText: "Saldo Real:" });
   await expect(bankAccounts.first()).toBeVisible({ timeout: 15_000 });

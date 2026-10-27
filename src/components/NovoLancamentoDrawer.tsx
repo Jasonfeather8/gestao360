@@ -1598,7 +1598,7 @@ export default function NovoLancamentoDrawer() {
                 )}
 
                 {editingItem && (
-                  <div className="p-5 bg-primary/5 border-2 border-primary/20 rounded-2xl space-y-4">
+                  <div data-testid="avr-panel" className="p-5 bg-primary/5 border-2 border-primary/20 rounded-2xl space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
                         <h3 className="text-xs font-black uppercase tracking-tight text-primary">Ajuste de Valor Real (AVR)</h3>
@@ -1606,6 +1606,7 @@ export default function NovoLancamentoDrawer() {
                       </div>
                       <button
                         type="button"
+                        data-testid="avr-toggle"
                         onClick={() => setIsAVREdit(!isAVREdit)}
                         className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest ${isAVREdit ? 'bg-primary text-white' : 'bg-white text-primary border border-primary/20'}`}
                       >
@@ -1617,7 +1618,7 @@ export default function NovoLancamentoDrawer() {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <label className="text-[9px] font-black uppercase text-primary tracking-widest">Motivo do AVR *</label>
-                            <select value={avrReasonId} onChange={(e) => setAvrReasonId(e.target.value)} className="w-full h-10 bg-white border-2 border-primary/10 rounded-xl px-3 text-[10px] font-bold outline-none focus:border-primary">
+                            <select data-testid="avr-motivo" value={avrReasonId} onChange={(e) => setAvrReasonId(e.target.value)} className="w-full h-10 bg-white border-2 border-primary/10 rounded-xl px-3 text-[10px] font-bold outline-none focus:border-primary">
                               <option value="">Selecione o motivo...</option>
                               {(categoriasAjuste as any[]).filter(reason => reason.tipo === 'avr' && reason.status !== 'inativo').map(reason => <option key={reason.id} value={reason.id}>{reason.nome}</option>)}
                             </select>
@@ -1631,7 +1632,7 @@ export default function NovoLancamentoDrawer() {
                         {!editingItem.recorrencia_id && (
                           <div className="space-y-2 border-t border-primary/10 pt-4">
                             <label className="text-[9px] font-black uppercase text-primary tracking-widest">Novo valor da parcela *</label>
-                            <MoneyInput value={avrSingleParcelValue} onChange={setAvrSingleParcelValue} className="w-full h-10 bg-white border-2 border-primary/10 rounded-xl px-3 text-xs font-black outline-none focus:border-primary" />
+                            <MoneyInput id="avr-valor-parcela" value={avrSingleParcelValue} onChange={setAvrSingleParcelValue} className="w-full h-10 bg-white border-2 border-primary/10 rounded-xl px-3 text-xs font-black outline-none focus:border-primary" />
                           </div>
                         )}
 
@@ -1644,7 +1645,7 @@ export default function NovoLancamentoDrawer() {
                             </div>
                             <label className="flex items-center gap-2 text-[9px] font-black uppercase text-secondary"><input type="checkbox" checked={avrWithEntry} onChange={(e) => setAvrWithEntry(e.target.checked)} className="rounded text-primary" /> Com entrada</label>
                             <button type="button" onClick={generateAVRParcels} className="w-full h-10 bg-primary/10 text-primary rounded-xl text-[9px] font-black uppercase tracking-widest">Gerar / Atualizar Parcelas</button>
-                            {avrParcels.length > 0 && <div className="border-2 border-primary/10 rounded-xl overflow-hidden bg-white"><table className="w-full"><tbody>{avrParcels.map((parcel, index) => { const parcelLocked = parcel.status !== 'aberto' || Number(parcel.valor_recebido) > 0; return <tr key={`${parcel.id || 'new'}-${parcel.numero}`} className="border-b border-primary/10"><td className="px-2 py-2 text-[10px] font-black">#{parcel.numero}</td><td className="px-1 py-1"><input type="date" disabled={parcelLocked} value={parcel.data} onChange={(e) => setAvrParcels(prev => prev.map((item, itemIndex) => itemIndex === index ? { ...item, data: e.target.value } : item))} className="w-full border-none text-[10px]" /></td><td className="px-1 py-1"><MoneyInput disabled={parcelLocked} value={parcel.valor} onChange={(value) => setAvrParcels(prev => prev.map((item, itemIndex) => itemIndex === index ? { ...item, valor: value } : item))} className="w-full border-none text-[10px] font-black" /></td></tr>; })}</tbody></table></div>}
+                            {avrParcels.length > 0 && <div data-testid="avr-parcelas" className="border-2 border-primary/10 rounded-xl overflow-hidden bg-white"><table className="w-full"><tbody>{avrParcels.map((parcel, index) => { const parcelLocked = parcel.status !== 'aberto' || Number(parcel.valor_recebido) > 0; return <tr key={`${parcel.id || 'new'}-${parcel.numero}`} className="border-b border-primary/10"><td className="px-2 py-2 text-[10px] font-black">#{parcel.numero}</td><td className="px-1 py-1"><input type="date" disabled={parcelLocked} value={parcel.data} onChange={(e) => setAvrParcels(prev => prev.map((item, itemIndex) => itemIndex === index ? { ...item, data: e.target.value } : item))} className="w-full border-none text-[10px]" /></td><td className="px-1 py-1"><MoneyInput disabled={parcelLocked} value={parcel.valor} onChange={(value) => setAvrParcels(prev => prev.map((item, itemIndex) => itemIndex === index ? { ...item, valor: value } : item))} className="w-full border-none text-[10px] font-black" /></td></tr>; })}</tbody></table></div>}
                           </div>
                         )}
                       </>
@@ -1799,8 +1800,8 @@ export default function NovoLancamentoDrawer() {
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-[420px] rounded-3xl shadow-2xl relative z-10 p-8 space-y-5 text-center">
               <div className="w-14 h-14 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto"><Shield className="w-7 h-7" /></div>
               <div><h3 className="text-sm font-black uppercase tracking-widest">Confirmar ajuste AVR?</h3><p className="text-[10px] font-bold text-secondary uppercase leading-relaxed mt-2">O novo valor será salvo sem gerar movimentação de caixa.</p></div>
-              {editingItem?.recorrencia_id && <div className="grid gap-2"><button type="button" onClick={() => { setAvrPropagation('none'); handleAVRSubmit('none'); }} className="w-full py-3 bg-neutral-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest">Ajustar apenas este</button><button type="button" onClick={() => { setAvrPropagation('open'); handleAVRSubmit('open'); }} className="w-full py-3 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest">Todas em aberto</button></div>}
-              {!editingItem?.recorrencia_id && <button type="button" onClick={handleAVRSubmit} className="w-full py-3 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest">Confirmar e salvar</button>}
+              {editingItem?.recorrencia_id && <div className="grid gap-2"><button type="button" data-testid="avr-propagar-apenas-este" onClick={() => { setAvrPropagation('none'); handleAVRSubmit('none'); }} className="w-full py-3 bg-neutral-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest">Ajustar apenas este</button><button type="button" data-testid="avr-propagar-todas-abertas" onClick={() => { setAvrPropagation('open'); handleAVRSubmit('open'); }} className="w-full py-3 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest">Todas em aberto</button></div>}
+              {!editingItem?.recorrencia_id && <button type="button" data-testid="avr-confirmar" onClick={handleAVRSubmit} className="w-full py-3 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest">Confirmar e salvar</button>}
               <button type="button" onClick={() => setIsAVRConfirmationOpen(false)} className="text-[10px] font-black uppercase text-secondary">Cancelar</button>
             </motion.div>
           </div>
@@ -1895,6 +1896,7 @@ export default function NovoLancamentoDrawer() {
           {toasts.map((toast) => (
             <motion.div
               key={toast.id}
+              data-testid="toast"
               initial={{ opacity: 0, x: 100 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 100 }}
