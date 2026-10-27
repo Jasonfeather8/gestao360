@@ -228,6 +228,7 @@ export default function Lancamentos({
     motivoDescontoId: motivoDescontoFilter,
     motivoAcrescimoId: motivoAcrescimoFilter,
     isFinanceiroView,
+    baixaRegistradaOnly: isFinanceiroView,
     transferenciasOnly: isFinanceiroView && transferenciasOnly,
     page: currentPage,
     pageSize: pageSize === 'all' ? undefined : pageSize
@@ -366,7 +367,8 @@ export default function Lancamentos({
     temAcrescimo: temAcrescimoFilter,
     motivoDescontoId: motivoDescontoFilter,
     motivoAcrescimoId: motivoAcrescimoFilter,
-    isFinanceiroView: true
+    isFinanceiroView: true,
+    baixaRegistradaOnly: true
   }), [approvalStatus, authorIdFilter, categoryIdFilter, centroCustoIdFilter, condicaoFilter, dateFilterActive, debouncedSearchTerm, docSearchTerm, endDate, isColaborador, motivoAcrescimoFilter, motivoDescontoFilter, resolvedFinanceiroContaIds, startDate, temAcrescimoFilter, temDescontoFilter, typeFilter]);
 
   const valueFormatter = (val: number) => {

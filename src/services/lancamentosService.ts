@@ -25,6 +25,8 @@ export interface LancamentoFilters {
   isFinanceiroView?: boolean;
   operationalView?: boolean;
   transferenciasOnly?: boolean;
+  // Usado apenas pela tela Financeiro: lista somente títulos com baixa registrada.
+  baixaRegistradaOnly?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -227,6 +229,15 @@ export const lancamentosService = {
         orGroups.push(['status_aprovacao.neq.confirmado_master', 'status_aprovacao.is.null']);
         // Transferências entre contas não são títulos; a tarifa permanece visível por ser despesa real.
         orGroups.push(['transferencia_id.is.null', 'transferencia_lado.eq.tarifa']);
+      }
+
+      if (filters.baixaRegistradaOnly) {
+        // Tela Financeiro: só entram títulos que passaram por uma baixa registrada
+        // (baixa normal, baixa parcial ou baixa por inatividade - BPI).
+        // Títulos novos, ajustados por AVR e cadastrados como "já pago" ficam fora,
+        // porque não têm baixa. Após estorno a baixa é desfeita e o título sai daqui.
+        query = query.in('tipo_baixa', ['financeira', 'bpi']);
+        orGroups.push(['valor_recebido.gt.0', 'status_pagamento.eq.bpi']);
       }
 
       if (filters.isFinanceiroView) {

@@ -22,6 +22,7 @@ interface FinanceiroStatusFilters {
   motivoDescontoId?: string;
   motivoAcrescimoId?: string;
   isFinanceiroView: boolean;
+  baixaRegistradaOnly?: boolean;
 }
 
 interface FinanceiroStatusFilterProps {
