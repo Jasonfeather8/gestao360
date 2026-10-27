@@ -16,6 +16,11 @@ export async function openPayables(page: Page): Promise<void> {
   await expect(page.getByRole("heading", { name: "Contas a Pagar" }).first()).toBeVisible({ timeout: 30_000 });
 }
 
+export async function openReceivables(page: Page): Promise<void> {
+  await page.goto("/receber", { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await expect(page.getByRole("heading", { name: "Contas a Receber" }).first()).toBeVisible({ timeout: 30_000 });
+}
+
 export async function openNewLaunch(page: Page): Promise<void> {
   await page.getByRole("button", { name: /novo lançamento/i }).first().click();
   await expect(page.getByRole("heading", { name: "Novo Lançamento" })).toBeVisible({ timeout: 15_000 });
@@ -59,6 +64,8 @@ export async function readToast(page: Page): Promise<string> {
 export type PayableInput = {
   /** Dígitos crus digitados no campo de valor: "88422" vira R$ 884,22. */
   amountDigits: string;
+  /** Direção do lançamento no painel (padrão: despesa/saída). */
+  direcao?: "Receita / Entrada" | "Despesa / Saída";
   dueDate?: string;
   condicao?: "À Vista" | "A Prazo";
   /** Nº de parcelas quando a condição é "A Prazo". */
@@ -84,7 +91,7 @@ export type CreatedPayable = {
 /** Cria um lançamento a pagar pelo painel e espera a confirmação de sucesso. */
 export async function createPayable(page: Page, input: PayableInput): Promise<CreatedPayable> {
   await openNewLaunch(page);
-  await page.getByRole("button", { name: "Despesa / Saída" }).click();
+  await page.getByRole("button", { name: input.direcao ?? "Despesa / Saída" }).click();
   const entityName = await chooseOption(page, "Entidade / Destinatário", input.entityIndex);
   await page.getByPlaceholder("0,00").first().fill(input.amountDigits);
   await page.getByRole("button", { name: input.condicao ?? "À Vista", exact: true }).click();
@@ -118,6 +125,11 @@ export async function createPayable(page: Page, input: PayableInput): Promise<Cr
   expect(message, `Mensagem exibida ao salvar: "${message}"`).toBe("Lançamento cadastrado com sucesso!");
   await expect(page.getByRole("heading", { name: "Novo Lançamento" })).toBeHidden({ timeout: 15_000 });
   return { entityName, categoryName, costCenterName, bankName };
+}
+
+/** Cria um lançamento a receber (receita) pelo painel, usando os mesmos campos da despesa. */
+export async function createReceivable(page: Page, input: PayableInput): Promise<CreatedPayable> {
+  return createPayable(page, { ...input, direcao: "Receita / Entrada" });
 }
 
 /** Linha da listagem que contém o valor informado (ex.: "884,22"). */
