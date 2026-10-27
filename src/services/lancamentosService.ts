@@ -233,10 +233,13 @@ export const lancamentosService = {
 
       if (filters.baixaRegistradaOnly) {
         // Tela Financeiro: só entram títulos que passaram por uma baixa registrada
-        // (baixa normal, baixa parcial ou baixa por inatividade - BPI).
-        // Títulos novos, ajustados por AVR e cadastrados como "já pago" ficam fora,
-        // porque não têm baixa. Após estorno a baixa é desfeita e o título sai daqui.
-        query = query.in('tipo_baixa', ['financeira', 'bpi']);
+        // (baixa normal, baixa parcial, baixa por conciliação ou baixa por
+        // inatividade - BPI). A evidência da baixa é o valor recebido ou o BPI.
+        // Um ajuste AVR, sozinho, nunca esconde o título: se depois houver baixa,
+        // ele volta a aparecer normalmente. Títulos novos, ainda sem baixa, e os
+        // cadastrados como "já pago" (marca 'cadastro') ficam fora. Após estorno a
+        // baixa é desfeita e o título sai daqui.
+        orGroups.push(['tipo_baixa.is.null', 'tipo_baixa.neq.cadastro']);
         orGroups.push(['valor_recebido.gt.0', 'status_pagamento.eq.bpi']);
       }
 
