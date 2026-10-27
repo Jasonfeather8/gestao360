@@ -764,6 +764,7 @@ export default function BaixaLancamentoModal() {
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-secondary">R$</span>
                     <MoneyInput
+                      id="baixa-valor-pago"
                       disabled={isBpi}
                       value={valorPago}
                       onChange={setValorPago}
@@ -1175,6 +1176,7 @@ export default function BaixaLancamentoModal() {
               {role === 'master' && !hasAnexo && (
                 <div className="flex items-start gap-3 p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
                   <div
+                    data-testid="dispensar-comprovante"
                     className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center border-2 transition-all cursor-pointer ${
                       dispensarComprovante ? 'bg-primary border-primary' : 'bg-white border-neutral-200'
                     }`}

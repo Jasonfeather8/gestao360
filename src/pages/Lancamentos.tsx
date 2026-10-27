@@ -797,6 +797,7 @@ export default function Lancamentos({
               </button>
               <button
                 type="button"
+                data-testid="hide-filters"
                 onClick={() => { setIsFilterPanelOpen(false); setCurrentPage(1); }}
                 className="h-9 px-3 rounded-lg border border-neutral-200 text-[9px] font-black uppercase tracking-widest text-secondary hover:border-primary hover:text-primary transition-all"
               >
@@ -848,6 +849,7 @@ export default function Lancamentos({
                     <button
                       key={opt.id}
                       type="button"
+                      data-testid={`status-filter-${opt.id}`}
                       onClick={() => opt.id === 'all'
                         ? setStatusPagamento([])
                         : setStatusPagamento(current => current.includes(opt.id) ? current.filter(value => value !== opt.id) : [...current, opt.id])}
@@ -866,7 +868,7 @@ export default function Lancamentos({
 
           <div className={isFinanceiroView ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4' : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4'}>
             {role !== 'colaborador' && (
-              <div className="space-y-2">
+              <div className="space-y-2" data-testid="filter-responsavel">
                 <label className="text-[10px] font-black uppercase tracking-[0.2em] text-secondary flex items-center gap-2">
                   <User className="w-4 h-4" /> Responsável
                 </label>
@@ -879,7 +881,7 @@ export default function Lancamentos({
               </div>
             )}
 
-            <div className="space-y-2">
+            <div className="space-y-2" data-testid="filter-categoria">
               <label className="text-[10px] font-black uppercase tracking-[0.2em] text-secondary flex items-center gap-2">
                 <Tag className="w-4 h-4" /> Categoria
               </label>
@@ -891,7 +893,7 @@ export default function Lancamentos({
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2" data-testid="filter-conta">
               <label className="text-[10px] font-black uppercase tracking-[0.2em] text-secondary flex items-center gap-2">
                 <CreditCard className="w-4 h-4" /> Conta Bancária
               </label>
@@ -903,7 +905,7 @@ export default function Lancamentos({
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2" data-testid="filter-centro-custo">
               <label className="text-[10px] font-black uppercase tracking-[0.2em] text-secondary flex items-center gap-2">
                 <Layers className="w-4 h-4" /> Centro de Custo
               </label>
@@ -922,6 +924,7 @@ export default function Lancamentos({
       <div className="bg-white border-2 border-neutral-100 p-4 rounded-3xl flex flex-col lg:flex-row gap-4 shadow-sm items-center">
         <button
           type="button"
+          data-testid="toggle-filters"
           onClick={() => setIsFilterPanelOpen(prev => !prev)}
           title={isFilterPanelOpen ? 'Ocultar filtros' : 'Mostrar filtros'}
           className={`h-12 w-12 flex items-center justify-center rounded-xl border-2 transition-all relative shrink-0 ${
@@ -1009,6 +1012,7 @@ export default function Lancamentos({
           </div>
 
           <select
+            data-testid="date-preset"
             value={datePreset}
             onChange={(e) => handlePresetChange(e.target.value as '15' | '30' | '90' | 'custom')}
             className="h-12 bg-neutral-100 border-none rounded-xl px-3 text-[9px] font-black uppercase tracking-tighter text-neutral-600 outline-none shrink-0"
@@ -1022,6 +1026,7 @@ export default function Lancamentos({
           <div className={`flex bg-neutral-100 p-1 rounded-xl h-12 transition-all ${datePreset === 'custom' ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
             <input
               type="date"
+              data-testid="date-start"
               value={startDate}
               onChange={(e) => { setStartDate(e.target.value); setDatePreset('custom'); setDateFilterActive(true); }}
               className="bg-transparent border-none text-[10px] font-black uppercase px-2 outline-none"
@@ -1029,6 +1034,7 @@ export default function Lancamentos({
             <div className="w-px h-4 bg-neutral-200 self-center" />
             <input
               type="date"
+              data-testid="date-end"
               value={endDate}
               onChange={(e) => { setEndDate(e.target.value); setDatePreset('custom'); setDateFilterActive(true); }}
               className="bg-transparent border-none text-[10px] font-black uppercase px-2 outline-none"
@@ -1036,6 +1042,7 @@ export default function Lancamentos({
           </div>
 
           <select
+            data-testid="page-size"
             value={pageSize}
             onChange={(event) => {
               const value = event.target.value;
