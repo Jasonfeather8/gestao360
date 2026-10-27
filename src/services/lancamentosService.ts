@@ -419,10 +419,15 @@ export const lancamentosService = {
       amount: valorRecebido
     });
 
+    // Cadastro "já pago": o título nasce pago sem passar por baixa e recebe a
+    // marca 'cadastro' para não ser confundido com um título que teve baixa.
+    const isCreatedAsPaid = item.status_pagamento === 'pago' || item.status_pagamento === 'pago_parcial';
+
     const lancamentoData = {
       ...item,
       user_id: user.id,
       usuario_criador_id: user.id,
+      ...(isCreatedAsPaid && !item.tipo_baixa ? { tipo_baixa: 'cadastro' } : {}),
       // Se não for master, garante que não entra como confirmado
       status_aprovacao: isMaster ? (item.status_aprovacao || 'confirmado_master') : 'digital'
     };
@@ -461,7 +466,9 @@ export const lancamentosService = {
           status_pagamento: 'aberto',
           valor_recebido: 0,
           ja_recebido: false,
-          data_pagamento: null
+          data_pagamento: null,
+          // Parcelas em aberto ainda não tiveram baixa: voltam à marca padrão.
+          tipo_baixa: 'financeira'
         }),
         data_vencimento: index === 0 ? item.data_vencimento : p.data_vencimento,
         valor_previsto: p.valor_previsto,
@@ -500,6 +507,12 @@ export const lancamentosService = {
     }
     delete safeData.valor_original;
     delete safeData.valor_previsto;
+
+    // Marcar um título como pago direto no cadastro/edição não é uma baixa:
+    // recebe a marca 'cadastro' para não ser confundido com baixa registrada.
+    if (!safeData.tipo_baixa && (safeData.status_pagamento === 'pago' || safeData.status_pagamento === 'pago_parcial')) {
+      safeData.tipo_baixa = 'cadastro';
+    }
 
     const { data: current } = await supabase
       .from('lancamentos_financeiros')
