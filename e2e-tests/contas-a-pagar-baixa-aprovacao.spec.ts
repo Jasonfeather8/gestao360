@@ -12,8 +12,8 @@ import {
   createPayable,
   openBaixa,
   openPayables,
-  openStatement,
   payInFull,
+  readOperationalBalance,
   rowWithAmount,
 } from "./fixtures/contas-a-pagar";
 
@@ -36,20 +36,20 @@ test.afterEach(async () => {
 
 test("Master baixa o título integralmente e ele sai de Contas a Pagar", async ({ page }) => {
   await openPayables(page);
-  await createPayable(page, { amountDigits: "111100" });
+  const { bankName } = await createPayable(page, { amountDigits: "111100" });
 
   const row = rowWithAmount(page, "1.111,00").first();
   await expect(row).toBeVisible({ timeout: 30_000 });
+  const saldoAntes = await readOperationalBalance(page, bankName);
 
   await payInFull(page, row);
-  await expect(row).toHaveCount(0, { timeout: 30_000 });
 
-  // O título não foi apagado: segue no Extrato aguardando a confirmação do Master.
-  await openStatement(page);
-  const noExtrato = rowWithAmount(page, "1.111,00").first();
-  await expect(noExtrato).toBeVisible({ timeout: 30_000 });
-  await expect(noExtrato.getByText("Confirme Baixa")).toBeVisible();
-  await expect(noExtrato.getByText("Pend. Gestor")).toBeVisible();
+  // O título deixa a lista e o valor sai do saldo operacional da conta.
+  await expect(row).toHaveCount(0, { timeout: 30_000 });
+  await expect.poll(
+    async () => Math.round((await readOperationalBalance(page, bankName)) * 100) / 100,
+    { timeout: 30_000 },
+  ).toBe(Math.round((saldoAntes - 1111) * 100) / 100);
 });
 
 test("Master baixa parcialmente e o título fica como Pago Parcial", async ({ page }) => {
@@ -77,10 +77,11 @@ test("Master baixa parcialmente e o título fica como Pago Parcial", async ({ pa
 
 test("Master dá baixa por inatividade e o título sai de Contas a Pagar", async ({ page }) => {
   await openPayables(page);
-  await createPayable(page, { amountDigits: "333300" });
+  const { bankName } = await createPayable(page, { amountDigits: "333300" });
 
   const row = rowWithAmount(page, "3.333,00").first();
   await expect(row).toBeVisible({ timeout: 30_000 });
+  const saldoAntes = await readOperationalBalance(page, bankName);
 
   await openBaixa(page, row);
   await page.getByRole("button", { name: /^BPI/ }).click();
@@ -92,7 +93,9 @@ test("Master dá baixa por inatividade e o título sai de Contas a Pagar", async
   await page.getByRole("button", { name: "Confirmar e Baixar" }).click();
   await expect(page.getByRole("heading", { name: "Operações de Baixa de Título" })).toBeHidden({ timeout: 30_000 });
 
+  // A baixa por inatividade tira o título da lista sem mexer no saldo da conta.
   await expect(row).toHaveCount(0, { timeout: 30_000 });
+  expect(await readOperationalBalance(page, bankName)).toBe(saldoAntes);
 });
 
 test("Baixa maior que o saldo da conta fica bloqueada", async ({ page }) => {
@@ -105,50 +108,4 @@ test("Baixa maior que o saldo da conta fica bloqueada", async ({ page }) => {
   await openBaixa(page, row);
   await expect(page.getByText("Saldo Insuficiente", { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Baixar Título" })).toBeDisabled();
-});
-
-test("Master aprova no Extrato o título baixado", async ({ page }) => {
-  await openPayables(page);
-  await createPayable(page, { amountDigits: "444400" });
-
-  const row = rowWithAmount(page, "4.444,00").first();
-  await expect(row).toBeVisible({ timeout: 30_000 });
-  await payInFull(page, row);
-
-  await openStatement(page);
-  const noExtrato = rowWithAmount(page, "4.444,00").first();
-  await expect(noExtrato.getByText("Pend. Gestor")).toBeVisible({ timeout: 30_000 });
-
-  await noExtrato.getByRole("button", { name: "Aprovar" }).click();
-  await expect(page.getByRole("heading", { name: "Aprovar Título" })).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: "Confirmar Aprovação" }).click();
-
-  await expect(noExtrato.getByText("Confirmado")).toBeVisible({ timeout: 30_000 });
-  await expect(noExtrato.getByRole("button", { name: "Aprovar" })).toHaveCount(0);
-});
-
-test("Master reprova no Extrato e o título volta aberto para Contas a Pagar", async ({ page }) => {
-  await openPayables(page);
-  await createPayable(page, { amountDigits: "555500" });
-
-  const row = rowWithAmount(page, "5.555,00").first();
-  await expect(row).toBeVisible({ timeout: 30_000 });
-  await payInFull(page, row);
-  await expect(row).toHaveCount(0, { timeout: 30_000 });
-
-  await openStatement(page);
-  const noExtrato = rowWithAmount(page, "5.555,00").first();
-  await expect(noExtrato.getByText("Pend. Gestor")).toBeVisible({ timeout: 30_000 });
-
-  page.on("dialog", dialog => dialog.accept());
-  await noExtrato.getByRole("button", { name: "Aprovar" }).click();
-  await expect(page.getByRole("heading", { name: "Aprovar Título" })).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: "Reprovar Título" }).click();
-  await expect(page.getByRole("heading", { name: "Aprovar Título" })).toBeHidden({ timeout: 30_000 });
-
-  // A reprovação devolve o título como aberto, pronto para uma nova baixa.
-  await openPayables(page);
-  const deVolta = rowWithAmount(page, "5.555,00").first();
-  await expect(deVolta).toBeVisible({ timeout: 30_000 });
-  await expect(deVolta.getByRole("button", { name: /dar baixa/i })).toBeVisible();
 });

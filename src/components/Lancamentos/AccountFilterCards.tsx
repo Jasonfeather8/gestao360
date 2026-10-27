@@ -50,6 +50,7 @@ export default function AccountFilterCards({
           return (
             <div
               key={acc.id}
+              data-testid="account-card"
               onClick={() => onSelect(isSelected ? selectedIds.filter(id => id !== acc.id) : [...selectedIds, acc.id])}
               className={`flex-shrink-0 w-64 bg-white p-4 border-2 rounded-2xl flex flex-col group cursor-pointer transition-all shadow-sm ${
                 isSelected ? 'border-primary bg-primary/5 ring-4 ring-primary/10' : 'border-neutral-100 hover:border-neutral-200'

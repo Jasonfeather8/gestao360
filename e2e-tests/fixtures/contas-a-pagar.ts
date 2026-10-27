@@ -146,10 +146,12 @@ export async function readDocumentCode(row: Locator): Promise<string> {
   return codigo;
 }
 
-/** Abre o Extrato financeiro, onde o Master aprova ou reprova os títulos. */
-export async function openStatement(page: Page): Promise<void> {
-  await page.goto("/lancamentos", { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await expect(page.getByRole("heading", { name: "Extrato" }).first()).toBeVisible({ timeout: 30_000 });
+/** Valor "Operacional" mostrado no card da conta bancária indicada. */
+export async function readOperationalBalance(page: Page, bankName: string): Promise<number> {
+  const card = page.getByTestId("account-card").filter({ hasText: bankName }).first();
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  const texto = (await card.getByText("Operacional", { exact: true }).locator("xpath=..").locator("p").innerText()).trim();
+  return Number(texto.replace("R$", "").replace(/\./g, "").replace(",", ".").trim());
 }
 
 /** Abre o modal de baixa pelo botão "Dar baixa" da linha. */
