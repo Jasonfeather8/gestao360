@@ -70,6 +70,8 @@ export type PayableInput = {
   categoryIndex?: number;
   costCenterIndex?: number;
   bankAccountIndex?: number;
+  /** Anexa um comprovante ao título antes de salvar. */
+  comAnexo?: boolean;
 };
 
 export type CreatedPayable = {
@@ -93,6 +95,16 @@ export async function createPayable(page: Page, input: PayableInput): Promise<Cr
 
   if (input.observacoes) {
     await page.getByPlaceholder("Digite descrições detalhadas...").fill(input.observacoes);
+  }
+
+  if (input.comAnexo) {
+    const fileInput = page.getByText("Nota Fiscal / Produto").locator("xpath=..").locator('input[type="file"]');
+    await fileInput.setInputFiles({
+      name: "comprovante-e2e.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("teste"),
+    });
+    await expect(page.getByText("1 Anexo(s)", { exact: true })).toBeVisible({ timeout: 15_000 });
   }
 
   if (input.installments && input.installments > 1) {
@@ -170,6 +182,18 @@ export async function payInFull(page: Page, row: Locator): Promise<void> {
   await openBaixa(page, row);
   await allowBaixaWithoutReceipt(page);
   await page.getByRole("button", { name: "Baixar Título" }).click();
+  await expect(page.getByRole("heading", { name: "Confirmar Baixa de Título?" })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Confirmar e Baixar" }).click();
+  await expect(page.getByRole("heading", { name: "Operações de Baixa de Título" })).toBeHidden({ timeout: 30_000 });
+}
+
+/** Baixa parcial: informa o valor pago, a justificativa e confirma no diálogo final. */
+export async function payPartially(page: Page, row: Locator, amountDigits: string, reason: string): Promise<void> {
+  await openBaixa(page, row);
+  await page.locator("#baixa-valor-pago").fill(amountDigits);
+  await page.getByPlaceholder(/Explique o motivo/).fill(reason);
+  await allowBaixaWithoutReceipt(page);
+  await page.getByRole("button", { name: "Confirmar Parcial" }).click();
   await expect(page.getByRole("heading", { name: "Confirmar Baixa de Título?" })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "Confirmar e Baixar" }).click();
   await expect(page.getByRole("heading", { name: "Operações de Baixa de Título" })).toBeHidden({ timeout: 30_000 });
