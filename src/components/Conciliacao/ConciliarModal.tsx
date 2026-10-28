@@ -50,33 +50,46 @@ export default function ConciliarModal({
 }: ConciliarModalProps) {
   const [lancamentoSelecionadoId, setLancamentoSelecionadoId] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [mostrarOutrasDatas, setMostrarOutrasDatas] = useState(false);
 
   useEffect(() => {
     setLancamentoSelecionadoId(item?.lancamento?.id ?? null);
     setErro(null);
+    setMostrarOutrasDatas(false);
   }, [item, aberto]);
 
-  const candidatos = useMemo(() => {
-    if (!item?.linhaExtrato) return [];
+  const { candidatosMesmaData, candidatosOutrasDatas } = useMemo(() => {
+    if (!item?.linhaExtrato) return { candidatosMesmaData: [], candidatosOutrasDatas: [] };
     const dataExtrato = new Date(`${item.linhaExtrato.data}T00:00:00Z`).getTime();
     const valorExtratoCentavos = Math.round(item.linhaExtrato.valor * 100);
-    return lancamentos
-      .filter((lancamento) => {
-        const dataReferencia = dataReferenciaLancamento(lancamento);
-        if (!dataReferencia || direcaoLancamento(lancamento) !== item.linhaExtrato?.direcao) return false;
-        const distanciaDias = Math.abs(new Date(`${dataReferencia}T00:00:00Z`).getTime() - dataExtrato) / 86400000;
-        return distanciaDias <= 7;
-      })
-      .sort((a, b) => {
-        const diferencaValorA = Math.abs(Math.round(valorEfetivoLancamento(a) * 100) - valorExtratoCentavos);
-        const diferencaValorB = Math.abs(Math.round(valorEfetivoLancamento(b) * 100) - valorExtratoCentavos);
-        if (diferencaValorA === 0 && diferencaValorB !== 0) return -1;
-        if (diferencaValorB === 0 && diferencaValorA !== 0) return 1;
-        const distanciaA = Math.abs(new Date(`${dataReferenciaLancamento(a)}T00:00:00Z`).getTime() - dataExtrato);
-        const distanciaB = Math.abs(new Date(`${dataReferenciaLancamento(b)}T00:00:00Z`).getTime() - dataExtrato);
-        return distanciaA - distanciaB;
-      });
+    const candidatosValidos = lancamentos.filter((lancamento) => {
+      const dataReferencia = dataReferenciaLancamento(lancamento);
+      if (!dataReferencia || direcaoLancamento(lancamento) !== item.linhaExtrato?.direcao) return false;
+      const distanciaDias = Math.abs(new Date(`${dataReferencia}T00:00:00Z`).getTime() - dataExtrato) / 86400000;
+      return distanciaDias <= 7;
+    });
+    const ordenarCandidatos = (a: LancamentoFinanceiro, b: LancamentoFinanceiro) => {
+      const diferencaValorA = Math.abs(Math.round(valorEfetivoLancamento(a) * 100) - valorExtratoCentavos);
+      const diferencaValorB = Math.abs(Math.round(valorEfetivoLancamento(b) * 100) - valorExtratoCentavos);
+      if (diferencaValorA === 0 && diferencaValorB !== 0) return -1;
+      if (diferencaValorB === 0 && diferencaValorA !== 0) return 1;
+      const distanciaA = Math.abs(new Date(`${dataReferenciaLancamento(a)}T00:00:00Z`).getTime() - dataExtrato);
+      const distanciaB = Math.abs(new Date(`${dataReferenciaLancamento(b)}T00:00:00Z`).getTime() - dataExtrato);
+      return distanciaA - distanciaB;
+    };
+    return {
+      candidatosMesmaData: candidatosValidos
+        .filter((lancamento) => dataReferenciaLancamento(lancamento) === item.linhaExtrato?.data)
+        .sort(ordenarCandidatos),
+      candidatosOutrasDatas: candidatosValidos
+        .filter((lancamento) => dataReferenciaLancamento(lancamento) !== item.linhaExtrato?.data)
+        .sort(ordenarCandidatos),
+    };
   }, [item, lancamentos]);
+
+  const candidatos = mostrarOutrasDatas
+    ? [...candidatosMesmaData, ...candidatosOutrasDatas]
+    : candidatosMesmaData;
 
   if (!aberto || !item?.linhaExtrato) return null;
 
@@ -155,11 +168,26 @@ export default function ConciliarModal({
 
         <section className="mt-5">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-bold text-on-surface">Lançamentos candidatos · {linha.direcao === 'entrada' ? 'Entrada' : 'Saída'}</h3>
+            <div>
+              <h3 className="text-sm font-bold text-on-surface">Lançamentos candidatos · {linha.direcao === 'entrada' ? 'Entrada' : 'Saída'}</h3>
+              {mostrarOutrasDatas && (
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-on-surface-variant">Mostrando lançamentos de outras datas (até ±7 dias).</p>
+                  <button type="button" onClick={() => setMostrarOutrasDatas(false)} className="text-xs font-semibold text-primary hover:underline">Voltar para a mesma data</button>
+                </div>
+              )}
+            </div>
             <span className="text-xs text-on-surface-variant">{candidatos.length} {candidatos.length === 1 ? 'candidato' : 'candidatos'}</span>
           </div>
           {candidatos.length === 0 ? (
-            <p className="rounded-2xl border border-pending-amber/30 bg-pending-amber/10 p-4 text-sm text-pending-amber">Não há lançamentos do ERP na mesma conta e natureza nos ±7 dias desta linha do extrato.</p>
+            <div className="rounded-2xl border border-pending-amber/30 bg-pending-amber/10 p-4 text-sm text-pending-amber">
+              <p>Não há lançamentos do ERP na mesma data ({formatarData(linha.data)}) e natureza desta linha do extrato.</p>
+              {candidatosOutrasDatas.length > 0 && !mostrarOutrasDatas && (
+                <button type="button" onClick={() => setMostrarOutrasDatas(true)} className="mt-3 rounded-lg border border-pending-amber/30 px-3 py-2 text-sm font-bold transition hover:bg-pending-amber/10">
+                  Ver lançamentos de outras datas (±7 dias)
+                </button>
+              )}
+            </div>
           ) : (
             <ul className="max-h-60 space-y-2 overflow-y-auto">
               {candidatos.map((lancamento) => {
