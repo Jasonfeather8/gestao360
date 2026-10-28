@@ -528,3 +528,8 @@ export interface TransferenciaBancaria {
   transacao_destino?: { data_transacao: string; descricao_banco: string; valor: number } | null;
   tarifa?: { valor_previsto: number; categoria_id: string | null; centro_custo_id: string | null } | null;
 }
+
+export interface TransferenciaCandidataLinha {
+  transferencia: TransferenciaBancaria;
+  lado: 'origem' | 'destino';
+}

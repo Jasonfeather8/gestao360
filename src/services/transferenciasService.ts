@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import type { TransacaoBancoCandidata, TransferenciaBancaria } from '../types';
+import type { TransacaoBancoCandidata, TransferenciaBancaria, TransferenciaCandidataLinha } from '../types';
 
 export interface CriarTransferenciaParams {
   contaOrigemId: string;
@@ -71,6 +71,49 @@ export const transferenciasService = {
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []) as TransferenciaBancaria[];
+  },
+
+  listarCandidatasParaTransacao: async (params: {
+    contaId: string;
+    dataTransacao: string;
+    valor: number;
+    direcao: 'entrada' | 'saida';
+  }): Promise<TransferenciaCandidataLinha[]> => {
+    const lado = params.direcao === 'saida' ? 'origem' : 'destino';
+    const espelhoColumn = lado === 'origem' ? 'lancamento_saida_id' : 'lancamento_entrada_id';
+    const transacaoColumn = lado === 'origem' ? 'transacao_origem_id' : 'transacao_destino_id';
+    const contaColumn = lado === 'origem' ? 'conta_origem_id' : 'conta_destino_id';
+    const { data, error } = await supabase
+      .from('transferencias_bancarias')
+      .select('*, conta_origem:contas_bancarias!transferencias_bancarias_conta_origem_id_fkey(nome), conta_destino:contas_bancarias!transferencias_bancarias_conta_destino_id_fkey(nome)')
+      .eq('status', 'conciliada')
+      .eq(contaColumn, params.contaId)
+      .is(transacaoColumn, null)
+      .eq('valor', params.valor)
+      .gte('data_transferencia', deslocarDias(params.dataTransacao, -7))
+      .lte('data_transferencia', deslocarDias(params.dataTransacao, 7))
+      .not(espelhoColumn, 'is', null)
+      .order('data_transferencia', { ascending: false });
+    if (error) throw error;
+
+    const transferencias = (data || []) as TransferenciaBancaria[];
+    if (transferencias.length === 0) return [];
+    const espelhoIds = transferencias
+      .map((transferencia) => lado === 'origem' ? transferencia.lancamento_saida_id : transferencia.lancamento_entrada_id)
+      .filter((id): id is string => Boolean(id));
+    const { data: conciliacoes, error: erroConciliacoes } = await supabase
+      .from('conciliacoes')
+      .select('lancamento_id')
+      .in('lancamento_id', espelhoIds);
+    if (erroConciliacoes) throw erroConciliacoes;
+    const espelhosConciliados = new Set((conciliacoes || []).map((conciliacao) => conciliacao.lancamento_id));
+
+    return transferencias
+      .filter((transferencia) => {
+        const espelhoId = lado === 'origem' ? transferencia.lancamento_saida_id : transferencia.lancamento_entrada_id;
+        return Boolean(espelhoId && !espelhosConciliados.has(espelhoId));
+      })
+      .map((transferencia) => ({ transferencia, lado }));
   },
 
   criar: async (params: CriarTransferenciaParams): Promise<TransferenciaBancaria> => {

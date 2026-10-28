@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   AlertTriangle,
   ArrowDownLeft,
+  ArrowLeftRight,
   ArrowUpRight,
   Building,
   CheckCircle2,
@@ -21,9 +22,10 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { useContas, useLancamentosDaConta, usePersistirExtrato, useConciliarTransacao, useStatusConciliacaoTransacoes, useLancamentosConciliados } from '../hooks/useData';
+import { useContas, useLancamentosDaConta, usePersistirExtrato, useConciliarTransacao, useStatusConciliacaoTransacoes, useLancamentosConciliados, useTransferenciasCandidatas, useConciliarTransferencia } from '../hooks/useData';
 import { useUIStore } from '../store/uiStore';
 import ConciliarModal from '../components/Conciliacao/ConciliarModal';
+import ConciliarTransferenciaModal from '../components/Conciliacao/ConciliarTransferenciaModal';
 import ProgressoExtrato from '../components/Conciliacao/ProgressoExtrato';
 import MigracaoDados from '../components/Migracao/MigracaoDados';
 import TransferenciasBancarias from '../components/Transferencias/TransferenciasBancarias';
@@ -31,7 +33,7 @@ import { compararExtrato, valorPrevistoParaConciliar } from '../services/extrato
 import { lerExtrato } from '../services/extrato/motorLeitura';
 import { reaproveitarExtratoImportado } from '../services/extrato/persistencia';
 import { mensagemDoErro } from '../services/erros';
-import type { ExtratoLido, ItemComparacao, LancamentoFinanceiro, ProgressoLeituraExtrato } from '../types';
+import type { ExtratoLido, ItemComparacao, LancamentoFinanceiro, ProgressoLeituraExtrato, TransferenciaCandidataLinha } from '../types';
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const dataFormatada = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
@@ -79,10 +81,12 @@ export default function Conciliacao() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const { persistir: persistirExtrato, isPersisting } = usePersistirExtrato();
   const { conciliar, isConciliando } = useConciliarTransacao();
+  const { conciliarTransferencia, isConciliando: isConciliandoTransferencia } = useConciliarTransferencia();
   const [arrastando, setArrastando] = useState(false);
   const [mostrarNaoInterpretadas, setMostrarNaoInterpretadas] = useState(false);
   const [mostrarIgnoradas, setMostrarIgnoradas] = useState(false);
   const [conciliarItem, setConciliarItem] = useState<ItemComparacao | null>(null);
+  const [transferenciaItem, setTransferenciaItem] = useState<ItemComparacao | null>(null);
   const [toasts, setToasts] = useState<Array<{ id: number; message: string; type: 'success' | 'error' }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -129,6 +133,19 @@ export default function Conciliacao() {
     lancamentoIds,
     Boolean(conciliarItem && podeAgirNaConciliacao),
   );
+  const linhaTransferencia = transferenciaItem?.linhaExtrato ?? null;
+  const {
+    data: transferenciasCandidatas = [],
+    isLoading: carregandoTransferenciasCandidatas,
+    isError: erroTransferenciasCandidatas,
+    error: erroCarregamentoTransferencias,
+  } = useTransferenciasCandidatas({
+    contaId,
+    dataTransacao: linhaTransferencia?.data ?? '',
+    valor: linhaTransferencia?.valor ?? 0,
+    direcao: linhaTransferencia?.direcao ?? 'entrada',
+    transacaoId: linhaTransferencia?.transacaoBancoId ?? null,
+  }, Boolean(transferenciaItem));
 
   const resultado = useMemo(
     () => (extrato ? compararExtrato(extrato, lancamentos) : null),
@@ -303,6 +320,14 @@ export default function Conciliacao() {
     showToast('Transação conciliada com sucesso.');
   };
 
+  const confirmarConciliacaoTransferencia = async ({ transferencia, lado }: TransferenciaCandidataLinha) => {
+    const transacaoId = transferenciaItem?.linhaExtrato?.transacaoBancoId;
+    if (!transacaoId) throw new Error('Importe o extrato para conciliação antes de conciliar.');
+    await conciliarTransferencia({ transferenciaId: transferencia.id, transacaoId, lado });
+    setTransferenciaItem(null);
+    showToast('Transação conciliada com a transferência.');
+  };
+
   const renderItem = (item: ItemComparacao) => {
     const status = {
       conciliado: { label: 'Par sugerido', icon: CheckCircle2, className: 'bg-bank-truth-green/10 text-bank-truth-green' },
@@ -360,6 +385,16 @@ export default function Conciliacao() {
                 className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />Conciliar
+              </button>
+              <button
+                type="button"
+                onClick={() => setTransferenciaItem(item)}
+                disabled={!item.linhaExtrato.transacaoBancoId}
+                title={!item.linhaExtrato.transacaoBancoId ? 'Importe o extrato para conciliação antes de conciliar' : 'Vincular esta transação bancária a uma transferência aprovada'}
+                data-testid="action-transferencia"
+                className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ArrowLeftRight className="h-3.5 w-3.5" />Transferência
               </button>
               {(item.status === 'pendente_banco' || item.status === 'divergente') && <button
                 type="button"
@@ -712,6 +747,16 @@ export default function Conciliacao() {
         onConfirmar={confirmarConciliacao}
         onFazerAVR={aplicarAVR}
         isConciliando={isConciliando}
+      />
+      <ConciliarTransferenciaModal
+        aberto={Boolean(transferenciaItem && podeAgirNaConciliacao)}
+        linha={linhaTransferencia}
+        candidatas={transferenciasCandidatas}
+        carregando={carregandoTransferenciasCandidatas}
+        erroCarregamento={erroTransferenciasCandidatas ? erroCarregamentoTransferencias : null}
+        onFechar={() => setTransferenciaItem(null)}
+        onConfirmar={confirmarConciliacaoTransferencia}
+        isConciliando={isConciliandoTransferencia}
       />
       <div aria-live="polite" className="pointer-events-none fixed bottom-4 right-4 z-[500] flex w-full max-w-sm flex-col gap-2">
         <AnimatePresence>

@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { DashboardIndicadores, ImportacaoDados } from '../types';
-import type { TransferenciaBancaria } from '../types';
+import type { TransferenciaBancaria, TransferenciaCandidataLinha } from '../types';
 import type { CriarTransferenciaParams } from '../services/transferenciasService';
 import { transferenciasService } from '../services/transferenciasService';
 import { desfazerImportacao } from '../services/migracao';
@@ -234,6 +234,23 @@ export function useTransacoesCandidatas(transferencia: TransferenciaBancaria | n
   });
 }
 
+export function useTransferenciasCandidatas(
+  params: {
+    contaId: string;
+    dataTransacao: string;
+    valor: number;
+    direcao: 'entrada' | 'saida';
+    transacaoId: string | null;
+  },
+  enabled = true,
+) {
+  return useQuery<TransferenciaCandidataLinha[]>({
+    queryKey: ['transferencias', 'candidatasTransacao', params.transacaoId],
+    queryFn: () => transferenciasService.listarCandidatasParaTransacao(params),
+    enabled: enabled && Boolean(params.transacaoId),
+  });
+}
+
 export function useSugerirTransferenciasDestino(transacaoId: string | null, enabled = true) {
   return useQuery({
     queryKey: ['transferencias', 'sugestoesDestino', transacaoId],
@@ -261,7 +278,7 @@ export function useConciliarTransferencia() {
     mutationFn: ({ transferenciaId, transacaoId, lado }: { transferenciaId: string; transacaoId: string; lado: 'origem' | 'destino' }) =>
       transferenciasService.conciliar(transferenciaId, transacaoId, lado),
     onSuccess: () => {
-      ['transferencias', 'lancamentos', 'contasSaldos', 'dashboardStats', 'dashboardIndicadores', 'auditoriaLogs', 'notifications', 'transacoesBanco']
+      ['transferencias', 'lancamentos', 'contasSaldos', 'dashboardStats', 'dashboardIndicadores', 'auditoriaLogs', 'notifications', 'transacoesBanco', 'conciliacoes']
         .forEach((queryKey) => queryClient.invalidateQueries({ queryKey: [queryKey] }));
     },
   });
