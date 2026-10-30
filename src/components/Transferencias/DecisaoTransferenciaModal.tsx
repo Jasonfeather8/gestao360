@@ -76,7 +76,7 @@ export default function DecisaoTransferenciaModal({
           <p className="mt-1 text-xs text-on-surface-variant">{dataFormatada.format(new Date(`${transferencia.data_transferencia}T00:00:00Z`))}</p>
         </div>
 
-        {modo === 'aprovar' && <p className="mt-4 text-sm text-on-surface-variant">Esta ação apenas confirma os dados da transferência. Os títulos aparecem no Financeiro como “Pend. Gestor”; a aprovação dos títulos e o efeito no saldo acontecem somente no Financeiro.</p>}
+        {modo === 'aprovar' && <p className="mt-4 text-sm text-on-surface-variant">Confirmar os dados movimenta <strong>somente o saldo operacional</strong> (saída na conta de origem e entrada na conta de destino) e envia os títulos ao Financeiro como “Pend. Gestor”. O saldo confirmado só muda quando o Master aprovar os títulos no Financeiro.</p>}
         {modo === 'reprovar' && <p className="mt-4 text-sm text-on-surface-variant">A transferência voltará para Aberta e será necessária uma nova conciliação.</p>}
         {modo === 'estornar' && <p className="mt-4 text-sm text-on-surface-variant">Os espelhos e vínculos da transferência serão desfeitos. A justificativa é obrigatória.</p>}
 

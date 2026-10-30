@@ -90,12 +90,12 @@ test("Master confirma os dados da transferência e aprova os dois títulos pelo 
   await transferenciaCard.getByRole("button", { name: "Confirmar", exact: true }).click();
   const modalConfirmacao = page.getByRole("dialog");
   await expect(modalConfirmacao.getByRole("heading", { name: "Confirmar dados da transferência" })).toBeVisible();
-  await expect(modalConfirmacao.getByText(/a aprovação dos títulos e o efeito no saldo acontecem somente no Financeiro/i)).toBeVisible();
+  await expect(modalConfirmacao.getByText(/O saldo confirmado só muda quando o Master aprovar os títulos no Financeiro/i)).toBeVisible();
   await modalConfirmacao.getByRole("button", { name: "Confirmar", exact: true }).click();
   await expect(modalConfirmacao).toBeHidden({ timeout: 30_000 });
   await expect(page.getByRole("status").filter({ hasText: "Dados da transferência confirmados." })).toBeVisible();
   await expect(transferenciaCard.getByRole("button", { name: "Confirmada", exact: true })).toBeDisabled();
-  await expect(transferenciaCard.getByText(/Dados confirmados pelo Master em/)).toBeVisible();
+  await expect(transferenciaCard.getByText(/Dados confirmados em/)).toBeVisible();
 
   await page.goto("/lancamentos", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await searchField(page).fill(observationMarker);

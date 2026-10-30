@@ -72,13 +72,13 @@ export async function cleanupMasterTestUser(admin: SupabaseClient, userId: strin
   try {
     const { data: transfers, error: transfersError } = await admin
       .from("transferencias_bancarias")
-      .select("id")
+      .select("id, lancamento_saida_id, lancamento_entrada_id, tarifa_lancamento_id")
       .eq("criado_por", userId);
     if (transfersError) throw transfersError;
 
-    // Estorna pela própria tela (quando a página está disponível) para desfazer a
-    // movimentação pelo fluxo do app; os registros são apagados logo abaixo de
-    // qualquer forma, então o saldo das contas volta ao estado anterior.
+    // A proteção do banco só permite desfazer uma transferência pelo estorno: os
+    // espelhos não podem ser apagados nem ter os dados estruturais alterados por
+    // fora. Com a página autenticada disponível, o estorno é feito pela própria tela.
     if (transfers?.length && page) {
       await page.goto("/conciliacao?aba=transferencias", { waitUntil: "domcontentloaded", timeout: 60_000 });
       await expect(page.getByRole("heading", { name: "Transferências registradas" })).toBeVisible({ timeout: 30_000 });
@@ -104,6 +104,9 @@ export async function cleanupMasterTestUser(admin: SupabaseClient, userId: strin
         .like("message", `%${transfer.id}%`);
       if (notificationError) throw notificationError;
 
+      const espelhos = [transfer.lancamento_saida_id, transfer.lancamento_entrada_id, transfer.tarifa_lancamento_id].filter(Boolean);
+      if (espelhos.length > 0) continue;
+
       const { error: transferError } = await admin
         .from("transferencias_bancarias")
         .delete()
@@ -114,11 +117,14 @@ export async function cleanupMasterTestUser(admin: SupabaseClient, userId: strin
 
     const { data: launches, error: launchesError } = await admin
       .from("lancamentos_financeiros")
-      .select("id")
+      .select("id, transferencia_id")
       .eq("user_id", userId);
     if (launchesError) throw launchesError;
 
+    const lancamentosApagaveis = (launches ?? []).filter((launch) => !launch.transferencia_id).map((launch) => launch.id);
+
     for (const launch of launches ?? []) {
+      if (launch.transferencia_id) continue;
       const { error } = await admin
         .from("notifications")
         .delete()
@@ -127,11 +133,13 @@ export async function cleanupMasterTestUser(admin: SupabaseClient, userId: strin
       if (error) throw error;
     }
 
-    const { error: launchDeleteError } = await admin
-      .from("lancamentos_financeiros")
-      .delete()
-      .eq("user_id", userId);
-    if (launchDeleteError) throw launchDeleteError;
+    if (lancamentosApagaveis.length > 0) {
+      const { error: launchDeleteError } = await admin
+        .from("lancamentos_financeiros")
+        .delete()
+        .in("id", lancamentosApagaveis);
+      if (launchDeleteError) throw launchDeleteError;
+    }
 
     const { error: recurrenceDeleteError } = await admin.from("recorrencias").delete().eq("user_id", userId);
     if (recurrenceDeleteError) throw recurrenceDeleteError;
