@@ -127,7 +127,9 @@ export const transferenciasService = {
       p_tarifa_centro_custo_id: params.tarifaCentroCustoId || null,
       p_observacao: params.observacao?.trim() || null,
     });
-    if (error) throw error;
+    // O erro do Supabase não é uma instância de Error: sem converter, a mensagem
+    // do banco (ex.: saldo insuficiente) seria trocada por um texto genérico.
+    if (error) throw new Error(error.message);
     return data as TransferenciaBancaria;
   },
 
