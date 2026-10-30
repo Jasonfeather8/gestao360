@@ -53,7 +53,15 @@ function linhaTransferencia(
 ) {
   const status = statusTransferencia[transferencia.status];
   const pendente = statusPendentesMaster.includes(transferencia.status);
-  const rotuloStatus = pendente && transferencia.confirmado_em ? 'Aguardando Financeiro' : status.label;
+  const reprovada = Boolean(transferencia.reprovado_em);
+  const rotuloStatus = reprovada
+    ? 'Reprovada'
+    : transferencia.status === 'aberta' && !transferencia.confirmado_em
+      ? 'Aguardando Confirmação'
+      : pendente && transferencia.confirmado_em
+        ? 'Aguardando Financeiro'
+        : status.label;
+  const corStatus = reprovada ? 'text-alert-red' : status.cor;
   // Depois de confirmada, o trabalho nesta tela terminou: nenhum botão fica aqui.
   // Reprovar e estornar passam a ser feitos no Financeiro, pelo Master.
   const acoesDisponiveis = !transferencia.confirmado_em && transferencia.status !== 'estornada';
@@ -71,8 +79,8 @@ function linhaTransferencia(
             Conciliação: origem {transferencia.transacao_origem_id ? 'conciliada' : 'pendente'} · destino {transferencia.transacao_destino_id ? 'conciliada' : 'pendente'}
           </p>
           {pendente && !transferencia.confirmado_em && <p className="mt-1 text-xs text-primary">Confirme os dados da transferência para movimentar o saldo operacional (saída na origem e entrada no destino) e enviar os títulos ao Financeiro como “Pend. Gestor”. A aprovação — e o efeito no saldo confirmado — é feita pelo Master no Financeiro. A conciliação do extrato pode ser feita depois, inclusive pelo gerente.</p>}
-          {pendente && transferencia.confirmado_em && <p className="mt-1 text-xs text-primary">Títulos já no Financeiro como “Pend. Gestor”, aguardando aprovação do Master. O saldo operacional já foi movimentado; o saldo confirmado só muda na aprovação. A conciliação do extrato é opcional e pode ser feita depois.</p>}
-          {transferencia.confirmado_em && <p className="mt-1 text-xs text-bank-truth-green">Dados confirmados em {dataHoraFormatada.format(new Date(transferencia.confirmado_em))}</p>}
+          {pendente && transferencia.confirmado_em && !reprovada && <p className="mt-1 text-xs text-primary">Títulos já no Financeiro como “Pend. Gestor”, aguardando aprovação do Master. O saldo operacional já foi movimentado; o saldo confirmado só muda na aprovação. A conciliação do extrato é opcional e pode ser feita depois.</p>}
+          {transferencia.confirmado_em && !reprovada && <p className="mt-1 text-xs text-bank-truth-green">Dados confirmados em {dataHoraFormatada.format(new Date(transferencia.confirmado_em))}</p>}
           {transferencia.tarifa && <p className="mt-1 text-xs text-on-surface-variant">Tarifa: {moeda.format(Number(transferencia.tarifa.valor_previsto))}</p>}
           {transferencia.status === 'conciliada' && transferencia.aprovado_em && <p className="mt-1 text-xs text-bank-truth-green">Aprovada em {dataHoraFormatada.format(new Date(transferencia.aprovado_em))}</p>}
           {transferencia.status === 'conciliada' && <p className="mt-1 text-xs text-bank-truth-green">Saldos ajustados: {moeda.format(-Number(transferencia.valor))} em {transferencia.conta_origem?.nome || 'conta de origem'} · {moeda.format(Number(transferencia.valor))} em {transferencia.conta_destino?.nome || 'conta de destino'}{transferencia.tarifa ? ` · tarifa de ${moeda.format(Number(transferencia.tarifa.valor_previsto))} em ${transferencia.conta_origem?.nome || 'conta de origem'}` : ''}</p>}
@@ -81,7 +89,7 @@ function linhaTransferencia(
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 sm:justify-end">
           <span className="text-sm font-black text-on-surface">{moeda.format(Number(transferencia.valor))}</span>
-          <span className={`text-xs font-bold ${status.cor}`}>{rotuloStatus}</span>
+          <span className={`text-xs font-bold ${corStatus}`}>{rotuloStatus}</span>
           {acoesDisponiveis && pendente && (role === 'master' || role === 'gerente') && (
             <button type="button" onClick={() => abrirDecisao(transferencia, 'aprovar')} className="rounded-lg bg-bank-truth-green px-3 py-2 text-xs font-bold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Confirmar</button>
           )}

@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.sincronizar_transferencia_aprovada()

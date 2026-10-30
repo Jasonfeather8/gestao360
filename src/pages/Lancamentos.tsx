@@ -1346,27 +1346,18 @@ export default function Lancamentos({
                             </div>
                           )}
 
-                          {isTransferenciaEspelho ? (
-                            <button
-                              type="button"
-                              onClick={() => navigate('/conciliacao?aba=transferencias')}
-                              className="px-3 py-1.5 rounded-lg border border-primary/20 bg-primary/5 text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary/10 transition-all"
-                            >
-                              Ver transferência
-                            </button>
-                          ) : (
-                            <LancamentoActionMenu
-                              item={item}
-                              isMaster={isMaster}
-                              isActive={activeMenuId === item.id}
-                              isOperationalView={isOperationalView}
-                              onToggle={() => setActiveMenuId(activeMenuId === item.id ? null : item.id)}
-                              onBaixa={handleOpenBaixa}
-                              onEstornar={handleEstornar}
-                              onEdit={handleEdit}
-                              onDelete={handleDelete}
-                            />
-                          )}
+                          <LancamentoActionMenu
+                            item={item}
+                            isMaster={isMaster}
+                            isActive={activeMenuId === item.id}
+                            isOperationalView={isOperationalView}
+                            onToggle={() => setActiveMenuId(activeMenuId === item.id ? null : item.id)}
+                            onBaixa={handleOpenBaixa}
+                            onEstornar={handleEstornar}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                            onVerTransferencia={() => navigate('/conciliacao?aba=transferencias')}
+                          />
                         </div>
                       </td>
                     </tr>

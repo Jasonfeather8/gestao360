@@ -94,7 +94,8 @@ test("Master confirma os dados da transferência e aprova os dois títulos pelo 
   await modalConfirmacao.getByRole("button", { name: "Confirmar", exact: true }).click();
   await expect(modalConfirmacao).toBeHidden({ timeout: 30_000 });
   await expect(page.getByRole("status").filter({ hasText: "Dados da transferência confirmados." })).toBeVisible();
-  await expect(transferenciaCard.getByRole("button", { name: "Confirmada", exact: true })).toBeDisabled();
+  // Confirmada, o trabalho nesta tela terminou: nenhum botão de decisão fica no cartão.
+  await expect(transferenciaCard.getByRole("button", { name: "Confirmar", exact: true })).toHaveCount(0);
   await expect(transferenciaCard.getByText(/Dados confirmados em/)).toBeVisible();
 
   await page.goto("/lancamentos", { waitUntil: "domcontentloaded", timeout: 60_000 });
