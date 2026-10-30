@@ -54,6 +54,9 @@ function linhaTransferencia(
   const status = statusTransferencia[transferencia.status];
   const pendente = statusPendentesMaster.includes(transferencia.status);
   const rotuloStatus = pendente && transferencia.confirmado_em ? 'Aguardando Financeiro' : status.label;
+  // Depois de confirmada, o trabalho nesta tela terminou: nenhum botão fica aqui.
+  // Reprovar e estornar passam a ser feitos no Financeiro, pelo Master.
+  const acoesDisponiveis = !transferencia.confirmado_em && transferencia.status !== 'estornada';
   return (
     <article key={transferencia.id} data-testid={`transferencia-${transferencia.id}`} className="border-b border-surface-border/70 py-4 last:border-b-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -79,13 +82,15 @@ function linhaTransferencia(
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 sm:justify-end">
           <span className="text-sm font-black text-on-surface">{moeda.format(Number(transferencia.valor))}</span>
           <span className={`text-xs font-bold ${status.cor}`}>{rotuloStatus}</span>
-          {pendente && (role === 'master' || role === 'gerente') && (
-            <button type="button" disabled={Boolean(transferencia.confirmado_em)} onClick={() => abrirDecisao(transferencia, 'aprovar')} className="rounded-lg bg-bank-truth-green px-3 py-2 text-xs font-bold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60">{transferencia.confirmado_em ? 'Confirmada' : 'Confirmar'}</button>
+          {acoesDisponiveis && pendente && (role === 'master' || role === 'gerente') && (
+            <button type="button" onClick={() => abrirDecisao(transferencia, 'aprovar')} className="rounded-lg bg-bank-truth-green px-3 py-2 text-xs font-bold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Confirmar</button>
           )}
-          {pendente && role === 'master' && (
+          {acoesDisponiveis && pendente && role === 'master' && (
             <button type="button" onClick={() => abrirDecisao(transferencia, 'reprovar')} className="rounded-lg bg-alert-red px-3 py-2 text-xs font-bold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Reprovar</button>
           )}
-          {role === 'master' && transferencia.status !== 'estornada' && <button type="button" onClick={() => abrirDecisao(transferencia, 'estornar')} className="rounded-lg border border-alert-red/40 px-3 py-2 text-xs font-bold text-alert-red transition hover:bg-alert-red/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Estornar</button>}
+          {acoesDisponiveis && role === 'master' && (
+            <button type="button" onClick={() => abrirDecisao(transferencia, 'estornar')} className="rounded-lg border border-alert-red/40 px-3 py-2 text-xs font-bold text-alert-red transition hover:bg-alert-red/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Estornar</button>
+          )}
         </div>
       </div>
     </article>
