@@ -39,7 +39,7 @@ export default function DecisaoTransferenciaModal({
 
   if (!modo || !transferencia) return null;
 
-  const titulo = modo === 'aprovar' ? 'Aprovar transferência' : modo === 'reprovar' ? 'Reprovar transferência' : 'Estornar transferência';
+  const titulo = modo === 'aprovar' ? 'Confirmar dados da transferência' : modo === 'reprovar' ? 'Reprovar transferência' : 'Estornar transferência';
   const obrigatoria = modo === 'reprovar' || modo === 'estornar';
   const confirmarDesabilitado = processando || (obrigatoria && !justificativa.trim());
 
@@ -76,6 +76,7 @@ export default function DecisaoTransferenciaModal({
           <p className="mt-1 text-xs text-on-surface-variant">{dataFormatada.format(new Date(`${transferencia.data_transferencia}T00:00:00Z`))}</p>
         </div>
 
+        {modo === 'aprovar' && <p className="mt-4 text-sm text-on-surface-variant">Esta ação apenas confirma os dados da transferência. Os títulos aparecem no Financeiro como “Pend. Gestor”; a aprovação dos títulos e o efeito no saldo acontecem somente no Financeiro.</p>}
         {modo === 'reprovar' && <p className="mt-4 text-sm text-on-surface-variant">A transferência voltará para Aberta e será necessária uma nova conciliação.</p>}
         {modo === 'estornar' && <p className="mt-4 text-sm text-on-surface-variant">Os espelhos e vínculos da transferência serão desfeitos. A justificativa é obrigatória.</p>}
 
@@ -107,7 +108,7 @@ export default function DecisaoTransferenciaModal({
             onClick={() => onConfirmar(justificativa.trim())}
             className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${modo === 'aprovar' ? 'bg-bank-truth-green' : 'bg-alert-red'}`}
           >
-            {processando ? <><LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" />Processando…</> : modo === 'aprovar' ? <><CheckCircle2 aria-hidden="true" className="h-4 w-4" />Aprovar</> : modo === 'reprovar' ? 'Reprovar' : 'Estornar'}
+            {processando ? <><LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" />Processando…</> : modo === 'aprovar' ? <><CheckCircle2 aria-hidden="true" className="h-4 w-4" />Confirmar</> : modo === 'reprovar' ? 'Reprovar' : 'Estornar'}
           </button>
         </footer>
       </section>

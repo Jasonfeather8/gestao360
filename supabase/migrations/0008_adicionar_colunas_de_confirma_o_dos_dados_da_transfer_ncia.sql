@@ -1,0 +1,2 @@
+ALTER TABLE public.transferencias_bancarias ADD COLUMN IF NOT EXISTS confirmado_por uuid REFERENCES auth.users(id);
+ALTER TABLE public.transferencias_bancarias ADD COLUMN IF NOT EXISTS confirmado_em timestamp with time zone;

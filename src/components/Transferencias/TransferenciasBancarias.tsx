@@ -4,7 +4,7 @@ import { ArrowLeftRight, CheckCircle2, Info, Landmark, LoaderCircle } from 'luci
 import MoneyInput from '../MoneyInput';
 import AccountFilterCards from '../Lancamentos/AccountFilterCards';
 import DecisaoTransferenciaModal from './DecisaoTransferenciaModal';
-import { useCategorias, useCentrosCusto, useContas, useContasSaldos, useCriarTransferencia, useDecidirTransferencia, useEstornarTransferencia, useTransferencias } from '../../hooks/useData';
+import { useCategorias, useCentrosCusto, useContas, useContasSaldos, useCriarTransferencia, useConfirmarTransferencia, useDecidirTransferencia, useEstornarTransferencia, useTransferencias } from '../../hooks/useData';
 import { useDragScroll } from '../../hooks/useDragScroll';
 import { useAuth } from '../../hooks/useAuth';
 import type { TransferenciaBancaria, TransferenciaStatus } from '../../types';
@@ -30,13 +30,13 @@ function emCentavos(valor: string): number {
 const statusTransferencia: Record<TransferenciaStatus, { label: string; cor: string }> = {
   aberta: { label: 'Aberta', cor: 'text-secondary' },
   aguardando_destino: { label: 'Aguardando destino', cor: 'text-pending-amber' },
-  conciliada_pendente_master: { label: 'Conciliada — aguardando Master', cor: 'text-primary' },
-  conciliada: { label: 'Concluída', cor: 'text-bank-truth-green' },
+  conciliada_pendente_master: { label: 'Conciliada — aguardando Financeiro', cor: 'text-primary' },
+  conciliada: { label: 'Conciliada', cor: 'text-bank-truth-green' },
   estornada: { label: 'Estornada', cor: 'text-alert-red' },
 };
 const statusPendentesMaster: TransferenciaStatus[] = ['aberta', 'aguardando_destino', 'conciliada_pendente_master'];
 const gruposSituacao = [
-  { id: 'pendentes', label: 'Pendentes de aprovação', statuses: ['aberta', 'aguardando_destino', 'conciliada_pendente_master'] },
+  { id: 'pendentes', label: 'Pendentes de confirmação', statuses: ['aberta', 'aguardando_destino', 'conciliada_pendente_master'] },
   { id: 'concluidas', label: 'Concluídas', statuses: ['conciliada'] },
   { id: 'estornadas', label: 'Estornadas', statuses: ['estornada'] },
 ] as const;
@@ -53,7 +53,7 @@ function linhaTransferencia(
 ) {
   const status = statusTransferencia[transferencia.status];
   return (
-    <article key={transferencia.id} className="border-b border-surface-border/70 py-4 last:border-b-0">
+    <article key={transferencia.id} data-testid={`transferencia-${transferencia.id}`} className="border-b border-surface-border/70 py-4 last:border-b-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-on-surface-variant">{formatarData(transferencia.data_transferencia)}</p>
@@ -65,8 +65,8 @@ function linhaTransferencia(
           <p className="mt-1 text-xs text-on-surface-variant">
             Conciliação: origem {transferencia.transacao_origem_id ? 'conciliada' : 'pendente'} · destino {transferencia.transacao_destino_id ? 'conciliada' : 'pendente'}
           </p>
-          {(transferencia.status === 'aberta' || transferencia.status === 'aguardando_destino') && <p className="mt-1 text-xs text-primary">Aprovação pendente do Master · a conciliação do extrato é opcional e pode ser feita depois · os saldos das contas são ajustados na aprovação.</p>}
-          {transferencia.status === 'conciliada_pendente_master' && <p className="mt-1 text-xs text-primary">Os dois lados estão conciliados e aguardam aprovação do Master.</p>}
+          {statusPendentesMaster.includes(transferencia.status) && <p className="mt-1 text-xs text-primary">Os títulos já estão no Financeiro como “Pend. Gestor”, aguardando aprovação do gestor. O saldo operacional da origem já está reservado; o saldo confirmado só muda quando os títulos são aprovados no Financeiro. A conciliação do extrato é opcional e pode ser feita depois.</p>}
+          {transferencia.confirmado_em && <p className="mt-1 text-xs text-bank-truth-green">Dados confirmados pelo Master em {dataHoraFormatada.format(new Date(transferencia.confirmado_em))}</p>}
           {transferencia.tarifa && <p className="mt-1 text-xs text-on-surface-variant">Tarifa: {moeda.format(Number(transferencia.tarifa.valor_previsto))}</p>}
           {transferencia.status === 'conciliada' && transferencia.aprovado_em && <p className="mt-1 text-xs text-bank-truth-green">Aprovada em {dataHoraFormatada.format(new Date(transferencia.aprovado_em))}</p>}
           {transferencia.status === 'conciliada' && <p className="mt-1 text-xs text-bank-truth-green">Saldos ajustados: {moeda.format(-Number(transferencia.valor))} em {transferencia.conta_origem?.nome || 'conta de origem'} · {moeda.format(Number(transferencia.valor))} em {transferencia.conta_destino?.nome || 'conta de destino'}{transferencia.tarifa ? ` · tarifa de ${moeda.format(Number(transferencia.tarifa.valor_previsto))} em ${transferencia.conta_origem?.nome || 'conta de origem'}` : ''}</p>}
@@ -77,7 +77,7 @@ function linhaTransferencia(
           <span className="text-sm font-black text-on-surface">{moeda.format(Number(transferencia.valor))}</span>
           <span className={`text-xs font-bold ${status.cor}`}>{status.label}</span>
           {role === 'master' && statusPendentesMaster.includes(transferencia.status) && <>
-            <button type="button" onClick={() => abrirDecisao(transferencia, 'aprovar')} className="rounded-lg bg-bank-truth-green px-3 py-2 text-xs font-bold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Aprovar</button>
+            <button type="button" disabled={Boolean(transferencia.confirmado_em)} onClick={() => abrirDecisao(transferencia, 'aprovar')} className="rounded-lg bg-bank-truth-green px-3 py-2 text-xs font-bold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60">{transferencia.confirmado_em ? 'Confirmada' : 'Confirmar'}</button>
             <button type="button" onClick={() => abrirDecisao(transferencia, 'reprovar')} className="rounded-lg bg-alert-red px-3 py-2 text-xs font-bold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Reprovar</button>
           </>}
           {role === 'master' && transferencia.status !== 'estornada' && <button type="button" onClick={() => abrirDecisao(transferencia, 'estornar')} className="rounded-lg border border-alert-red/40 px-3 py-2 text-xs font-bold text-alert-red transition hover:bg-alert-red/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Estornar</button>}
@@ -97,6 +97,7 @@ export default function TransferenciasBancarias() {
   const dragScrollContas = useDragScroll();
   const transferenciasPendentesMaster = transferencias.filter((transferencia) => statusPendentesMaster.includes(transferencia.status)).length;
   const { criarTransferencia, isCreating } = useCriarTransferencia();
+  const { confirmarTransferencia, isConfirmando } = useConfirmarTransferencia();
   const { decidirTransferencia, isDecidindo } = useDecidirTransferencia();
   const { estornarTransferencia, isEstornando } = useEstornarTransferencia();
   const contas = useMemo(() => contasData.filter((conta) => !('status' in conta) || conta.status !== 'excluido'), [contasData]);
@@ -155,13 +156,15 @@ export default function TransferenciasBancarias() {
     if (!transferenciaDecisao || !modoDecisao) return;
     setErroDecisao('');
     try {
-      if (modoDecisao === 'estornar') {
+      if (modoDecisao === 'aprovar') {
+        await confirmarTransferencia({ transferenciaId: transferenciaDecisao.id });
+      } else if (modoDecisao === 'estornar') {
         await estornarTransferencia({ transferenciaId: transferenciaDecisao.id, motivo: justificativa });
       } else {
-        await decidirTransferencia({ transferenciaId: transferenciaDecisao.id, aprovado: modoDecisao === 'aprovar', justificativa });
+        await decidirTransferencia({ transferenciaId: transferenciaDecisao.id, aprovado: false, justificativa });
       }
       setErro('');
-      setConfirmacao(modoDecisao === 'aprovar' ? 'Transferência aprovada.' : modoDecisao === 'reprovar' ? 'Transferência reprovada.' : 'Transferência estornada.');
+      setConfirmacao(modoDecisao === 'aprovar' ? 'Dados da transferência confirmados.' : modoDecisao === 'reprovar' ? 'Transferência reprovada.' : 'Transferência estornada.');
       cancelarDecisao();
     } catch (error) {
       setErroDecisao(error instanceof Error ? error.message : 'Não foi possível concluir a ação na transferência.');
@@ -330,7 +333,7 @@ export default function TransferenciasBancarias() {
         <header className="mb-2 flex items-center justify-between gap-3">
           <h2 className="text-xs font-black uppercase tracking-widest text-secondary">Transferências registradas</h2>
           <div className="flex items-center gap-2">
-            {role === 'master' && transferenciasPendentesMaster > 0 && <span className="rounded-full border border-amber-100 bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700">{transferenciasPendentesMaster} aguardando decisão do Master</span>}
+            {role === 'master' && transferenciasPendentesMaster > 0 && <span className="rounded-full border border-amber-100 bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700">{transferenciasPendentesMaster} aguardando confirmação dos dados</span>}
             <span className="text-xs text-on-surface-variant">{filtroAtivo ? `${transferenciasFiltradas.length} de ${transferencias.length}` : transferencias.length}</span>
           </div>
         </header>
@@ -347,7 +350,7 @@ export default function TransferenciasBancarias() {
       <DecisaoTransferenciaModal
         modo={modoDecisao}
         transferencia={transferenciaDecisao}
-        processando={isDecidindo || isEstornando}
+        processando={isConfirmando || isDecidindo || isEstornando}
         erro={erroDecisao}
         onCancelar={cancelarDecisao}
         onConfirmar={(justificativa) => void confirmarDecisao(justificativa)}

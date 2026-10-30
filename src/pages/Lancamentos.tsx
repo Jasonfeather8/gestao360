@@ -316,6 +316,8 @@ export default function Lancamentos({
   const { data: transferencias = [] } = useTransferencias();
   const transferenciasById = useMemo(() => new Map(transferencias.map(transferencia => [transferencia.id, transferencia])), [transferencias]);
   const displayedLancamentos = useMemo(() => {
+    if (isFinanceiroView) return filteredLancamentos;
+
     const displayed: LancamentoFinanceiro[] = [];
     const indexesByTransferencia = new Map<string, number>();
 
@@ -337,7 +339,7 @@ export default function Lancamentos({
     });
 
     return displayed;
-  }, [filteredLancamentos]);
+  }, [filteredLancamentos, isFinanceiroView]);
   const selectableLancamentos = useMemo(
     () => filteredLancamentos.filter(item => item.transferencia_lado !== 'origem' && item.transferencia_lado !== 'destino'),
     [filteredLancamentos]
@@ -611,6 +613,8 @@ export default function Lancamentos({
   };
 
   const renderStatusBadge = (item: LancamentoFinanceiro) => {
+   const isTransferenciaEspelho = Boolean(item.transferencia_id)
+     && (item.transferencia_lado === 'origem' || item.transferencia_lado === 'destino');
    if (isFinanceiroView && item.status_aprovacao !== 'confirmado_master') {
      return (
        <span className="inline-flex items-center px-2.5 py-0.5 rounded bg-orange-50 text-orange-600 font-black border border-orange-200 text-[9px] uppercase tracking-tighter animate-pulse">
@@ -657,7 +661,7 @@ export default function Lancamentos({
    if (item.status_pagamento === 'quitação_pendente') {
      return (
        <span className="inline-flex items-center px-2.5 py-0.5 rounded bg-orange-50 text-orange-600 font-black border border-orange-200 text-[9px] uppercase tracking-tighter animate-pulse">
-         {isMaster ? 'Confirme Baixa' : 'Pendente Gestor'}
+         {isTransferenciaEspelho ? (isMaster ? 'Confirme Aprovação' : 'Pend. Gestor') : (isMaster ? 'Confirme Baixa' : 'Pendente Gestor')}
        </span>
      );
    }
@@ -1128,7 +1132,7 @@ export default function Lancamentos({
                   const isSelected = selectedLancamentoIdsForBatch.includes(item.id);
                   const isTransferenciaEspelho = Boolean(item.transferencia_id)
                     && (item.transferencia_lado === 'origem' || item.transferencia_lado === 'destino');
-                  const podeAprovarPeloSelo = isFinanceiroView && isMaster && !isTransferenciaEspelho && item.status_aprovacao !== 'confirmado_master';
+                  const podeAprovarPeloSelo = isFinanceiroView && isMaster && item.status_aprovacao !== 'confirmado_master';
                   const days = getDaysOverdue(item.data_vencimento);
 
                   return (
@@ -1270,7 +1274,7 @@ export default function Lancamentos({
                               </div>
                             ) : item.status_pagamento === 'quitação_pendente' ? (
                               <div className="flex flex-col">
-                                <span className="text-amber-600 font-black text-[9px] uppercase">{isMaster ? 'Confirme Baixa' : 'Pendente Gestor'}</span>
+                                <span className="text-amber-600 font-black text-[9px] uppercase">{isTransferenciaEspelho ? (isMaster ? 'Confirme Aprovação' : 'Pend. Gestor') : (isMaster ? 'Confirme Baixa' : 'Pendente Gestor')}</span>
                                 <span className="text-[9px] text-neutral-400 font-mono">{item.data_pagamento?.split('-').reverse().join('/')}</span>
                               </div>
                             ) : item.status_pagamento === 'bpi' ? (

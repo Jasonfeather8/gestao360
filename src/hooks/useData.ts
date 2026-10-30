@@ -298,6 +298,18 @@ export function useDecidirTransferencia() {
   return { decidirTransferencia: mutation.mutateAsync, isDecidindo: mutation.isPending };
 }
 
+export function useConfirmarTransferencia() {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: ({ transferenciaId }: { transferenciaId: string }) => transferenciasService.confirmar(transferenciaId),
+    onSuccess: () => {
+      ['transferencias', 'lancamentos', 'contasSaldos', 'dashboardStats', 'dashboardIndicadores', 'auditoriaLogs', 'notifications', 'transacoesBanco']
+        .forEach((queryKey) => queryClient.invalidateQueries({ queryKey: [queryKey] }));
+    },
+  });
+  return { confirmarTransferencia: mutation.mutateAsync, isConfirmando: mutation.isPending };
+}
+
 export function useEstornarTransferencia() {
   const queryClient = useQueryClient();
   const mutation = useMutation({

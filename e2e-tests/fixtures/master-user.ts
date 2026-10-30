@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 
 export type MasterTestUser = {
@@ -68,8 +68,50 @@ export async function signInAsMaster(page: Page, user: MasterTestUser): Promise<
   await page.waitForURL("**/dashboard", { timeout: 60_000 });
 }
 
-export async function cleanupMasterTestUser(admin: SupabaseClient, userId: string): Promise<void> {
+export async function cleanupMasterTestUser(admin: SupabaseClient, userId: string, page?: Page): Promise<void> {
   try {
+    const { data: transfers, error: transfersError } = await admin
+      .from("transferencias_bancarias")
+      .select("id")
+      .eq("criado_por", userId);
+    if (transfersError) throw transfersError;
+
+    // Estorna pela própria tela (quando a página está disponível) para desfazer a
+    // movimentação pelo fluxo do app; os registros são apagados logo abaixo de
+    // qualquer forma, então o saldo das contas volta ao estado anterior.
+    if (transfers?.length && page) {
+      await page.goto("/conciliacao?aba=transferencias", { waitUntil: "domcontentloaded", timeout: 60_000 });
+      await expect(page.getByRole("heading", { name: "Transferências registradas" })).toBeVisible({ timeout: 30_000 });
+      for (const transfer of transfers) {
+        const card = page.getByTestId(`transferencia-${transfer.id}`);
+        await expect(card).toBeVisible({ timeout: 30_000 });
+        const estornar = card.getByRole("button", { name: "Estornar", exact: true });
+        if (await estornar.count()) {
+          await estornar.click();
+          const modal = page.getByRole("dialog");
+          await modal.getByRole("textbox", { name: /Justificativa/ }).fill("Limpeza automática do teste e2e.");
+          await modal.getByRole("button", { name: "Estornar", exact: true }).click();
+          await expect(modal).toBeHidden({ timeout: 30_000 });
+        }
+      }
+    }
+
+    for (const transfer of transfers ?? []) {
+      const { error: notificationError } = await admin
+        .from("notifications")
+        .delete()
+        .eq("origem", "transferencia_bancaria")
+        .like("message", `%${transfer.id}%`);
+      if (notificationError) throw notificationError;
+
+      const { error: transferError } = await admin
+        .from("transferencias_bancarias")
+        .delete()
+        .eq("id", transfer.id)
+        .eq("criado_por", userId);
+      if (transferError) throw transferError;
+    }
+
     const { data: launches, error: launchesError } = await admin
       .from("lancamentos_financeiros")
       .select("id")

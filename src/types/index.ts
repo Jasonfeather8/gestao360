@@ -517,6 +517,8 @@ export interface TransferenciaBancaria {
   criado_por: string;
   created_at: string;
   updated_at: string;
+  confirmado_por?: string | null;
+  confirmado_em?: string | null;
   aprovado_em: string | null;
   reprovado_em: string | null;
   motivo_reprovacao: string | null;

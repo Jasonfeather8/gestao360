@@ -73,6 +73,14 @@ export const transferenciasService = {
     return (data || []) as TransferenciaBancaria[];
   },
 
+  confirmar: async (transferenciaId: string): Promise<TransferenciaBancaria> => {
+    const { data, error } = await supabase.rpc('confirmar_transferencia_bancaria', {
+      p_transferencia_id: transferenciaId,
+    });
+    if (error) throw new Error(error.message);
+    return data as TransferenciaBancaria;
+  },
+
   listarCandidatasParaTransacao: async (params: {
     contaId: string;
     dataTransacao: string;
