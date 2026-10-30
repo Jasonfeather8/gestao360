@@ -94,7 +94,9 @@ export const transferenciasService = {
     const { data, error } = await supabase
       .from('transferencias_bancarias')
       .select('*, conta_origem:contas_bancarias!transferencias_bancarias_conta_origem_id_fkey(nome), conta_destino:contas_bancarias!transferencias_bancarias_conta_destino_id_fkey(nome)')
-      .eq('status', 'conciliada')
+      // A conciliação acontece quando a transferência já está no Financeiro como
+      // "Pend. Gestor" (confirmada, aguardando aprovação) — não só depois de aprovada.
+      .or('confirmado_em.not.is.null,status.eq.conciliada')
       .eq(contaColumn, params.contaId)
       .is(transacaoColumn, null)
       .eq('valor', params.valor)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { CheckCircle2, Loader2, X } from 'lucide-react';
+import { CheckCircle2, Clock, Loader2, X } from 'lucide-react';
 import { mensagemDoErro } from '../../services/erros';
 import type { LinhaExtrato, TransferenciaCandidataLinha } from '../../types';
 
@@ -56,7 +56,7 @@ export default function ConciliarTransferenciaModal({
         <header className="mb-5 flex items-start justify-between gap-4">
           <div>
             <h2 id="conciliar-transferencia-title" className="text-xl font-black text-on-surface">Conciliar transferência</h2>
-            <p className="mt-1 text-sm text-on-surface-variant">Selecione uma transferência bancária já aprovada compatível com esta linha do extrato.</p>
+            <p className="mt-1 text-sm text-on-surface-variant">Selecione uma transferência bancária compatível com esta linha do extrato.</p>
           </div>
           <button type="button" onClick={onFechar} aria-label="Fechar" disabled={isConciliando} className="rounded-full p-2 text-on-surface-variant hover:bg-surface disabled:opacity-50"><X className="h-5 w-5" /></button>
         </header>
@@ -78,11 +78,11 @@ export default function ConciliarTransferenciaModal({
             {!carregando && !erroCarregamento && <span className="text-xs text-on-surface-variant">{candidatas.length} {candidatas.length === 1 ? 'candidata' : 'candidatas'}</span>}
           </div>
           {carregando ? (
-            <p className="flex items-center gap-2 rounded-2xl border border-surface-border p-4 text-sm text-on-surface-variant"><Loader2 className="h-4 w-4 animate-spin" />Carregando transferências aprovadas...</p>
+            <p className="flex items-center gap-2 rounded-2xl border border-surface-border p-4 text-sm text-on-surface-variant"><Loader2 className="h-4 w-4 animate-spin" />Carregando transferências compatíveis...</p>
           ) : erroCarregamento ? (
             <p role="alert" className="rounded-2xl border border-alert-red/30 bg-alert-red/10 p-4 text-sm text-alert-red">{mensagemDoErro(erroCarregamento, 'Não foi possível carregar as transferências candidatas.')}</p>
           ) : candidatas.length === 0 ? (
-            <p className="rounded-2xl border border-pending-amber/30 bg-pending-amber/10 p-4 text-sm text-pending-amber">Não há transferência aprovada compatível com esta linha do extrato.</p>
+            <p className="rounded-2xl border border-pending-amber/30 bg-pending-amber/10 p-4 text-sm text-pending-amber">Não há transferência compatível com esta linha do extrato.</p>
           ) : (
             <ul className="max-h-72 space-y-2 overflow-y-auto">
               {candidatas.map(({ transferencia, lado }) => (
@@ -91,7 +91,11 @@ export default function ConciliarTransferenciaModal({
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-semibold text-on-surface">{dataFormatada.format(new Date(`${transferencia.data_transferencia}T00:00:00Z`))}</p>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-bank-truth-green/10 px-2 py-1 text-[10px] font-bold text-bank-truth-green"><CheckCircle2 className="h-3 w-3" />Aprovada</span>
+                        {transferencia.status === 'conciliada' ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-bank-truth-green/10 px-2 py-1 text-[10px] font-bold text-bank-truth-green"><CheckCircle2 className="h-3 w-3" />Aprovada</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-pending-amber/10 px-2 py-1 text-[10px] font-bold text-pending-amber"><Clock className="h-3 w-3" />Pend. Gestor</span>
+                        )}
                       </div>
                       <p className="mt-2 flex items-center gap-2 text-sm text-on-surface-variant">
                         <span className="truncate">{transferencia.conta_origem?.nome || 'Conta de origem'}</span>
