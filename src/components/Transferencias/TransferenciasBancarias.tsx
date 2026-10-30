@@ -34,13 +34,25 @@ const statusTransferencia: Record<TransferenciaStatus, { label: string; cor: str
   conciliada: { label: 'Conciliada', cor: 'text-bank-truth-green' },
   estornada: { label: 'Estornada', cor: 'text-alert-red' },
 };
-const statusPendentesMaster: TransferenciaStatus[] = ['aberta', 'aguardando_destino', 'conciliada_pendente_master'];
 const gruposSituacao = [
-  { id: 'pendentes', label: 'Pendentes de confirmação', statuses: ['aberta', 'aguardando_destino', 'conciliada_pendente_master'] },
-  { id: 'concluidas', label: 'Concluídas', statuses: ['conciliada'] },
-  { id: 'estornadas', label: 'Estornadas', statuses: ['estornada'] },
+  { id: 'pendentes', label: 'Pendentes de confirmação' },
+  { id: 'concluidas', label: 'Concluídas' },
+  { id: 'reprovadas', label: 'Reprovadas' },
+  { id: 'estornadas', label: 'Estornadas' },
 ] as const;
 type GrupoSituacaoId = typeof gruposSituacao[number]['id'];
+
+/**
+ * Situação da transferência na tela. A reprovação encerra a transferência: ela não volta
+ * para a fila de confirmação e não aceita mais nenhuma ação, então sai dos pendentes assim
+ * que existe data de reprovação — mesmo com o status de origem ainda gravado como 'aberta'.
+ */
+function grupoDaTransferencia(transferencia: TransferenciaBancaria): GrupoSituacaoId {
+  if (transferencia.status === 'estornada') return 'estornadas';
+  if (transferencia.reprovado_em) return 'reprovadas';
+  if (transferencia.status === 'conciliada') return 'concluidas';
+  return 'pendentes';
+}
 
 function formatarData(data: string): string {
   return dataFormatada.format(new Date(`${data}T00:00:00Z`));
@@ -52,8 +64,8 @@ function linhaTransferencia(
   abrirDecisao: (transferencia: TransferenciaBancaria, modo: 'aprovar' | 'reprovar' | 'estornar') => void,
 ) {
   const status = statusTransferencia[transferencia.status];
-  const pendente = statusPendentesMaster.includes(transferencia.status);
   const reprovada = Boolean(transferencia.reprovado_em);
+  const pendente = grupoDaTransferencia(transferencia) === 'pendentes';
   const rotuloStatus = reprovada
     ? 'Reprovada'
     : transferencia.status === 'aberta' && !transferencia.confirmado_em
@@ -62,9 +74,9 @@ function linhaTransferencia(
         ? 'Aguardando Financeiro'
         : status.label;
   const corStatus = reprovada ? 'text-alert-red' : status.cor;
-  // Depois de confirmada, o trabalho nesta tela terminou: nenhum botão fica aqui.
-  // Reprovar e estornar passam a ser feitos no Financeiro, pelo Master.
-  const acoesDisponiveis = !transferencia.confirmado_em && transferencia.status !== 'estornada';
+  // Reprovada é uma transferência encerrada e, depois de confirmada, o trabalho nesta tela
+  // terminou: nenhum botão fica aqui. Reprovar e estornar passam a ser feitos no Financeiro.
+  const acoesDisponiveis = pendente && !transferencia.confirmado_em;
   return (
     <article key={transferencia.id} data-testid={`transferencia-${transferencia.id}`} className="border-b border-surface-border/70 py-4 last:border-b-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -79,7 +91,7 @@ function linhaTransferencia(
             Conciliação: origem {transferencia.transacao_origem_id ? 'conciliada' : 'pendente'} · destino {transferencia.transacao_destino_id ? 'conciliada' : 'pendente'}
           </p>
           {pendente && !transferencia.confirmado_em && <p className="mt-1 text-xs text-primary">Confirme os dados da transferência para movimentar o saldo operacional (saída na origem e entrada no destino) e enviar os títulos ao Financeiro como “Pend. Gestor”. A aprovação — e o efeito no saldo confirmado — é feita pelo Master no Financeiro. A conciliação do extrato pode ser feita depois, inclusive pelo gerente.</p>}
-          {pendente && transferencia.confirmado_em && !reprovada && <p className="mt-1 text-xs text-primary">Títulos já no Financeiro como “Pend. Gestor”, aguardando aprovação do Master. O saldo operacional já foi movimentado; o saldo confirmado só muda na aprovação. A conciliação do extrato é opcional e pode ser feita depois.</p>}
+          {pendente && transferencia.confirmado_em && <p className="mt-1 text-xs text-primary">Títulos já no Financeiro como “Pend. Gestor”, aguardando aprovação do Master. O saldo operacional já foi movimentado; o saldo confirmado só muda na aprovação. A conciliação do extrato é opcional e pode ser feita depois.</p>}
           {transferencia.confirmado_em && !reprovada && <p className="mt-1 text-xs text-bank-truth-green">Dados confirmados em {dataHoraFormatada.format(new Date(transferencia.confirmado_em))}</p>}
           {transferencia.tarifa && <p className="mt-1 text-xs text-on-surface-variant">Tarifa: {moeda.format(Number(transferencia.tarifa.valor_previsto))}</p>}
           {transferencia.status === 'conciliada' && transferencia.aprovado_em && <p className="mt-1 text-xs text-bank-truth-green">Aprovada em {dataHoraFormatada.format(new Date(transferencia.aprovado_em))}</p>}
@@ -113,7 +125,7 @@ export default function TransferenciasBancarias() {
   const { data: centrosData = [] } = useCentrosCusto();
   const { data: transferencias = [], isLoading, isError } = useTransferencias();
   const dragScrollContas = useDragScroll();
-  const transferenciasPendentes = transferencias.filter((transferencia) => statusPendentesMaster.includes(transferencia.status));
+  const transferenciasPendentes = transferencias.filter((transferencia) => grupoDaTransferencia(transferencia) === 'pendentes');
   const transferenciasAguardandoConfirmacao = transferenciasPendentes.filter((transferencia) => !transferencia.confirmado_em).length;
   const transferenciasAguardandoFinanceiro = transferenciasPendentes.filter((transferencia) => Boolean(transferencia.confirmado_em)).length;
   const { criarTransferencia, isCreating } = useCriarTransferencia();
@@ -148,15 +160,12 @@ export default function TransferenciasBancarias() {
   const [modoDecisao, setModoDecisao] = useState<'aprovar' | 'reprovar' | 'estornar' | null>(null);
   const [erroDecisao, setErroDecisao] = useState('');
   const tarifaCentavos = emCentavos(tarifa);
-  const statusesAtivos = useMemo(() => gruposSituacao
-    .filter((grupo) => gruposAtivos.includes(grupo.id))
-    .flatMap((grupo) => grupo.statuses), [gruposAtivos]);
   const transferenciasFiltradas = useMemo(() => transferencias.filter((transferencia) => {
     const correspondeConta = contasSelecionadas.length === 0
       || contasSelecionadas.includes(transferencia.conta_origem_id)
       || contasSelecionadas.includes(transferencia.conta_destino_id);
-    return correspondeConta && statusesAtivos.includes(transferencia.status);
-  }), [transferencias, contasSelecionadas, statusesAtivos]);
+    return correspondeConta && gruposAtivos.includes(grupoDaTransferencia(transferencia));
+  }), [transferencias, contasSelecionadas, gruposAtivos]);
   const filtroAtivo = contasSelecionadas.length > 0 || gruposAtivos.length !== gruposSituacao.length;
 
   const abrirDecisao = (transferencia: TransferenciaBancaria, modo: 'aprovar' | 'reprovar' | 'estornar') => {

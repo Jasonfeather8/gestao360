@@ -1,7 +1,6 @@
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
-import { searchField } from "./contas-a-pagar";
 
 export type MasterTestUser = {
   id: string;
@@ -69,55 +68,6 @@ export async function signInAsMaster(page: Page, user: MasterTestUser): Promise<
   await page.waitForURL("**/dashboard", { timeout: 60_000 });
 }
 
-type TransferenciaParaLimpeza = {
-  id: string;
-  lancamento_saida_id: string | null;
-  lancamento_entrada_id: string | null;
-  tarifa_lancamento_id: string | null;
-};
-
-/**
- * Estorna um título da transferência pela tela do Financeiro. É o caminho exigido pelo
- * banco depois que a transferência foi confirmada: o cartão da transferência não oferece
- * mais o estorno, e o estorno do título devolve a transferência para "Aguardando Confirmação".
- * Retorna false quando não há título listado (nada foi estornado).
- */
-async function estornarTituloDaTransferenciaNoFinanceiro(
-  admin: SupabaseClient,
-  page: Page,
-  transfer: TransferenciaParaLimpeza,
-): Promise<boolean> {
-  const titulos = [transfer.lancamento_saida_id, transfer.lancamento_entrada_id, transfer.tarifa_lancamento_id]
-    .filter((id): id is string => Boolean(id));
-  if (titulos.length === 0) return false;
-
-  const { data: lancamento, error } = await admin
-    .from("lancamentos_financeiros")
-    .select("observacoes")
-    .eq("id", titulos[0])
-    .single();
-  if (error) throw error;
-
-  const termo = (lancamento?.observacoes ?? "").trim();
-  if (!termo) return false;
-
-  await page.goto("/lancamentos", { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await searchField(page).fill(termo);
-
-  const linha = page.getByRole("row").filter({ has: page.getByTestId("lancamento-action-menu") }).first();
-  try {
-    await expect(linha).toBeVisible({ timeout: 30_000 });
-  } catch {
-    return false;
-  }
-
-  await linha.getByTestId("lancamento-action-menu").click();
-  page.once("dialog", (dialog) => void dialog.accept());
-  await page.getByTestId("action-estornar").click();
-  await expect(page.getByTestId("action-estornar")).toBeHidden({ timeout: 30_000 });
-  return true;
-}
-
 export async function cleanupMasterTestUser(admin: SupabaseClient, userId: string, page?: Page): Promise<void> {
   try {
     const { data: transfers, error: transfersError } = await admin
@@ -126,25 +76,32 @@ export async function cleanupMasterTestUser(admin: SupabaseClient, userId: strin
       .eq("criado_por", userId);
     if (transfersError) throw transfersError;
 
-    // A proteção do banco só permite desfazer uma transferência pelo estorno: os
-    // espelhos não podem ser apagados nem ter os dados estruturais alterados por
-    // fora. Com a página autenticada disponível, o estorno é feito pela própria tela.
+    // A proteção do banco só permite desfazer uma transferência pelo estorno: os espelhos não
+    // podem ser apagados nem ter os dados estruturais alterados por fora. Como o cartão deixa
+    // de oferecer ações depois que a transferência foi confirmada ou reprovada, a limpeza
+    // devolve o registro ao estado de confirmação e desfaz tudo pela própria tela.
     if (transfers?.length && page) {
+      for (const transfer of transfers) {
+        const { error: resetError } = await admin
+          .from("transferencias_bancarias")
+          .update({
+            confirmado_por: null,
+            confirmado_em: null,
+            reprovado_por: null,
+            reprovado_em: null,
+            motivo_reprovacao: null,
+          })
+          .eq("id", transfer.id)
+          .eq("criado_por", userId);
+        if (resetError) throw resetError;
+      }
+
       await page.goto("/conciliacao?aba=transferencias", { waitUntil: "domcontentloaded", timeout: 60_000 });
       await expect(page.getByRole("heading", { name: "Transferências registradas" })).toBeVisible({ timeout: 30_000 });
       for (const transfer of transfers) {
         const card = page.getByTestId(`transferencia-${transfer.id}`);
         await expect(card).toBeVisible({ timeout: 30_000 });
-        let estornar = card.getByRole("button", { name: "Estornar", exact: true });
-        if (await estornar.count() === 0) {
-          // Depois de confirmada a transferência não tem mais botões no cartão: o estorno
-          // começa pelo Financeiro e devolve a transferência para "Aguardando Confirmação".
-          const estornouTitulo = await estornarTituloDaTransferenciaNoFinanceiro(admin, page, transfer);
-          if (!estornouTitulo) continue;
-          await page.goto("/conciliacao?aba=transferencias", { waitUntil: "domcontentloaded", timeout: 60_000 });
-          await expect(card).toBeVisible({ timeout: 30_000 });
-          estornar = card.getByRole("button", { name: "Estornar", exact: true });
-        }
+        const estornar = card.getByRole("button", { name: "Estornar", exact: true });
         if (await estornar.count()) {
           await estornar.click();
           const modal = page.getByRole("dialog");

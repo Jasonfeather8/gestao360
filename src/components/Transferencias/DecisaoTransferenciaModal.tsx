@@ -77,7 +77,7 @@ export default function DecisaoTransferenciaModal({
         </div>
 
         {modo === 'aprovar' && <p className="mt-4 text-sm text-on-surface-variant">Confirmar os dados movimenta <strong>somente o saldo operacional</strong> (saída na conta de origem e entrada na conta de destino) e envia os títulos ao Financeiro como “Pend. Gestor”. O saldo confirmado só muda quando o Master aprovar os títulos no Financeiro.</p>}
-        {modo === 'reprovar' && <p className="mt-4 text-sm text-on-surface-variant">A transferência voltará para Aberta e será necessária uma nova conciliação.</p>}
+        {modo === 'reprovar' && <p className="mt-4 text-sm text-on-surface-variant">A transferência será encerrada como reprovada e não aceita mais ações. Os títulos voltam a ficar abertos e os vínculos com o extrato são desfeitos.</p>}
         {modo === 'estornar' && <p className="mt-4 text-sm text-on-surface-variant">Os espelhos e vínculos da transferência serão desfeitos. A justificativa é obrigatória.</p>}
 
         {obrigatoria && (
