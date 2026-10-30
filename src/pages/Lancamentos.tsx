@@ -1128,7 +1128,7 @@ export default function Lancamentos({
                   const isSelected = selectedLancamentoIdsForBatch.includes(item.id);
                   const isTransferenciaEspelho = Boolean(item.transferencia_id)
                     && (item.transferencia_lado === 'origem' || item.transferencia_lado === 'destino');
-                  const isAprovacaoPendente = item.status_aprovacao !== 'confirmado_master' || item.status_pagamento === 'quitação_pendente';
+                  const podeAprovarPeloSelo = isFinanceiroView && isMaster && !isTransferenciaEspelho && item.status_aprovacao !== 'confirmado_master';
                   const days = getDaysOverdue(item.data_vencimento);
 
                   return (
@@ -1294,7 +1294,20 @@ export default function Lancamentos({
                             </span>
                           </td>
                           <td className="py-3 px-4 text-center whitespace-nowrap">
-                            {renderStatusBadge(item)}
+                            {podeAprovarPeloSelo ? (
+                              <button
+                                type="button"
+                                title="Clique para aprovar"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelectedLancamentoIdsForBatch([item.id]);
+                                  setModalOpen('isAprovacaoModalOpen', true);
+                                }}
+                                className="cursor-pointer rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                              >
+                                {renderStatusBadge(item)}
+                              </button>
+                            ) : renderStatusBadge(item)}
                           </td>
                           <td className="py-3 px-4 text-center">{renderConciliadoBadge(item)}</td>
                           {renderBancoCell(item)}
@@ -1315,29 +1328,19 @@ export default function Lancamentos({
                       )}
                       <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
-                          <div className="flex items-center gap-1.5 mr-2">
-                            {isFinanceiroView && isMaster && !isTransferenciaEspelho && isAprovacaoPendente && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedLancamentoIdsForBatch([item.id]);
-                                  setModalOpen('isAprovacaoModalOpen', true);
-                                }}
-                                className="px-3 py-1.5 bg-primary text-white text-[9px] font-black uppercase tracking-widest rounded-lg hover:brightness-110 transition-all flex items-center gap-1.5 shadow-sm"
-                              >
-                                <ShieldCheck className="w-3 h-3" /> Aprovar
-                              </button>
-                            )}
-                            {isOperationalView && (item.status_pagamento === 'aberto' || isPartialPayment(item)) && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenBaixa(item.id)}
-                                className="px-3 py-1.5 bg-bank-truth-green text-white text-[9px] font-black uppercase tracking-widest rounded-lg hover:brightness-110 transition-all flex items-center gap-1.5 shadow-sm"
-                              >
-                                <CheckCircle2 className="w-3 h-3" /> Dar baixa
-                              </button>
-                            )}
-                          </div>
+                          {isOperationalView && (
+                            <div className="flex items-center gap-1.5 mr-2">
+                              {(item.status_pagamento === 'aberto' || isPartialPayment(item)) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenBaixa(item.id)}
+                                  className="px-3 py-1.5 bg-bank-truth-green text-white text-[9px] font-black uppercase tracking-widest rounded-lg hover:brightness-110 transition-all flex items-center gap-1.5 shadow-sm"
+                                >
+                                  <CheckCircle2 className="w-3 h-3" /> Dar baixa
+                                </button>
+                              )}
+                            </div>
+                          )}
 
                           {isTransferenciaEspelho ? (
                             <button
