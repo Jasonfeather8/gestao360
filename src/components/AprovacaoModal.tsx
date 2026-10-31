@@ -1,25 +1,16 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  X,
   CheckCircle2,
   AlertCircle,
   Loader2,
   Paperclip,
-  FileText,
+  FileX,
   XCircle
 } from 'lucide-react';
 
 import { useUIStore } from '../store/uiStore';
-import { useLancamentos } from '../hooks/useData';
-import { supabase } from '@/integrations/supabase/client';
-
-interface LocalFile {
-  name: string;
-  size: number;
-  type: string;
-  file: File;
-}
+import { useLancamentoAnexos, useLancamentos } from '../hooks/useData';
 
 export default function AprovacaoModal() {
   const { 
@@ -33,7 +24,6 @@ export default function AprovacaoModal() {
 
   const { data: lancamentos = [], batchApprove } = useLancamentos();
   const [loading, setLoading] = useState(false);
-  const [attachments, setAttachments] = useState<LocalFile[]>([]);
 
   const selectedCount = selectedLancamentoIdsForBatch.length;
   const aprovandoTransferencia = selectedCount > 1 ? selectedTransferenciaAprovacao : null;
@@ -42,6 +32,10 @@ export default function AprovacaoModal() {
   const lancamento = showAttachment
     ? (lancamentos as any[]).find(l => l.id === selectedLancamentoIdsForBatch[0])
     : null;
+  const { anexos, isLoading: carregandoAnexos } = useLancamentoAnexos(
+    showAttachment ? (selectedLancamentoIdsForBatch[0] ?? null) : null,
+  );
+  const temComprovante = Boolean(lancamento?.comprovante_url) || anexos.length > 0;
 
   const entName = lancamento?.entidades_negocio?.nome_razao_social || 'Desconhecido';
 
@@ -49,45 +43,12 @@ export default function AprovacaoModal() {
     setModalOpen('isAprovacaoModalOpen', false);
     setSelectedLancamentoIdsForBatch([]);
     setSelectedTransferenciaAprovacao(null);
-    setAttachments([]);
   };
 
   const handleConfirm = async () => {
     setLoading(true);
     try {
       await batchApprove({ ids: selectedLancamentoIdsForBatch, targetStatus: 'confirmado_master' });
-
-      // Handle Attachment if only one item is selected
-      if (showAttachment && attachments.length > 0) {
-        const lancamentoId = selectedLancamentoIdsForBatch[0];
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        for (const attachment of attachments) {
-          const fileExt = attachment.name.split('.').pop();
-          const fileName = `${Math.random()}.${fileExt}`;
-          const filePath = `lancamentos/${lancamentoId}/${fileName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('documents')
-            .upload(filePath, attachment.file);
-
-          if (!uploadError) {
-            const { data: { publicUrl } } = supabase.storage
-              .from('documents')
-              .getPublicUrl(filePath);
-
-            await (supabase.from('lancamento_anexos') as any).insert({
-              lancamento_id: lancamentoId,
-              nome: attachment.name,
-              url: publicUrl,
-              tamanho: attachment.size,
-              tipo_arquivo: attachment.type,
-              user_id: user?.id
-            });
-          }
-        }
-      }
-
       handleClose();
     } catch (err: any) {
       alert('Erro ao aprovar: ' + err.message);
@@ -160,52 +121,23 @@ export default function AprovacaoModal() {
             </div>
 
             {showAttachment && (
-              <div className="text-left space-y-3 pt-2">
-                <label className="text-[10px] font-black uppercase text-secondary tracking-widest flex items-center gap-2">
-                  <Paperclip className="w-4 h-4" /> Anexar Comprovante (Opcional)
-                </label>
-                
-                <div className="relative group cursor-pointer h-12 border-2 border-dashed border-neutral-200 rounded-xl hover:border-primary transition-all flex items-center justify-center gap-2 text-secondary hover:text-primary bg-neutral-50/50">
-                  <Paperclip className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase">
-                    {attachments.length > 0 ? `${attachments.length} Anexo(s)` : 'Selecionar Arquivo'}
-                  </span>
-                  <input
-                    type="file"
-                    multiple
-                    onChange={(e) => {
-                      if (e.target.files) {
-                        const fileList = Array.from(e.target.files) as File[];
-                        const newFiles: LocalFile[] = fileList.map(f => ({
-                          name: f.name,
-                          size: f.size,
-                          type: f.type,
-                          file: f
-                        }));
-                        setAttachments(prev => [...prev, ...newFiles]);
-                      }
-                    }}
-                    className="absolute inset-0 opacity-0 cursor-pointer"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  {attachments.map((f, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-neutral-50 border border-neutral-100 rounded-xl">
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-3.5 h-3.5 text-primary" />
-                        <span className="text-[10px] font-bold truncate max-w-[150px]">{f.name}</span>
-                      </div>
-                      <button 
-                        type="button" 
-                        onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))} 
-                        className="text-neutral-400 hover:text-alert-red transition-colors"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+              <div data-testid="comprovante-status" className="flex items-center justify-center gap-2 rounded-2xl border border-neutral-100 bg-neutral-50 px-4 py-3">
+                {carregandoAnexos ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin text-secondary" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-secondary">Verificando comprovante...</span>
+                  </>
+                ) : temComprovante ? (
+                  <>
+                    <Paperclip className="h-4 w-4 text-bank-truth-green" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-bank-truth-green">Comprovante anexado</span>
+                  </>
+                ) : (
+                  <>
+                    <FileX className="h-4 w-4 text-secondary" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-secondary">Comprovante dispensado</span>
+                  </>
+                )}
               </div>
             )}
 
