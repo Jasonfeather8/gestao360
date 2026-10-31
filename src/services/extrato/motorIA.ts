@@ -11,7 +11,7 @@ import type {
   ProgressoLeituraExtrato,
 } from '../../types';
 import { supabase } from '@/integrations/supabase/client';
-import { contarPaginas } from './pdfDocumento';
+import { analisarExtrato, type CabecalhoDiaExtrato } from './pdfDocumento';
 
 const LIMITE_ARQUIVO = 20 * 1024 * 1024;
 const LIMITE_PAGINAS = 60;
@@ -50,8 +50,12 @@ interface ContextoLote {
   conta: string | null;
   periodoInicio: string | null;
   periodoFim: string | null;
-  /** Último dia lido no lote anterior: uma continuação de dia pode cair no lote seguinte. */
+  /** Dia vigente ao final da página anterior a este lote (determinístico, do mapa de dias). */
   ultimoDia?: string | null;
+  /** Mapa de dias das páginas deste lote. */
+  diasPorPagina?: Array<{ pagina: number; diaInicial: string | null; cabecalhos: CabecalhoDiaExtrato[] }>;
+  /** Texto da última página do lote anterior (contexto; a IA não deve extrair linhas dele). */
+  textoPaginaAnterior?: string | null;
 }
 
 function valorTexto(valor: unknown): string | null {
@@ -219,7 +223,8 @@ export async function lerExtratoIA(
   const { data: { user }, error: erroUsuario } = await supabase.auth.getUser();
   if (erroUsuario || !user) throw new Error('Sessão expirada. Entre novamente.');
 
-  const totalPaginas = await contarPaginas(arquivo);
+  const analise = await analisarExtrato(arquivo);
+  const { totalPaginas, paginas } = analise;
   if (totalPaginas === 0) throw new Error('Não foi possível ler o PDF (arquivo vazio ou corrompido).');
   if (totalPaginas > LIMITE_PAGINAS) {
     throw new Error(`Este extrato tem ${totalPaginas} páginas; o limite por importação é de ${LIMITE_PAGINAS} páginas.`);
@@ -255,6 +260,31 @@ export async function lerExtratoIA(
       const paginaInicio = lote * paginasPorLote + 1;
       const paginaFim = Math.min((lote + 1) * paginasPorLote, totalPaginas);
       const loteAtual = lote + 1;
+      const paginasLote = paginas.slice(paginaInicio - 1, paginaFim);
+      // O "lote anterior" é a página imediatamente antes deste lote: é dela que vêm
+      // o dia vigente no fim e o texto de apoio para resolver a continuação do dia.
+      const paginaAnterior = paginaInicio > 1
+        ? paginas.find((pagina) => pagina.pagina === paginaInicio - 1)
+        : undefined;
+      const ultimoDia = paginaAnterior
+        ? paginaAnterior.cabecalhos.at(-1)?.dia ?? paginaAnterior.diaInicial
+        : null;
+      const textoPaginaAnterior = paginaAnterior
+        ? paginaAnterior.linhas.join('\n').slice(0, 6000)
+        : null;
+      const contextoAtual: ContextoLote = {
+        banco: contexto?.banco ?? null,
+        conta: contexto?.conta ?? null,
+        periodoInicio: contexto?.periodoInicio ?? null,
+        periodoFim: contexto?.periodoFim ?? null,
+        ultimoDia,
+        diasPorPagina: paginasLote.map(({ pagina, diaInicial, cabecalhos }) => ({ pagina, diaInicial, cabecalhos })),
+        textoPaginaAnterior,
+      };
+      const temContexto = paginasLote.length > 0 || Boolean(
+        contextoAtual.banco || contextoAtual.conta || contextoAtual.periodoInicio || contextoAtual.periodoFim ||
+        contextoAtual.ultimoDia || contextoAtual.textoPaginaAnterior,
+      );
       onProgress?.({ etapa: 'lendo', loteAtual, totalLotes, paginaInicio, paginaFim, totalPaginas, linhasLidas: linhas.length });
 
       const { data, error } = await supabase.functions.invoke<RespostaExtrato>('ler-extrato', {
@@ -263,7 +293,7 @@ export async function lerExtratoIA(
           paginaInicio,
           paginaFim,
           totalPaginas,
-          ...(contexto ? { contexto } : {}),
+          ...(temContexto ? { contexto: contextoAtual } : {}),
         },
       });
 
@@ -283,13 +313,6 @@ export async function lerExtratoIA(
       }
 
       linhas.push(...mapearLinhas(data.linhas, loteAtual));
-      // O último dia lido alimenta o contexto do próximo lote, para que uma
-      // continuação de dia sem cabeçalho próprio herde o dia correto.
-      const ultimoDiaDoLote = data.linhas
-        .map((linha) => linha?.data)
-        .filter((valor): valor is string => dataValida(valor))
-        .pop() ?? null;
-      if (contexto) contexto.ultimoDia = ultimoDiaDoLote;
       naoInterpretadas.push(...mapearDuvidosas(data.linhasDuvidosas));
       linhasIgnoradas.push(...mapearIgnoradas(data.linhasIgnoradas));
       tokensEntrada += valorNumero(data.uso?.tokensEntrada) ?? 0;

@@ -101,6 +101,13 @@ Regras de data (têm prioridade sobre a regra 4):
 15. A data herdada do cabeçalho de dia é uma informação do documento e NÃO reduz a confiança da linha: use "alta" ou "media" conforme a legibilidade da linha. Reserve "confianca": "baixa" para linhas realmente duvidosas (valor ilegível, texto ambíguo, direção incerta).
 16. Devolva "linhas" na ordem do documento, de cima para baixo e em ordem crescente de página.`
 
+const REGRAS_DE_MAPA_DE_DIAS = `
+Regras de data pelo mapa de dias (fonte autoritativa para o formato agrupado por dia; têm prioridade sobre as regras 4 e 12 a 16):
+17. O "Mapa de dias deste lote" do contexto foi extraído do próprio PDF e informa, para cada página, qual dia está vigente no início dela ("inicia no dia") e onde aparecem os cabeçalhos de dia dentro da página. Use-o como a fonte correta do dia das linhas QUE NÃO TRAZEM DATA PRÓPRIA.
+18. As linhas que aparecem ACIMA do primeiro cabeçalho de dia da página pertencem ao dia informado em "inicia no dia". Um cabeçalho de dia que aparece no meio da página vale apenas para as linhas ABAIXO dele. Nunca atribua a um dia as linhas que estão acima do cabeçalho desse dia.
+19. Se a PRÓPRIA LINHA trouxer a data (ex.: "05/03/2026 Compra ... -50,00"), ela é uma TRANSAÇÃO: use a data da linha, coloque-a em "linhas" e NÃO a trate como cabeçalho. Cabeçalho de dia é a linha que separa seções de dias (ex.: "17/09/2026 Saldo do dia R$ 4.743,20"), não uma transação.
+20. O bloco "Página anterior (contexto)" existe apenas para você entender a continuação do dia entre páginas. NUNCA crie linhas a partir dele; ele não faz parte das páginas deste lote.`
+
 class HttpError extends Error {
   status: number
 
@@ -132,6 +139,23 @@ function validIsoDate(value: unknown): value is string {
   const date = new Date(Date.UTC(year, month - 1, day))
   if (year >= 0 && year <= 99) date.setUTCFullYear(year)
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
+
+function formatarMapaDeDias(value: unknown): string {
+  if (!Array.isArray(value)) return ''
+  const paginas = value.flatMap((item) => {
+    if (!isRecord(item) || !Number.isInteger(item.pagina) || item.pagina < 1) return []
+    const diaInicial = validIsoDate(item.diaInicial) ? item.diaInicial : null
+    const cabecalhos = Array.isArray(item.cabecalhos)
+      ? item.cabecalhos.flatMap((cabecalho: unknown) => {
+        if (!isRecord(cabecalho) || !validIsoDate(cabecalho.dia)) return []
+        if (typeof cabecalho.topo !== 'number' || !Number.isFinite(cabecalho.topo) || cabecalho.topo < 0 || cabecalho.topo > 1) return []
+        return [`${cabecalho.dia} (a ${Math.round(cabecalho.topo * 100)}% do topo)`]
+      })
+      : []
+    return [`- página ${item.pagina}: inicia no dia ${diaInicial ?? 'não identificado'}; cabeçalhos de dia na página: ${cabecalhos.join(', ') || 'nenhum'}`]
+  })
+  return paginas.length ? `\nMapa de dias deste lote (extraído do PDF):\n${paginas.join('\n')}` : ''
 }
 
 function finiteNumberOrNull(value: unknown): number | null {
@@ -325,9 +349,24 @@ serve(async (req) => {
     const pdfBase64 = encodeBase64(pdfBytes)
 
     const contexto = isRecord(body.contexto) ? body.contexto : null
-    const contextoPrompt = contexto
-      ? `\nMetadados já identificados no início do documento: banco=${contexto.banco ?? null}, conta=${contexto.conta ?? null}, período de ${contexto.periodoInicio ?? null} a ${contexto.periodoFim ?? null}. Use-os para completar o ano de datas abreviadas.\nO lote anterior terminou no dia ${contexto.ultimoDia ?? 'não informado'}; se este lote começar com uma continuação sem cabeçalho de dia, use esse dia.`
+    const mapaDiasPrompt = contexto ? formatarMapaDeDias(contexto.diasPorPagina) : ''
+    const textoPaginaAnterior = contexto && typeof contexto.textoPaginaAnterior === 'string'
+      ? contexto.textoPaginaAnterior.slice(0, 6000)
       : ''
+    const textoPaginaAnteriorPrompt = textoPaginaAnterior
+      ? `\nPágina anterior (contexto, NÃO extrair linhas dela):\n"""\n${textoPaginaAnterior}\n"""`
+      : ''
+    // A frase de metadados só aparece quando há metadado real: no primeiro lote os
+    // campos ainda são desconhecidos e "banco=null, conta=null" poderia levar o modelo
+    // a devolver meta nula (o meta é lido apenas do primeiro lote).
+    const temMetadados = Boolean(contexto && (contexto.banco || contexto.conta || contexto.periodoInicio || contexto.periodoFim))
+    const metadadosPrompt = temMetadados && contexto
+      ? `\nMetadados já identificados no início do documento: banco=${contexto.banco ?? null}, conta=${contexto.conta ?? null}, período de ${contexto.periodoInicio ?? null} a ${contexto.periodoFim ?? null}. Use-os para completar o ano de datas abreviadas.`
+      : ''
+    const ultimoDiaPrompt = contexto && contexto.ultimoDia
+      ? `\nO lote anterior terminou no dia ${contexto.ultimoDia}; se este lote começar com uma continuação sem cabeçalho de dia, use esse dia.`
+      : ''
+    const contextoPrompt = `${metadadosPrompt}${ultimoDiaPrompt}${mapaDiasPrompt}${textoPaginaAnteriorPrompt}`
     const prompt = `Você é um extrator de dados de extratos bancários brasileiros. Converta o PDF recebido em JSON conforme o schema fornecido.\n\nContexto deste lote: páginas ${inicio} a ${fim} de um total de ${total} páginas do documento.${contextoPrompt}\n\nRegras obrigatórias:\n1. Uma linha de transação do extrato = um item em "linhas". Nunca agrupe, resuma ou some lançamentos.\n2. "valor" é SEMPRE positivo, em reais, com duas casas decimais. A natureza do lançamento vai em "direcao": "entrada" (crédito, depósito, transferência recebida, estorno a favor) ou "saida" (débito, pagamento, tarifa, saque, transferência enviada).\n3. Determine a direção pelo sinal negativo, pelo marcador de débito/crédito (D, C, Débito, Crédito), pelo texto do histórico e, quando disponível, pela variação do saldo entre linhas consecutivas.\n4. "data" SEMPRE no formato yyyy-mm-dd. Se a linha trouxer apenas dia/mês (ex.: "05/03"), use o ano do período do extrato.\n5. Valores no padrão brasileiro: "1.234,56" equivale a 1234.56; "(75,50)" e "-75,50" indicam saída de 75.50. Nunca trate o ponto como separador decimal quando houver vírgula.\n6. "texto_original" deve conter a linha inteira exatamente como aparece no PDF, sem tradução, resumo ou correção. Isso é obrigatório para conferência humana.\n7. Linhas de saldo, totalizadores, cabeçalhos e rodapés NÃO são transações: vão para "linhas_ignoradas" com o motivo adequado. O saldo inicial e o saldo final do período vão em "saldo_inicial" e "saldo_final".\n8. Se uma linha parecer transação mas faltar data, valor legível ou a direção não puder ser determinada, coloque-a em "linhas_duvidosas" com o motivo. NUNCA invente valores, datas ou descrições.\n9. "confianca" reflete sua certeza sobre a linha: "alta", "media" ou "baixa".\n10. Não inclua lançamentos que não estejam no PDF e não repita linhas.\n11. Preencha "banco", "agencia", "conta", "periodo_inicio" e "periodo_fim" com o que estiver no documento; use null quando a informação não existir.`
 
     const apiKey = Deno.env.get('OPENAI_API_KEY')
@@ -347,7 +386,7 @@ serve(async (req) => {
           max_output_tokens: 32000,
           input: [{ role: 'user', content: [
             { type: 'input_file', filename: 'extrato.pdf', file_data: `data:application/pdf;base64,${pdfBase64}` },
-            { type: 'input_text', text: prompt + REGRAS_DE_DATA },
+            { type: 'input_text', text: prompt + REGRAS_DE_DATA + REGRAS_DE_MAPA_DE_DIAS },
           ] }],
           text: { format: { type: 'json_schema', name: 'extrato_bancario', strict: true, schema } },
         }),
