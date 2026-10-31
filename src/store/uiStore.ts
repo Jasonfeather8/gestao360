@@ -37,7 +37,7 @@ interface UIState {
   isAprovacaoModalOpen: boolean;
   isSidebarCollapsed: boolean;
   lancamentoPreset: { dataExtrato: string; transacaoBancoId?: string } | null;
-  conciliacaoPosLancamento: { lancamentoId: string; dataExtrato: string } | null;
+  conciliacaoPosLancamento: { lancamentoId: string; dataExtrato: string; transacaoBancoId?: string | null } | null;
   baixaPreset: { lancamentoId: string; dataPagamento: string; aprovarDepois: boolean } | null;
   avrPreset: { lancamentoId: string; valor: string } | null;
 
@@ -112,7 +112,7 @@ interface UIState {
 
   setLancamentoFormDraft: (draft: Partial<UIState['lancamentoFormDraft']>) => void;
   setLancamentoPreset: (preset: { dataExtrato: string; transacaoBancoId?: string } | null) => void;
-  setConciliacaoPosLancamento: (pos: { lancamentoId: string; dataExtrato: string } | null) => void;
+  setConciliacaoPosLancamento: (pos: { lancamentoId: string; dataExtrato: string; transacaoBancoId?: string | null } | null) => void;
   setBaixaPreset: (preset: { lancamentoId: string; dataPagamento: string; aprovarDepois: boolean } | null) => void;
   setAvrPreset: (preset: { lancamentoId: string; valor: string } | null) => void;
   setEntidadeFormDraft: (draft: Partial<UIState['entidadeFormDraft']>) => void;

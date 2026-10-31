@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
@@ -34,7 +33,6 @@ import type { PrintableDocumentData } from './printing/types';
 import { supabase } from '@/integrations/supabase/client';
 import Button from './Button';
 import { calculateAdjustmentAmount } from '../utils/adjustments';
-import { conciliacaoService } from '../services/conciliacaoService';
 
 function formatBRL(value: any): string {
   if (value === null || value === undefined) return '';
@@ -203,7 +201,6 @@ interface LocalFile {
 
 export default function NovoLancamentoDrawer() {
   const { role, user } = useAuth();
-  const queryClient = useQueryClient();
   const {
     isNovoLancamentoOpen,
 
@@ -903,27 +900,13 @@ export default function NovoLancamentoDrawer() {
       showToast(editingItem ? 'Lançamento atualizado!' : 'Lançamento cadastrado com sucesso!', 'success');
       if (!editingItem && lancamentoPreset && (createdItem as any)?.id) {
         const lancamentoId = (createdItem as any).id as string;
-        if (lancamentoPreset.transacaoBancoId) {
-          try {
-            await conciliacaoService.conciliar({
-              transacaoBancoId: lancamentoPreset.transacaoBancoId,
-              lancamentoIds: [lancamentoId],
-            });
-            await Promise.all([
-              queryClient.invalidateQueries({ queryKey: ['transacoesBanco'] }),
-              queryClient.invalidateQueries({ queryKey: ['conciliacoes'] }),
-              queryClient.invalidateQueries({ queryKey: ['lancamentos'] }),
-              queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }),
-              queryClient.invalidateQueries({ queryKey: ['auditoriaLogs'] }),
-            ]);
-            showToast('Lançamento criado e conciliado com o extrato', 'success');
-          } catch (error) {
-            showToast(`Lançamento criado, mas não foi possível conciliá-lo: ${error instanceof Error ? error.message : 'erro desconhecido'}`, 'error');
-            setConciliacaoPosLancamento({ lancamentoId, dataExtrato: lancamentoPreset.dataExtrato });
-          }
-        } else {
-          setConciliacaoPosLancamento({ lancamentoId, dataExtrato: lancamentoPreset.dataExtrato });
-        }
+        // A pergunta "dar baixa / dar baixa e aprovar / deixar em aberto" acontece sempre:
+        // o vínculo com o extrato só é criado se o usuário escolher uma das duas baixas.
+        setConciliacaoPosLancamento({
+          lancamentoId,
+          dataExtrato: lancamentoPreset.dataExtrato,
+          transacaoBancoId: lancamentoPreset.transacaoBancoId ?? null,
+        });
         setLancamentoPreset(null);
       }
       resetAllDrafts();

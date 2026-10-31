@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowDownLeft, ArrowUpRight, CheckCircle2, ShieldCheck, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Loader2, ShieldCheck, X } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useAuth } from '../../hooks/useAuth';
-import { useLancamentos } from '../../hooks/useData';
+import { useConciliarTransacao, useLancamentos } from '../../hooks/useData';
+import { mensagemDoErro } from '../../services/erros';
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const dataFormatada = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
@@ -17,24 +19,50 @@ export default function PosLancamentoModal() {
     setConciliacaoPosLancamento,
     setBaixaPreset,
     setSelectedLancamentoIdForModal,
+    setSelectedLancamentoIdsForBatch,
+    setSelectedTransferenciaAprovacao,
     setModalOpen,
   } = useUIStore();
   const { role } = useAuth();
   const { data: lancamentos = [] } = useLancamentos();
+  const { conciliar } = useConciliarTransacao();
+  const [processando, setProcessando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
   if (!conciliacaoPosLancamento) return null;
 
-  const { lancamentoId, dataExtrato } = conciliacaoPosLancamento;
+  const { lancamentoId, dataExtrato, transacaoBancoId } = conciliacaoPosLancamento;
   const lancamento = lancamentos.find(item => item.id === lancamentoId);
   const ehEntrada = lancamento?.tipo !== 'saida';
 
   const fechar = () => setConciliacaoPosLancamento(null);
 
-  const darBaixa = (aprovarDepois: boolean) => {
-    setBaixaPreset({ lancamentoId, dataPagamento: dataExtrato, aprovarDepois });
-    setSelectedLancamentoIdForModal(lancamentoId);
-    setConciliacaoPosLancamento(null);
-    setModalOpen('isBaixaLancamentoOpen', true);
+  const darBaixa = async (aprovarDepois: boolean) => {
+    setErro(null);
+    if (!transacaoBancoId) {
+      setBaixaPreset({ lancamentoId, dataPagamento: dataExtrato, aprovarDepois });
+      setSelectedLancamentoIdForModal(lancamentoId);
+      setConciliacaoPosLancamento(null);
+      setModalOpen('isBaixaLancamentoOpen', true);
+      return;
+    }
+
+    setProcessando(true);
+    try {
+      await conciliar({ transacaoBancoId, lancamentoIds: [lancamentoId] });
+      if (aprovarDepois && role === 'master') {
+        setSelectedLancamentoIdsForBatch([lancamentoId]);
+        setSelectedTransferenciaAprovacao(null);
+        setConciliacaoPosLancamento(null);
+        setModalOpen('isAprovacaoModalOpen', true);
+      } else {
+        setConciliacaoPosLancamento(null);
+      }
+    } catch (error) {
+      setErro(mensagemDoErro(error, 'Não foi possível conciliar a transação do extrato.'));
+    } finally {
+      setProcessando(false);
+    }
   };
 
   return (
@@ -50,11 +78,11 @@ export default function PosLancamentoModal() {
               <CheckCircle2 className="h-5 w-5" />
             </div>
             <div>
-              <h2 id="pos-lancamento-title" className="text-lg font-black text-on-surface">Lançamento criado em aberto.</h2>
-              <p className="mt-1 text-sm text-on-surface-variant">Deseja dar baixa neste valor?</p>
+              <h2 id="pos-lancamento-title" className="text-lg font-black text-on-surface">Lançamento criado. Como deseja prosseguir?</h2>
+              <p className="mt-1 text-sm text-on-surface-variant">Escolha se deseja dar baixa, aprovar agora ou deixar o lançamento em aberto.</p>
             </div>
           </div>
-          <button type="button" onClick={fechar} aria-label="Fechar" className="rounded-full p-2 text-on-surface-variant hover:bg-surface"><X className="h-5 w-5" /></button>
+          <button type="button" onClick={fechar} disabled={processando} aria-label="Fechar" className="rounded-full p-2 text-on-surface-variant hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"><X className="h-5 w-5" /></button>
         </header>
 
         {lancamento && (
@@ -74,27 +102,35 @@ export default function PosLancamentoModal() {
           </div>
         )}
 
+        {erro && <p role="alert" className="mb-4 rounded-2xl border border-alert-red/30 bg-alert-red/10 p-4 text-sm text-alert-red">{erro}</p>}
+
+        <p className="mb-3 text-xs text-on-surface-variant">Se não escolher uma das opções de baixa, o lançamento fica em aberto e aparece em Contas a Pagar / Contas a Receber.</p>
         <div className="space-y-3">
           <button
             type="button"
-            onClick={() => darBaixa(false)}
-            className="w-full rounded-2xl bg-neutral-900 py-4 text-[10px] font-black uppercase tracking-widest text-white shadow-lg transition hover:bg-black"
+            onClick={() => void darBaixa(false)}
+            disabled={processando}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-neutral-900 py-4 text-[10px] font-black uppercase tracking-widest text-white shadow-lg transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
           >
+            {processando && <Loader2 className="h-4 w-4 animate-spin" />}
             Dar baixa
           </button>
           {role === 'master' && (
             <button
               type="button"
-              onClick={() => darBaixa(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-bank-truth-green py-4 text-[10px] font-black uppercase tracking-widest text-white shadow-lg transition hover:opacity-90"
+              onClick={() => void darBaixa(true)}
+              disabled={processando}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-bank-truth-green py-4 text-[10px] font-black uppercase tracking-widest text-white shadow-lg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <ShieldCheck className="h-4 w-4" />Dar baixa e aprovar
+              {processando ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+              Dar baixa e aprovar
             </button>
           )}
           <button
             type="button"
             onClick={fechar}
-            className="w-full rounded-2xl border border-surface-border py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant transition hover:bg-surface"
+            disabled={processando}
+            className="w-full rounded-2xl border border-surface-border py-4 text-[10px] font-black uppercase tracking-widest text-on-surface-variant transition hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
           >
             Agora não
           </button>
