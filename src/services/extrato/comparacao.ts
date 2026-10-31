@@ -196,14 +196,18 @@ export function compararExtrato(
       const erpDisponivel = [...erp];
       const itens: ItemComparacao[] = [];
 
-      // 1) Casamento exato: mesmo dia + mesmo valor.
+      // 1) Casamento exato: mesmo dia + mesmo valor. Entre candidatos de mesmo dia e mesmo
+      // valor, um título reprovado não deve ser o par sugerido quando existe um título
+      // válido — ex.: transferência reprovada no mesmo dia/valor de uma confirmada.
       for (const linha of banco) {
-        const indice = erpDisponivel.findIndex(
-          (item) => centavos(valorEfetivoLancamento(item.lancamento)) === centavos(linha.valor),
-        );
-        if (indice === -1) continue;
-        itens.push(itemConciliado(linha, erpDisponivel[indice].lancamento));
-        erpDisponivel.splice(indice, 1);
+        const valorLinha = centavos(linha.valor);
+        const candidatos = erpDisponivel
+          .map((item, index) => ({ item, index }))
+          .filter(({ item }) => centavos(valorEfetivoLancamento(item.lancamento)) === valorLinha);
+        if (candidatos.length === 0) continue;
+        const escolhido = candidatos.find(({ item }) => item.lancamento.status_aprovacao !== 'reprovado') ?? candidatos[0];
+        itens.push(itemConciliado(linha, escolhido.item.lancamento));
+        erpDisponivel.splice(escolhido.index, 1);
         bancoDisponivel.splice(bancoDisponivel.indexOf(linha), 1);
       }
 

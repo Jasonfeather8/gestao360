@@ -30,6 +30,25 @@ export async function sha256Hex(arquivo: File): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+/** Defasagem tolerada entre a data gravada na transação e a data lida agora no mesmo PDF. */
+const DIAS_DE_TOLERANCIA_DE_DATA = 1;
+
+function diferencaEmDias(dataGravada: string, dataLida: string): number {
+  const gravada = new Date(`${String(dataGravada).slice(0, 10)}T00:00:00Z`).getTime();
+  const lida = new Date(`${String(dataLida).slice(0, 10)}T00:00:00Z`).getTime();
+  if (Number.isNaN(gravada) || Number.isNaN(lida)) return Number.POSITIVE_INFINITY;
+  return Math.abs(Math.round((gravada - lida) / 86400000));
+}
+
+function descricaoComparavel(descricao: string): string {
+  return String(descricao)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .slice(0, 24);
+}
+
 function nomeSanitizado(nome: string): string {
   const semExtensao = nome.replace(/\.pdf$/i, '');
   const base = semExtensao.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 100) || 'extrato';
@@ -66,7 +85,7 @@ export async function reaproveitarExtratoImportado(params: {
 
   const { data: transacoes, error } = await supabase
     .from('transacoes_banco')
-    .select('id, hash_transacao, data_transacao, valor_centavos, pagina_origem, linha_origem')
+    .select('id, hash_transacao, data_transacao, valor_centavos, descricao_banco, pagina_origem, linha_origem')
     .eq('conta_bancaria_id', contaId)
     .eq('arquivo_hash', arquivoHash);
   if (error || !transacoes || transacoes.length === 0) return null;
@@ -87,10 +106,19 @@ export async function reaproveitarExtratoImportado(params: {
     const ordem = ordemLinhaPorId.get(linha.id);
     const candidata = ordem ? porProcedencia.get(`${linha.pagina}:${ordem}`) : undefined;
     const valorCentavos = Math.round((linha.direcao === 'entrada' ? linha.valor : -linha.valor) * 100);
-    const confere = candidata
-      && candidata.data_transacao === linha.data
-      && Number(candidata.valor_centavos) === valorCentavos;
-    if (!confere) {
+    if (!candidata || Number(candidata.valor_centavos) !== valorCentavos) {
+      linhasNaoReconhecidas += 1;
+      continue;
+    }
+
+    // Leituras antigas do mesmo PDF atribuíam o dia da página seguinte às linhas que
+    // continuavam a seção anterior na virada de página: a data GRAVADA pode estar um dia
+    // à frente/atrás da data lida agora. O vínculo continua sendo posição + valor, e a
+    // data só precisa ser compatível (mesmo dia, dia vizinho) ou a descrição conferir.
+    const descricaoGravada = descricaoComparavel(candidata.descricao_banco ?? '');
+    const descricaoLida = descricaoComparavel(linha.descricao ?? '');
+    const mesmaDescricao = descricaoGravada.length >= 8 && descricaoGravada === descricaoLida;
+    if (diferencaEmDias(candidata.data_transacao, linha.data) > DIAS_DE_TOLERANCIA_DE_DATA && !mesmaDescricao) {
       linhasNaoReconhecidas += 1;
       continue;
     }
