@@ -47,6 +47,8 @@ import AccountFilterCards from '../components/Lancamentos/AccountFilterCards';
 import LancamentoActionMenu from '../components/Lancamentos/LancamentoActionMenu';
 import FinanceiroStatusFilter from '../components/Lancamentos/FinanceiroStatusFilter';
 
+type LancamentoExibido = LancamentoFinanceiro & { transferenciaEspelhoIds?: string[] };
+
 interface LancamentosProps {
   typeOverride?: 'entrada' | 'saida';
   titleOverride?: string;
@@ -70,6 +72,7 @@ export default function Lancamentos({
     setSelectedLancamentoIdForModal,
     selectedLancamentoIdsForBatch,
     setSelectedLancamentoIdsForBatch,
+    setSelectedTransferenciaAprovacao,
     setActiveTab,
     isAprovacaoModalOpen
   } = useUIStore();
@@ -315,31 +318,43 @@ export default function Lancamentos({
 
   const { data: transferencias = [] } = useTransferencias();
   const transferenciasById = useMemo(() => new Map(transferencias.map(transferencia => [transferencia.id, transferencia])), [transferencias]);
-  const displayedLancamentos = useMemo(() => {
-    if (isFinanceiroView) return filteredLancamentos;
-
-    const displayed: LancamentoFinanceiro[] = [];
-    const indexesByTransferencia = new Map<string, number>();
+  const displayedLancamentos = useMemo<LancamentoExibido[]>(() => {
+    const grupos = new Map<string, LancamentoFinanceiro[]>();
+    const ordem: Array<{ item: LancamentoFinanceiro } | { transferenciaId: string }> = [];
 
     filteredLancamentos.forEach(item => {
       const isTransferenciaEspelho = Boolean(item.transferencia_id)
         && (item.transferencia_lado === 'origem' || item.transferencia_lado === 'destino');
       if (!isTransferenciaEspelho || !item.transferencia_id) {
-        displayed.push(item);
+        ordem.push({ item });
         return;
       }
 
-      const existingIndex = indexesByTransferencia.get(item.transferencia_id);
-      if (existingIndex === undefined) {
-        indexesByTransferencia.set(item.transferencia_id, displayed.length);
-        displayed.push(item);
-      } else if (item.transferencia_lado === 'origem' && displayed[existingIndex].transferencia_lado === 'destino') {
-        displayed[existingIndex] = item;
+      const grupo = grupos.get(item.transferencia_id);
+      if (grupo) {
+        grupo.push(item);
+        return;
       }
+
+      grupos.set(item.transferencia_id, [item]);
+      ordem.push({ transferenciaId: item.transferencia_id });
     });
 
-    return displayed;
-  }, [filteredLancamentos, isFinanceiroView]);
+    return ordem.map(entrada => {
+      if ('item' in entrada) return entrada.item;
+
+      const grupo = grupos.get(entrada.transferenciaId) ?? [];
+      // A linha única da transferência mostra sempre o lado de origem; se a origem já
+      // estiver aprovada e a outra ponta ainda não, mostra a ponta pendente para que o
+      // Master consiga concluir a aprovação.
+      const representante = grupo.find(titulo => titulo.transferencia_lado === 'origem' && titulo.status_aprovacao !== 'confirmado_master')
+        ?? grupo.find(titulo => titulo.status_aprovacao !== 'confirmado_master')
+        ?? grupo.find(titulo => titulo.transferencia_lado === 'origem')
+        ?? grupo[0];
+
+      return { ...representante, transferenciaEspelhoIds: grupo.map(titulo => titulo.id) };
+    });
+  }, [filteredLancamentos]);
   const selectableLancamentos = useMemo(
     () => filteredLancamentos.filter(item => item.transferencia_lado !== 'origem' && item.transferencia_lado !== 'destino'),
     [filteredLancamentos]
@@ -479,6 +494,7 @@ export default function Lancamentos({
       .map(item => item.id);
     if (eligibleIds.length === 0) return;
     setSelectedLancamentoIdsForBatch(eligibleIds);
+    setSelectedTransferenciaAprovacao(null);
     setModalOpen('isAprovacaoModalOpen', true);
   };
 
@@ -1304,7 +1320,10 @@ export default function Lancamentos({
                                 title="Clique para aprovar"
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  setSelectedLancamentoIdsForBatch([item.id]);
+                                  setSelectedLancamentoIdsForBatch(item.transferenciaEspelhoIds ?? [item.id]);
+                                  setSelectedTransferenciaAprovacao(item.transferenciaEspelhoIds && item.transferencia_id
+                                    ? { id: item.transferencia_id, rotulo: getTransferenciaContasLabel(item) }
+                                    : null);
                                   setModalOpen('isAprovacaoModalOpen', true);
                                 }}
                                 className="cursor-pointer rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"

@@ -100,18 +100,17 @@ test("Master confirma os dados da transferência e aprova os dois títulos pelo 
 
   await page.goto("/lancamentos", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await searchField(page).fill(observationMarker);
+  // A transferência entra no Financeiro como uma única linha: saída na origem e entrada no destino agrupadas.
   const linhas = page.getByRole("row").filter({ hasText: "123,45" });
-  await expect(linhas).toHaveCount(2, { timeout: 30_000 });
-  for (let index = 0; index < 2; index += 1) {
-    const linha = linhas.nth(index);
-    const seloPendGestor = linha.getByText("Pend. Gestor", { exact: true });
-    await expect(seloPendGestor).toBeVisible();
-    await seloPendGestor.click();
-    await expect(page.getByRole("heading", { name: "Aprovar Título" })).toBeVisible();
-    await page.getByRole("button", { name: "Confirmar Aprovação" }).click();
-    await expect(page.getByRole("heading", { name: "Aprovar Título" })).toBeHidden({ timeout: 30_000 });
-    await expect(linha.getByText("Pend. Gestor", { exact: true })).toHaveCount(0, { timeout: 30_000 });
-  }
+  await expect(linhas).toHaveCount(1, { timeout: 30_000 });
+  const linha = linhas.first();
+  const seloPendGestor = linha.getByText("Pend. Gestor", { exact: true });
+  await expect(seloPendGestor).toBeVisible();
+  await seloPendGestor.click();
+  await expect(page.getByRole("heading", { name: "Aprovar Transferência" })).toBeVisible();
+  await page.getByRole("button", { name: "Confirmar Aprovação" }).click();
+  await expect(page.getByRole("heading", { name: "Aprovar Transferência" })).toBeHidden({ timeout: 30_000 });
+  await expect(linha.getByText("Pend. Gestor", { exact: true })).toHaveCount(0, { timeout: 30_000 });
 
   const { data: transferencia, error: transferenciaError } = await admin!
     .from("transferencias_bancarias")

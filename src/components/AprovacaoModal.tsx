@@ -24,9 +24,11 @@ interface LocalFile {
 export default function AprovacaoModal() {
   const { 
     isAprovacaoModalOpen, 
-    setModalOpen, 
+    setModalOpen,
     selectedLancamentoIdsForBatch,
-    setSelectedLancamentoIdsForBatch
+    setSelectedLancamentoIdsForBatch,
+    selectedTransferenciaAprovacao,
+    setSelectedTransferenciaAprovacao
   } = useUIStore();
 
   const { data: lancamentos = [], batchApprove } = useLancamentos();
@@ -34,6 +36,7 @@ export default function AprovacaoModal() {
   const [attachments, setAttachments] = useState<LocalFile[]>([]);
 
   const selectedCount = selectedLancamentoIdsForBatch.length;
+  const aprovandoTransferencia = selectedCount > 1 ? selectedTransferenciaAprovacao : null;
   const showAttachment = selectedCount === 1;
 
   const lancamento = showAttachment
@@ -45,6 +48,7 @@ export default function AprovacaoModal() {
   const handleClose = () => {
     setModalOpen('isAprovacaoModalOpen', false);
     setSelectedLancamentoIdsForBatch([]);
+    setSelectedTransferenciaAprovacao(null);
     setAttachments([]);
   };
 
@@ -134,10 +138,12 @@ export default function AprovacaoModal() {
             
             <div>
               <h3 className="text-sm font-black uppercase tracking-widest text-neutral-900">
-                Aprovar {selectedCount > 1 ? `${selectedCount} Títulos` : 'Título'}
+                {aprovandoTransferencia ? 'Aprovar Transferência' : `Aprovar ${selectedCount > 1 ? `${selectedCount} Títulos` : 'Título'}`}
               </h3>
               <p className="text-[10px] font-bold text-secondary uppercase leading-relaxed mt-2">
-                {selectedCount > 1 ? (
+                {aprovandoTransferencia ? (
+                  <>Você está prestes a confirmar a transferência entre contas <span className="text-primary font-black">{aprovandoTransferencia.rotulo}</span>. Isso confirma os dois lados de uma vez: a saída na conta de origem e a entrada na conta de destino.</>
+                ) : selectedCount > 1 ? (
                   <>Você está prestes a aprovar <span className="text-primary font-black">{selectedCount} títulos</span> selecionados.</>
                 ) : (
                   <>Você está prestes a aprovar o título de <span className="text-primary font-black">{entName}</span>.</>

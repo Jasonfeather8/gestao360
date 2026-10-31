@@ -93,16 +93,17 @@ test("Master estorna o título da transferência no Financeiro e ela volta a agu
   await expect(modalConfirmacao).toBeHidden({ timeout: 30_000 });
   await expect(page.getByRole("status").filter({ hasText: "Dados da transferência confirmados." })).toBeVisible();
 
-  // Os dois títulos da transferência entram no Financeiro aguardando o Master.
+  // A transferência entra no Financeiro como uma única linha com os dois lados agrupados.
   await page.goto("/lancamentos", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await searchField(page).fill(observationMarker);
   const linhas = page.getByRole("row").filter({ hasText: "123,45" });
-  await expect(linhas).toHaveCount(2, { timeout: 30_000 });
+  await expect(linhas).toHaveCount(1, { timeout: 30_000 });
 
   // Estorno do título pelo menu ⋮ do Financeiro.
   await linhas.first().getByTestId("lancamento-action-menu").click();
   page.once("dialog", (dialog) => void dialog.accept());
   await page.getByTestId("action-estornar").click();
+  // O título estornado sai da lista; resta a outra ponta da transferência.
   await expect(linhas).toHaveCount(1, { timeout: 30_000 });
 
   const { data: transferencia, error: transferenciaError } = await admin!

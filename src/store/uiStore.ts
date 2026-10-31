@@ -45,6 +45,7 @@ interface UIState {
 
   selectedLancamentoIdForModal: string | null;
   selectedLancamentoIdsForBatch: string[];
+  selectedTransferenciaAprovacao: { id: string; rotulo: string } | null;
   selectedRecorrenciaAction: 'single' | 'all' | null;
 
   // Temp Draft states so users don't lose typed progress
@@ -102,10 +103,11 @@ interface UIState {
   setActiveConfigSubTab: (sub: 'equipe' | 'auditoria' | 'legacy') => void;
   setCurrentUserId: (id: string) => void;
   
-  setModalOpen: (modal: keyof Omit<UIState, 'theme' | 'activeTab' | 'activeConfigSubTab' | 'currentUserId' | 'scrollPositions' | 'selectedLancamentoIdForModal' | 'selectedLancamentoIdsForBatch' | 'selectedRecorrenciaAction' | 'lancamentoFormDraft' | 'lancamentoPreset' | 'conciliacaoPosLancamento' | 'baixaPreset' | 'avrPreset' | 'entidadeFormDraft' | 'setTheme' | 'setActiveTab' | 'setActiveConfigSubTab' | 'setCurrentUserId' | 'setModalOpen' | 'setSelectedLancamentoIdForModal' | 'setSelectedLancamentoIdsForBatch' | 'setSelectedRecorrenciaAction' | 'setLancamentoFormDraft' | 'setLancamentoPreset' | 'setConciliacaoPosLancamento' | 'setBaixaPreset' | 'setAvrPreset' | 'setEntidadeFormDraft' | 'setScrollPosition'>, value: boolean) => void;
+  setModalOpen: (modal: keyof Omit<UIState, 'theme' | 'activeTab' | 'activeConfigSubTab' | 'currentUserId' | 'scrollPositions' | 'selectedLancamentoIdForModal' | 'selectedLancamentoIdsForBatch' | 'selectedTransferenciaAprovacao' | 'selectedRecorrenciaAction' | 'lancamentoFormDraft' | 'lancamentoPreset' | 'conciliacaoPosLancamento' | 'baixaPreset' | 'avrPreset' | 'entidadeFormDraft' | 'setTheme' | 'setActiveTab' | 'setActiveConfigSubTab' | 'setCurrentUserId' | 'setModalOpen' | 'setSelectedLancamentoIdForModal' | 'setSelectedLancamentoIdsForBatch' | 'setSelectedTransferenciaAprovacao' | 'setSelectedRecorrenciaAction' | 'setLancamentoFormDraft' | 'setLancamentoPreset' | 'setConciliacaoPosLancamento' | 'setBaixaPreset' | 'setAvrPreset' | 'setEntidadeFormDraft' | 'setScrollPosition'>, value: boolean) => void;
   
   setSelectedLancamentoIdForModal: (id: string | null) => void;
   setSelectedLancamentoIdsForBatch: (ids: string[]) => void;
+  setSelectedTransferenciaAprovacao: (contexto: { id: string; rotulo: string } | null) => void;
   setSelectedRecorrenciaAction: (action: 'single' | 'all' | null) => void;
 
   setLancamentoFormDraft: (draft: Partial<UIState['lancamentoFormDraft']>) => void;
@@ -195,6 +197,7 @@ export const useUIStore = create<UIState>()(
 
       selectedLancamentoIdForModal: null,
       selectedLancamentoIdsForBatch: [],
+      selectedTransferenciaAprovacao: null,
 
       selectedRecorrenciaAction: null,
 
@@ -211,6 +214,7 @@ export const useUIStore = create<UIState>()(
       
       setSelectedLancamentoIdForModal: (id) => set({ selectedLancamentoIdForModal: id }),
       setSelectedLancamentoIdsForBatch: (ids) => set({ selectedLancamentoIdsForBatch: ids }),
+      setSelectedTransferenciaAprovacao: (contexto) => set({ selectedTransferenciaAprovacao: contexto }),
       setSelectedRecorrenciaAction: (action) => set({ selectedRecorrenciaAction: action }),
 
       setLancamentoFormDraft: (draft) => set((state) => ({
