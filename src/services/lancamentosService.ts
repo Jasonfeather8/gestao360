@@ -31,6 +31,13 @@ export interface LancamentoFilters {
   pageSize?: number;
 }
 
+export interface ArquivoAnexoLocal {
+  name: string;
+  size: number;
+  type: string;
+  file: File;
+}
+
 const normalizeFilterValues = (value?: string | string[]): string[] => {
   const values = Array.isArray(value) ? value : value ? [value] : [];
   return values.includes('all') ? [] : Array.from(new Set(values.filter(Boolean)));
@@ -988,6 +995,67 @@ export const lancamentosService = {
       .update({ status_pagamento: isMaster ? 'pago' : 'quitação_pendente' })
       .eq('id', id);
     if (error) throw error;
+  },
+
+  // Envia os arquivos para o storage e registra cada comprovante em lancamento_anexos.
+  // Upload e insert são verificados individualmente: qualquer falha vira erro (nunca
+  // um "salvo com sucesso" silencioso) e o arquivo órfão é removido do storage.
+  addAnexos: async (lancamentoId: string, arquivos: ArquivoAnexoLocal[]): Promise<any[]> => {
+    if (!lancamentoId) throw new Error('lançamento não identificado para anexar o comprovante');
+    if (!arquivos || arquivos.length === 0) return [];
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('sessão expirada — entre novamente para anexar o comprovante');
+
+    const criados: any[] = [];
+
+    for (const arquivo of arquivos) {
+      const extensao = arquivo.name.includes('.') ? arquivo.name.split('.').pop() : 'bin';
+      const caminho = `lancamentos/${lancamentoId}/${Math.random()}.${extensao}`;
+
+      diagnosticLogger.info('lancamento-anexos', 'Enviando anexo para o storage', {
+        lancamentoId,
+        caminho,
+        nome: arquivo.name,
+        tamanho: arquivo.size
+      });
+
+      const { error: erroUpload } = await supabase.storage
+        .from('documents')
+        .upload(caminho, arquivo.file);
+
+      if (erroUpload) {
+        diagnosticLogger.error('lancamento-anexos', 'Falha ao enviar o anexo para o storage', { lancamentoId, caminho, error: erroUpload });
+        throw new Error(`falha ao enviar "${arquivo.name}" para o storage (${erroUpload.message})`);
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('documents')
+        .getPublicUrl(caminho);
+
+      const { data: anexoCriado, error: erroRegistro } = await (supabase.from('lancamento_anexos') as any)
+        .insert({
+          lancamento_id: lancamentoId,
+          nome: arquivo.name,
+          url: publicUrl,
+          tamanho: arquivo.size,
+          tipo_arquivo: arquivo.type,
+          user_id: user.id
+        })
+        .select()
+        .single();
+
+      if (erroRegistro) {
+        diagnosticLogger.error('lancamento-anexos', 'Falha ao registrar o anexo no banco', { lancamentoId, caminho, error: erroRegistro });
+        await supabase.storage.from('documents').remove([caminho]);
+        throw new Error(`falha ao registrar "${arquivo.name}" no lançamento (${erroRegistro.message})`);
+      }
+
+      diagnosticLogger.info('lancamento-anexos', 'Anexo registrado com sucesso', { lancamentoId, anexoId: anexoCriado?.id });
+      criados.push(anexoCriado);
+    }
+
+    return criados;
   },
 
   getAnexos: async (lancamentoId: string): Promise<any[]> => {

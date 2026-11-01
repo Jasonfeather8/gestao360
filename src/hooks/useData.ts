@@ -11,7 +11,7 @@ import { entidadesService } from '../services/entidadesService';
 import { centrosCustoService } from '../services/centrosCustoService';
 import { categoriasService } from '../services/categoriasService';
 import { contasService } from '../services/contasService';
-import { lancamentosService } from '../services/lancamentosService';
+import { lancamentosService, type ArquivoAnexoLocal } from '../services/lancamentosService';
 import { recorrenciasService } from '../services/recorrenciasService';
 import { usuariosService } from '../services/usuariosService';
 import { auditoriaService } from '../services/auditoriaService';
@@ -414,6 +414,22 @@ export function useLancamentoAnexosByIds(lancamentoIds: string[]) {
     queryKey: ['lancamentoAnexosByIds', ids],
     queryFn: () => lancamentosService.getAnexosByLancamentoIds(ids),
     enabled: ids.length > 0,
+    // Comprovante recém-anexado precisa aparecer ao abrir os detalhes do título.
+    staleTime: 0,
+  });
+}
+
+// Centraliza o envio de comprovantes e invalida os caches de anexos usados pelo
+// painel de detalhes e pela lista de lançamentos.
+export function useAnexarComprovante() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ lancamentoId, arquivos }: { lancamentoId: string; arquivos: ArquivoAnexoLocal[] }) =>
+      lancamentosService.addAnexos(lancamentoId, arquivos),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lancamentoAnexos'] });
+      queryClient.invalidateQueries({ queryKey: ['lancamentoAnexosByIds'] });
+    },
   });
 }
 
@@ -438,6 +454,8 @@ export function useLancamentoAnexos(lancamentoId: string | null) {
       return anexos;
     },
     enabled: !!lancamentoId,
+    // Comprovante recém-anexado precisa aparecer ao abrir os detalhes do título.
+    staleTime: 0,
     meta: { feature: 'lancamento-anexos' },
   });
   const deleteMutation = useMutation({ mutationFn: ({ id, path }: { id: string, path: string }) => lancamentosService.deleteAnexo(id, path), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['lancamentoAnexos', lancamentoId] }) });

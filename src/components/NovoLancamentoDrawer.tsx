@@ -24,7 +24,7 @@ import {
   Shield
 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
-import { useLancamentos, useLancamento, useEntidades, useCentrosCusto, useCategorias, useContas, useContasSaldos, useLancamentoAnexos, useCategoriasAjuste } from '../hooks/useData';
+import { useLancamentos, useLancamento, useEntidades, useCentrosCusto, useCategorias, useContas, useContasSaldos, useLancamentoAnexos, useCategoriasAjuste, useAnexarComprovante } from '../hooks/useData';
 import { useAuth } from '../hooks/useAuth';
 import MoneyInput from './MoneyInput';
 import { PrintDocumentSelector } from './printing/PrintDocumentSelector';
@@ -222,6 +222,7 @@ export default function NovoLancamentoDrawer() {
   } = useUIStore();
 
   const { createLancamento, updateLancamento, baixaLancamento, isCreating, isUpdating, data: lancamentos = [] } = useLancamentos();
+  const { mutateAsync: anexarComprovante } = useAnexarComprovante();
   const { data: lancamentoSelecionado, isLoading: isLancamentoSelecionadoLoading } = useLancamento(selectedLancamentoIdForModal);
   const { data: entidades = [] } = useEntidades();
   const { data: rawCentros = [] } = useCentrosCusto();
@@ -238,6 +239,18 @@ export default function NovoLancamentoDrawer() {
 
   const [attachments, setAttachments] = useState<LocalFile[]>([]);
   const [isPrintOpen, setIsPrintOpen] = useState(false);
+
+  // Aceita arquivos pelo seletor e por arrastar-e-soltar na área pontilhada.
+  const addLocalFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const novos: LocalFile[] = Array.from(files).map(file => ({
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      file
+    }));
+    setAttachments(prev => [...prev, ...novos]);
+  };
 
   const [parcelasManuais, setParcelasManuais] = useState<Array<{ numero: number; data: string; valor: string }>>([]);
   const [isAVREdit, setIsAVREdit] = useState(false);
@@ -712,6 +725,15 @@ export default function NovoLancamentoDrawer() {
           propagate_avr: propagationOverride ?? avrPropagation
         }
       });
+      // O comprovante escolhido também precisa ser gravado no fluxo de AVR.
+      if (editingItem?.id && attachments.length > 0) {
+        try {
+          await anexarComprovante({ lancamentoId: editingItem.id, arquivos: attachments });
+        } catch (anexoError: any) {
+          showToast('AVR salvo, mas o comprovante não foi anexado: ' + anexoError.message, 'error');
+        }
+      }
+
       showToast('AVR atualizado com sucesso!', 'success');
       setIsAVRConfirmationOpen(false);
       resetAllDrafts();
@@ -834,7 +856,6 @@ export default function NovoLancamentoDrawer() {
     };
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       let createdItem;
 
       if (editingItem) {
@@ -866,34 +887,15 @@ export default function NovoLancamentoDrawer() {
         });
       }
 
-      // Handle Attachments
+      // Anexos: envio e registro ficam no serviço, que valida upload e insert.
+      // Se o comprovante falhar, o lançamento já está salvo — avisamos o usuário
+      // em vez de encerrar o fluxo com um "sucesso" silencioso.
       const lancamentoId = editingItem ? editingItem.id : (createdItem as any)?.id;
       if (lancamentoId && attachments.length > 0) {
-        for (const attachment of attachments) {
-          const fileExt = (attachment as LocalFile).name.split('.').pop();
-          const fileName = `${Math.random()}.${fileExt}`;
-          const filePath = `lancamentos/${lancamentoId}/${fileName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('documents')
-            .upload(filePath, (attachment as LocalFile).file);
-
-          if (!uploadError) {
-            const { data: { publicUrl } } = supabase.storage
-              .from('documents')
-              .getPublicUrl(filePath);
-
-            await (supabase.from('lancamento_anexos') as any).insert({
-              lancamento_id: lancamentoId,
-              nome: (attachment as LocalFile).name,
-              url: publicUrl,
-              tamanho: (attachment as LocalFile).size,
-              tipo_arquivo: (attachment as LocalFile).type,
-              user_id: user?.id
-            });
-          } else {
-            console.error('Erro ao subir anexo:', uploadError);
-          }
+        try {
+          await anexarComprovante({ lancamentoId, arquivos: attachments });
+        } catch (anexoError: any) {
+          showToast('Lançamento salvo, mas o comprovante não foi anexado: ' + anexoError.message, 'error');
         }
       }
 
@@ -1638,23 +1640,23 @@ export default function NovoLancamentoDrawer() {
 
                 <div className="flex flex-col gap-2">
                   <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Nota Fiscal / Produto</label>
-                  <div className="relative group cursor-pointer h-12 border-2 border-dashed border-neutral-200 rounded-xl hover:border-primary transition-all flex items-center justify-center gap-2 text-secondary hover:text-primary bg-neutral-50/50">
+                  <div
+                    className="relative group cursor-pointer h-12 border-2 border-dashed border-neutral-200 rounded-xl hover:border-primary transition-all flex items-center justify-center gap-2 text-secondary hover:text-primary bg-neutral-50/50"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      addLocalFiles(e.dataTransfer.files);
+                    }}
+                  >
                     <Paperclip className="w-4 h-4" />
                     <span className="text-[10px] font-black uppercase">{(attachments.length + (existingAnexos?.length || 0)) > 0 ? `${attachments.length + (existingAnexos?.length || 0)} Anexo(s)` : 'Anexar Documento'}</span>
                     <input
                       type="file"
                       multiple
+                      data-testid="novo-lancamento-anexo-input"
                       onChange={(e) => {
-                        if (e.target.files) {
-                          const fileList = Array.from(e.target.files) as File[];
-                          const newFiles: LocalFile[] = fileList.map(f => ({
-                            name: f.name,
-                            size: f.size,
-                            type: f.type,
-                            file: f
-                          }));
-                          setAttachments(prev => [...prev, ...newFiles]);
-                        }
+                        addLocalFiles(e.target.files);
+                        e.target.value = '';
                       }}
                       className="absolute inset-0 opacity-0 cursor-pointer"
                     />

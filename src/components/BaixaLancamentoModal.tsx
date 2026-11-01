@@ -26,7 +26,7 @@ import {
   Shield
 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
-import { useLancamentos, useLancamento, useContas, useEntidades, useCategorias, useCategoriasAjuste, useCentrosCusto, useContasSaldos, useLancamentoAnexos } from '../hooks/useData';
+import { useLancamentos, useLancamento, useContas, useEntidades, useCategorias, useCategoriasAjuste, useCentrosCusto, useContasSaldos, useLancamentoAnexos, useAnexarComprovante } from '../hooks/useData';
 
 import { useAuth } from '../hooks/useAuth';
 import MoneyInput from './MoneyInput';
@@ -76,6 +76,7 @@ export default function BaixaLancamentoModal() {
 
   const { role } = useAuth();
   const { data: lancamentos = [], baixaLancamento, updateLancamento } = useLancamentos();
+  const { mutateAsync: anexarComprovante } = useAnexarComprovante();
   const { data: selectedLancamento } = useLancamento(selectedLancamentoIdForModal);
   const { data: rawContas } = useContas();
 
@@ -133,6 +134,18 @@ export default function BaixaLancamentoModal() {
   const [isFinalConfirmationOpen, setIsFinalConfirmationOpen] = useState(false);
   const [attachments, setAttachments] = useState<LocalFile[]>([]);
   const [dispensarComprovante, setDispensarComprovante] = useState(false);
+
+  // Aceita arquivos pelo seletor e por arrastar-e-soltar na área pontilhada.
+  const addLocalFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const novos: LocalFile[] = Array.from(files).map(file => ({
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      file
+    }));
+    setAttachments(prev => [...prev, ...novos]);
+  };
 
   // Quick add states
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
@@ -393,6 +406,16 @@ export default function BaixaLancamentoModal() {
           motivo_acrescimo_id: motivoAcrescimoId || null
         }
       });
+
+      // O comprovante escolhido também precisa ser gravado ao salvar o registro.
+      if (attachments.length > 0) {
+        try {
+          await anexarComprovante({ lancamentoId: lancamento.id, arquivos: attachments });
+        } catch (anexoError: any) {
+          alert('Registro salvo, mas o comprovante não foi anexado: ' + anexoError.message);
+        }
+      }
+
       handleClose();
     } catch (err: any) {
       alert('Erro ao salvar registro: ' + err.message);
@@ -455,32 +478,14 @@ export default function BaixaLancamentoModal() {
         }
       });
 
-      // Handle Attachments
+      // Anexos: envio e registro ficam no serviço, que valida upload e insert.
+      // A baixa já foi registrada, então uma falha no comprovante é avisada ao
+      // usuário em vez de passar em silêncio.
       if (attachments.length > 0) {
-        const { data: { user } } = await supabase.auth.getUser();
-        for (const attachment of attachments) {
-          const fileExt = attachment.name.split('.').pop();
-          const fileName = `${Math.random()}.${fileExt}`;
-          const filePath = `lancamentos/${lancamento.id}/${fileName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('documents')
-            .upload(filePath, attachment.file);
-
-          if (!uploadError) {
-            const { data: { publicUrl } } = supabase.storage
-              .from('documents')
-              .getPublicUrl(filePath);
-
-            await (supabase.from('lancamento_anexos') as any).insert({
-              lancamento_id: lancamento.id,
-              nome: attachment.name,
-              url: publicUrl,
-              tamanho: attachment.size,
-              tipo_arquivo: attachment.type,
-              user_id: user?.id
-            });
-          }
+        try {
+          await anexarComprovante({ lancamentoId: lancamento.id, arquivos: attachments });
+        } catch (anexoError: any) {
+          alert('Baixa registrada, mas o comprovante não foi anexado: ' + anexoError.message);
         }
       }
 
@@ -1105,27 +1110,27 @@ export default function BaixaLancamentoModal() {
                   <Paperclip className="w-4 h-4" /> Comprovantes e Anexos
                 </h4>
                 
-                <div className="relative group cursor-pointer h-12 border-2 border-dashed border-neutral-200 rounded-xl hover:border-primary transition-all flex items-center justify-center gap-2 text-secondary hover:text-primary bg-neutral-50/50">
+                <div
+                  className="relative group cursor-pointer h-12 border-2 border-dashed border-neutral-200 rounded-xl hover:border-primary transition-all flex items-center justify-center gap-2 text-secondary hover:text-primary bg-neutral-50/50"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    addLocalFiles(e.dataTransfer.files);
+                  }}
+                >
                   <Paperclip className="w-4 h-4" />
                   <span className="text-[10px] font-black uppercase">
-                    {(attachments.length + (existingAnexos?.length || 0)) > 0 
-                      ? `${attachments.length + (existingAnexos?.length || 0)} Anexo(s)` 
+                    {(attachments.length + (existingAnexos?.length || 0)) > 0
+                      ? `${attachments.length + (existingAnexos?.length || 0)} Anexo(s)`
                       : 'Anexar Comprovante'}
                   </span>
                   <input
                     type="file"
                     multiple
+                    data-testid="baixa-anexo-input"
                     onChange={(e) => {
-                      if (e.target.files) {
-                        const fileList = Array.from(e.target.files) as File[];
-                        const newFiles: LocalFile[] = fileList.map(f => ({
-                          name: f.name,
-                          size: f.size,
-                          type: f.type,
-                          file: f
-                        }));
-                        setAttachments(prev => [...prev, ...newFiles]);
-                      }
+                      addLocalFiles(e.target.files);
+                      e.target.value = '';
                     }}
                     className="absolute inset-0 opacity-0 cursor-pointer"
                   />
