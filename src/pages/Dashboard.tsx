@@ -427,6 +427,7 @@ export default function Dashboard() {
                 {accountsBalances.map((acc, i) => (
                   <div
                     key={acc.id}
+                    data-testid="dashboard-account-card"
                     onClick={() => setSelectedAccountId(acc.id === selectedAccountId ? null : acc.id)}
                     className={`flex-shrink-0 w-64 bg-white dark:bg-surface p-4 border rounded-lg flex flex-col group cursor-pointer transition-all ${
                       selectedAccountId === acc.id ? 'border-primary ring-2 ring-primary/20 shadow-md scale-[1.02]' : 'border-surface-border hover:border-primary shadow-sm'
@@ -486,6 +487,7 @@ export default function Dashboard() {
                     return (
                       <div
                         key={cc.id}
+                        data-testid="dashboard-cc-bar"
                         onClick={() => setSelectedCCId(isSelected ? null : cc.id)}
                         className={`flex flex-col items-center gap-1 flex-1 h-full justify-end group cursor-pointer transition-all ${
                           isSelected ? 'opacity-100 scale-105' : selectedCCId ? 'opacity-30 grayscale' : 'opacity-100'
