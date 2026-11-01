@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.get_dashboard_performance(date, date, uuid) TO authenticated, service_role

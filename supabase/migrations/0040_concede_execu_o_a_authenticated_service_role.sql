@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.get_dashboard_stats(uuid, uuid) TO authenticated, service_role

@@ -181,7 +181,10 @@ export default function Lancamentos({
 
   const [categoryIdFilter, setCategoryIdFilter] = useState<string[]>([]);
   const [contaIdFilter, setContaIdFilter] = useState<string[]>([]);
-  const [centroCustoIdFilter, setCentroCustoIdFilter] = useState<string[]>([]);
+  const [centroCustoIdFilter, setCentroCustoIdFilter] = useState<string[]>(() => {
+    const cc = searchParams.get('centroCusto');
+    return cc ? [cc] : [];
+  });
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [condicaoFilter, setCondicaoFilter] = useState('all');
   const [temDescontoFilter, setTemDescontoFilter] = useState('all');

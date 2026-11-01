@@ -362,9 +362,51 @@ export interface DashboardKpis {
   realizado_saida: number;
   previsto_entrada: number;
   previsto_saida: number;
-  liquidez: number;
+  resultado_realizado: number;
   saldo_projetado: number;
   margem: number;
+}
+
+export interface DashboardCentroPerformance {
+  id: string;
+  nome: string;
+  entradas: number;
+  saidas: number;
+  resultado: number;
+}
+
+export interface DashboardDesempenho {
+  juros_pagos: number;
+  descontos_obtidos: number;
+  juros_recebidos: number;
+  descontos_concedidos: number;
+}
+
+export interface DashboardEficiencia {
+  liquidadas: number;
+  abertas: number;
+  bpi: number;
+  total: number;
+  percentual: number;
+}
+
+export interface DashboardPerformance {
+  centros: DashboardCentroPerformance[];
+  desempenho: DashboardDesempenho;
+  eficiencia: DashboardEficiencia;
+}
+
+export interface DashboardStats {
+  total_consolidado: number;
+  total_operacional: number;
+  total_simulado: number;
+  quitacao_pendente_count: number;
+  transferencias_pendentes_count: number;
+  transferencias_pendentes_valor: number;
+  pendente_saida_valor: number;
+  pendente_saida_count: number;
+  pendente_entrada_valor: number;
+  pendente_entrada_count: number;
 }
 
 export interface DashboardFluxoDia {

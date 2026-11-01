@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { DashboardIndicadores, ImportacaoDados } from '../types';
+import { DashboardIndicadores, DashboardPerformance, DashboardStats, ImportacaoDados } from '../types';
 import type { TransferenciaBancaria, TransferenciaCandidataLinha } from '../types';
 import type { CriarTransferenciaParams } from '../services/transferenciasService';
 import { transferenciasService } from '../services/transferenciasService';
@@ -329,20 +329,23 @@ export function useLancamentos(filters?: any) {
   const isMaster = role === 'master';
 
   const query = useQuery({ queryKey: ['lancamentos', filters], queryFn: ({ signal }) => lancamentosService.getAll(filters, signal) });
-  const createMutation = useMutation({ mutationFn: ({ item, recorrencia }: { item: any, recorrencia?: any }) => lancamentosService.create(item, recorrencia), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); } });
-  const updateMutation = useMutation({ mutationFn: ({ id, data, mode }: { id: string, data: any, mode?: 'single' | 'all' }) => lancamentosService.update(id, data, mode), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['lancamento'] }); queryClient.invalidateQueries({ queryKey: ['auditoriaLogs'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); } });
-  const deleteMutation = useMutation({ mutationFn: ({ id, mode }: { id: string, mode?: 'single' | 'all' }) => lancamentosService.delete(id, mode), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['auditoriaLogs'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); } });
+  const invalidateDashboard = () => {
+    ['dashboardStats', 'dashboardIndicadores', 'dashboardPerformance'].forEach(queryKey => queryClient.invalidateQueries({ queryKey: [queryKey] }));
+  };
+  const createMutation = useMutation({ mutationFn: ({ item, recorrencia }: { item: any, recorrencia?: any }) => lancamentosService.create(item, recorrencia), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); invalidateDashboard(); } });
+  const updateMutation = useMutation({ mutationFn: ({ id, data, mode }: { id: string, data: any, mode?: 'single' | 'all' }) => lancamentosService.update(id, data, mode), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['lancamento'] }); queryClient.invalidateQueries({ queryKey: ['auditoriaLogs'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); invalidateDashboard(); } });
+  const deleteMutation = useMutation({ mutationFn: ({ id, mode }: { id: string, mode?: 'single' | 'all' }) => lancamentosService.delete(id, mode), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['auditoriaLogs'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); invalidateDashboard(); } });
   // Aprovar (ou reprovar) os títulos de uma transferência muda o estado dela: a tela de
   // Transferências precisa recarregar para mostrar a transferência concluída ou reprovada.
-  const batchApproveMutation = useMutation({ mutationFn: ({ ids, targetStatus }: { ids: string[], targetStatus: 'digital' | 'confirmado_master' | 'reprovado' }) => lancamentosService.approveInBatch(ids, targetStatus), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['auditoriaLogs'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); queryClient.invalidateQueries({ queryKey: ['transferencias'] }); } });
-  const baixaMutation = useMutation({ mutationFn: ({ id, data }: { id: string, data: any }) => lancamentosService.baixaLancamento(id, data, isMaster), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['lancamento'] }); queryClient.invalidateQueries({ queryKey: ['auditoriaLogs'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); } });
+  const batchApproveMutation = useMutation({ mutationFn: ({ ids, targetStatus }: { ids: string[], targetStatus: 'digital' | 'confirmado_master' | 'reprovado' }) => lancamentosService.approveInBatch(ids, targetStatus), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['auditoriaLogs'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); queryClient.invalidateQueries({ queryKey: ['transferencias'] }); invalidateDashboard(); } });
+  const baixaMutation = useMutation({ mutationFn: ({ id, data }: { id: string, data: any }) => lancamentosService.baixaLancamento(id, data, isMaster), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['lancamento'] }); queryClient.invalidateQueries({ queryKey: ['auditoriaLogs'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); invalidateDashboard(); } });
 
   // O estorno também desfaz a conciliação bancária do título no banco: é preciso
   // descartar o cache de conciliação para a tela de Conciliação refletir a liberação
   // da transação do extrato e permitir conciliar o título novamente.
   // O estorno também desfaz a conciliação bancária do título no banco e, quando o título
   // vem de uma transferência, devolve a transferência para "Aguardando Confirmação".
-  const estornoMutation = useMutation({ mutationFn: (id: string) => lancamentosService.estornarLancamento(id), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['auditoriaLogs'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); queryClient.invalidateQueries({ queryKey: ['conciliacoes'] }); queryClient.invalidateQueries({ queryKey: ['transacoesBanco'] }); queryClient.invalidateQueries({ queryKey: ['transferencias'] }); } });
+  const estornoMutation = useMutation({ mutationFn: (id: string) => lancamentosService.estornarLancamento(id), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['auditoriaLogs'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); queryClient.invalidateQueries({ queryKey: ['conciliacoes'] }); queryClient.invalidateQueries({ queryKey: ['transacoesBanco'] }); queryClient.invalidateQueries({ queryKey: ['transferencias'] }); invalidateDashboard(); } });
 
   return {
     ...query,
@@ -485,20 +488,64 @@ export function useAuditoriaLogs() {
   return useQuery({ queryKey: ['auditoriaLogs'], queryFn: auditoriaService.getAll });
 }
 
-export function useDashboardIndicadores(inicio?: string | null, fim?: string | null) {
+export function useDashboardIndicadores(inicio?: string | null, fim?: string | null, centroCustoId?: string | null, contaBancariaId?: string | null) {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ['dashboardIndicadores', user?.id, inicio ?? null, fim ?? null],
+    queryKey: ['dashboardIndicadores', user?.id, inicio ?? null, fim ?? null, centroCustoId ?? null, contaBancariaId ?? null],
     queryFn: async (): Promise<DashboardIndicadores> => {
       const { data, error } = await supabase.rpc('get_dashboard_indicadores', {
         p_inicio: inicio ?? null,
         p_fim: fim ?? null,
+        p_centro_custo_id: centroCustoId ?? null,
+        p_conta_bancaria_id: contaBancariaId ?? null,
       });
       if (error) throw error;
       return data as DashboardIndicadores;
     },
     enabled: !!user?.id,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useDashboardStats(centroCustoId?: string | null, contaBancariaId?: string | null) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['dashboardStats', user?.id, centroCustoId ?? null, contaBancariaId ?? null],
+    queryFn: async (): Promise<DashboardStats> => {
+      const { data, error } = await supabase.rpc('get_dashboard_stats', {
+        p_centro_custo_id: centroCustoId ?? null,
+        p_conta_bancaria_id: contaBancariaId ?? null,
+      });
+      if (error) throw error;
+      return data as DashboardStats;
+    },
+    enabled: !!user?.id,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useDashboardPerformance(inicio?: string | null, fim?: string | null, centroCustoId?: string | null, contaBancariaId?: string | null) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['dashboardPerformance', user?.id, inicio ?? null, fim ?? null, centroCustoId ?? null, contaBancariaId ?? null],
+    queryFn: async (): Promise<DashboardPerformance> => {
+      const { data, error } = await supabase.rpc('get_dashboard_performance', {
+        p_inicio: inicio ?? null,
+        p_fim: fim ?? null,
+        p_centro_custo_id: centroCustoId ?? null,
+        p_conta_bancaria_id: contaBancariaId ?? null,
+      });
+      if (error) throw error;
+      return data as DashboardPerformance;
+    },
+    enabled: !!user?.id,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 }
 

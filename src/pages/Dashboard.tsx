@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   TrendingUp,
   TrendingDown,
@@ -25,14 +25,11 @@ import {
   Users,
   Activity
 } from 'lucide-react';
-import { useLancamentos, useContas, useCentrosCusto, useAuditoriaLogs, useEntidades, useContasSaldos, useDashboardIndicadores } from '../hooks/useData';
+import { useLancamentos, useContas, useCentrosCusto, useAuditoriaLogs, useEntidades, useContasSaldos, useDashboardIndicadores, useDashboardStats, useDashboardPerformance } from '../hooks/useData';
 import { useAuth } from '../hooks/useAuth';
 import { useUIStore } from '../store/uiStore';
-import { calculateAdjustmentAmount } from '../utils/adjustments';
 
 import { useDragScroll } from '../hooks/useDragScroll';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import type { DashboardIndicadores } from '../types';
 import { CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
@@ -46,23 +43,36 @@ export default function Dashboard() {
 
   const [currentTab, setCurrentTab] = useState<'general' | 'cashflow' | 'audit'>('general');
   const [showAdvancedFilters, setShowAdvancedFiltersAdvancedFilters] = useState(false);
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [selectedCCId, setSelectedCCId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const periodFilter = searchParams.get('mes') || 'all';
+  const selectedAccountId = searchParams.get('conta') || null;
+  const selectedCCId = searchParams.get('centroCusto') || null;
+  const updateFilter = (key: string, value: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setSearchParams(next, { replace: true });
+  };
 
-  const { data: lancamentos = [], isLoading: loadingLancamentos } = useLancamentos();
   const { data: rawContas = [], isLoading: loadingContas } = useContas();
   const { data: rawCentrosCusto = [] } = useCentrosCusto();
   const { data: auditoriaLogs = [], refetch: refetchAudit, isFetching: fetchingAudit } = useAuditoriaLogs();
   const { data: entidades = [] } = useEntidades();
 
-  const [periodFilter, setPeriodFilter] = useState('all');
   const selectedMonth = periodFilter === 'all' ? null : periodFilter;
   const monthStart = selectedMonth ? `${selectedMonth}-01` : null;
   const monthEnd = selectedMonth
     ? `${selectedMonth}-${String(new Date(Number(selectedMonth.slice(0, 4)), Number(selectedMonth.slice(5, 7)), 0).getDate()).padStart(2, '0')}`
     : null;
-  const { data: indicadoresData, isLoading: loadingIndicadores } = useDashboardIndicadores(monthStart, monthEnd);
+  const { data: indicadoresData, isLoading: loadingIndicadores } = useDashboardIndicadores(monthStart, monthEnd, selectedCCId, selectedAccountId);
   const indicadores: DashboardIndicadores | undefined = indicadoresData;
+  const { data: stats, isLoading: loadingStats } = useDashboardStats(selectedCCId, selectedAccountId);
+  const { data: performance } = useDashboardPerformance(monthStart, monthEnd, selectedCCId, selectedAccountId);
+  const { data: lancamentosRecentes = [], isLoading: loadingRecentes } = useLancamentos({
+    statusPagamento: 'pago', isFinanceiroView: true, centroCustoId: selectedCCId ?? undefined,
+    contaId: selectedAccountId ?? undefined, startDate: monthStart ?? undefined, endDate: monthEnd ?? undefined,
+    page: 1, pageSize: 50,
+  });
 
   const contas = useMemo(() => {
     return rawContas
@@ -73,76 +83,17 @@ export default function Dashboard() {
 
   // Detail modal state for audit
   const [selectedAuditLog, setSelectedAuditLog] = useState<any | null>(null);
+  const { setActiveTab } = useUIStore();
+  const valueFormatter = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const compactFormatter = (val: number) => new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(val);
+  const filtersActive = periodFilter !== 'all' || Boolean(selectedAccountId) || Boolean(selectedCCId);
+  const selectedAccount = contas.find(account => account.id === selectedAccountId);
+  const selectedCenter = centrosCusto.find(center => center.id === selectedCCId);
+  const formattedPeriod = selectedMonth
+    ? new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${selectedMonth}-01T12:00:00Z`)).replace(/^./, letter => letter.toUpperCase())
+    : null;
 
-  const { data: stats, isLoading: loadingStats } = useQuery({
-    queryKey: ['dashboardStats'],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-      const { data, error } = await supabase.rpc('get_dashboard_stats', { p_user_id: user.id });
-      if (error) throw error;
-      return data;
-    }
-  });
-  
-  const { setModalOpen, setActiveTab } = useUIStore();
-
-  const filteredLancamentos = useMemo(() => {
-    return lancamentos.filter(item => {
-      const periodMatch = periodFilter === 'all' || item.data_vencimento.startsWith(periodFilter);
-
-      // Account filter
-      const accountMatch = selectedAccountId ? item.conta_bancaria_id === selectedAccountId : true;
-
-      // Cost center filter
-      const ccMatch = selectedCCId ? item.centro_custo_id === selectedCCId : true;
-
-      return periodMatch && accountMatch && ccMatch;
-    });
-  }, [lancamentos, periodFilter, selectedAccountId, selectedCCId]);
-
-  const valueFormatter = (val: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-  };
-
-  const totals = useMemo(() => {
-   const paidSum = filteredLancamentos.filter(l => l.status_pagamento === 'pago').length;
-   const unpaidSum = filteredLancamentos.filter(l => l.status_pagamento === 'aberto').length;
-   const bpiSum = filteredLancamentos.filter(l => l.status_pagamento === 'bpi').length;
-   const totalStatusCount = paidSum + unpaidSum + bpiSum || 1;
-
-   // Real juros and discounts metrics
-   const jurosPagos = filteredLancamentos
-     .filter(l => l.tipo === 'saida' && l.status_pagamento === 'pago')
-     .reduce((acc, l) => acc + calculateAdjustmentAmount(l.acrescimo_valor, l.acrescimo_tipo, l.valor_previsto), 0);
-
-   const descontosObtidos = filteredLancamentos
-     .filter(l => l.tipo === 'saida' && l.status_pagamento === 'pago')
-     .reduce((acc, l) => acc + calculateAdjustmentAmount(l.desconto_valor, l.desconto_tipo, l.valor_previsto), 0);
-
-   const jurosRecebidos = filteredLancamentos
-     .filter(l => l.tipo === 'entrada' && l.status_pagamento === 'pago')
-     .reduce((acc, l) => acc + calculateAdjustmentAmount(l.acrescimo_valor, l.acrescimo_tipo, l.valor_previsto), 0);
-
-   const descontosConcedidos = filteredLancamentos
-     .filter(l => l.tipo === 'entrada' && l.status_pagamento === 'pago')
-     .reduce((acc, l) => acc + calculateAdjustmentAmount(l.desconto_valor, l.desconto_tipo, l.valor_previsto), 0);
-
-   return {
-     paidPercent: Math.round((paidSum / totalStatusCount) * 100),
-     unpaidPercent: Math.round((unpaidSum / totalStatusCount) * 100),
-     bpiPercent: Math.round((bpiSum / totalStatusCount) * 100),
-     paidCount: paidSum,
-     unpaidCount: unpaidSum,
-     bpiCount: bpiSum,
-     jurosPagos,
-     descontosObtidos,
-     jurosRecebidos,
-     descontosConcedidos
-   };
- }, [filteredLancamentos]);
-
- const { data: contasSaldos = [] } = useContasSaldos();
+  const { data: contasSaldos = [] } = useContasSaldos();
 
  const accountsBalances = useMemo(() => {
    return contas.map(account => {
@@ -163,17 +114,11 @@ export default function Dashboard() {
    };
  }, [accountsBalances]);
  const cofreLocalAccount = accountsBalances.find(account => account.is_cofre_local);
+ const centrosPerformance = performance?.centros ?? [];
+ const centrosComMovimento = centrosPerformance.filter(center => center.entradas > 0 || center.saidas > 0);
+ const centrosSemMovimento = centrosPerformance.length - centrosComMovimento.length;
 
-  const costCenterBreakdown = useMemo(() => {
-    return centrosCusto.map(cc => {
-      const ccLaunches = filteredLancamentos.filter(l => l.centro_custo_id === cc.id);
-      const entradas = ccLaunches.filter(l => l.tipo === 'entrada').reduce((acc, l) => acc + l.valor_previsto, 0);
-      const saidas = ccLaunches.filter(l => l.tipo === 'saida').reduce((acc, l) => acc + l.valor_previsto, 0);
-      return { ...cc, entradas, saidas };
-    });
-  }, [centrosCusto, filteredLancamentos]);
-
-  if (loadingLancamentos || loadingContas || loadingStats) {
+  if (loadingContas || loadingStats) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-2">
@@ -206,7 +151,7 @@ export default function Dashboard() {
           <>
             <section className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-surface p-4 rounded-lg border border-surface-border shadow-sm animate-fade-in">
               <div className="flex flex-wrap items-center gap-4">
-                <div className="flex flex-col"><span className="text-xs font-medium text-secondary mb-1">Seletor de Período</span><div className="flex items-center gap-2 border border-surface-border rounded-lg px-3 py-2 bg-surface"><Calendar className="w-5 h-5 text-secondary" /><select value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value)} className="bg-transparent border-none p-0 text-sm font-semibold focus:ring-0 w-48 text-on-surface outline-none cursor-pointer"><option value="all">Todo o período</option>{(indicadoresData?.meses || []).map(month => <option key={month} value={month}>{new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${month}-01T12:00:00Z`)).replace(/^./, letter => letter.toUpperCase())}</option>)}</select></div></div>
+                <div className="flex flex-col"><span className="text-xs font-medium text-secondary mb-1">Seletor de Período</span><div className="flex items-center gap-2 border border-surface-border rounded-lg px-3 py-2 bg-surface"><Calendar className="w-5 h-5 text-secondary" /><select aria-label="Seletor de Período" value={periodFilter} onChange={(e) => updateFilter('mes', e.target.value === 'all' ? null : e.target.value)} className="bg-transparent border-none p-0 text-sm font-semibold focus:ring-0 w-48 text-on-surface outline-none cursor-pointer"><option value="all">Todo o período</option>{(indicadoresData?.meses || []).map(month => <option key={month} value={month}>{new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${month}-01T12:00:00Z`)).replace(/^./, letter => letter.toUpperCase())}</option>)}</select></div></div>
               </div>
               <button onClick={() => {
                 const data = indicadores;
@@ -215,6 +160,7 @@ export default function Dashboard() {
                   rows.push([title], headers, ...values, []);
                 };
                 const csvValue = (value: string | number) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+                addSection('FILTROS', ['Filtro', 'Valor'], [['Período', formattedPeriod || 'Todos'], ['Conta', selectedAccount?.nome || 'Todos'], ['Centro de custo', selectedCenter?.nome || 'Todos']]);
                 addSection('SALDOS', ['Indicador', 'Valor'], data ? [
                   ['Real', valueFormatter(data.saldos.real)], ['Operacional', valueFormatter(data.saldos.operacional)], ['Simulado', valueFormatter(data.saldos.simulado)]
                 ] : []);
@@ -227,14 +173,17 @@ export default function Dashboard() {
                 ] : []);
                 addSection('ITENS DE COBERTURA', ['Descrição', 'Entidade', 'Vencimento', 'Valor', 'Acumulado', 'Coberto'], data?.cobertura.itens.map(item => [item.descricao, item.entidade || '', item.vencimento || '', valueFormatter(item.valor), valueFormatter(item.acumulado), item.coberto ? 'Sim' : 'Não']) || []);
                 addSection('CARTEIRA / INADIMPLÊNCIA', ['Indicador', 'Valor'], data ? [
-                  ['Pago regular', valueFormatter(data.carteira.pago_regular)], ['Atrasado', valueFormatter(data.carteira.atrasado)], ['Baixa por inatividade', valueFormatter(data.carteira.baixa_inatividade)], ['Total', valueFormatter(data.carteira.total)]
+                  ['Recebido ou a vencer', valueFormatter(data.carteira.pago_regular)], ['Atrasado', valueFormatter(data.carteira.atrasado)], ['Baixa por inatividade', valueFormatter(data.carteira.baixa_inatividade)], ['Total', valueFormatter(data.carteira.total)]
                 ] : []);
                 addSection('KPIs DO PERÍODO', ['Indicador', 'Valor'], data ? [
-                  ['Entradas realizadas', valueFormatter(data.periodo.kpis.realizado_entrada)], ['Saídas realizadas', valueFormatter(data.periodo.kpis.realizado_saida)], ['Entradas previstas', valueFormatter(data.periodo.kpis.previsto_entrada)], ['Saídas previstas', valueFormatter(data.periodo.kpis.previsto_saida)], ['Liquidez corrente', valueFormatter(data.periodo.kpis.liquidez)], ['Saldo projetado', valueFormatter(data.periodo.kpis.saldo_projetado)], ['Margem operacional', `${data.periodo.kpis.margem.toFixed(1)}%`]
+                  ['Entradas realizadas', valueFormatter(data.periodo.kpis.realizado_entrada)], ['Saídas realizadas', valueFormatter(data.periodo.kpis.realizado_saida)], ['Entradas previstas', valueFormatter(data.periodo.kpis.previsto_entrada)], ['Saídas previstas', valueFormatter(data.periodo.kpis.previsto_saida)], ['Resultado realizado', valueFormatter(data.periodo.kpis.resultado_realizado)], ['Saldo projetado', valueFormatter(data.periodo.kpis.saldo_projetado)], ['Margem operacional', `${data.periodo.kpis.margem.toFixed(1)}%`]
                 ] : []);
                 addSection('FLUXO DE CAIXA DIÁRIO', ['Data', 'Realizado', 'Projetado'], data?.periodo.fluxo_diario.map(day => [day.data, valueFormatter(day.realizado), valueFormatter(day.previsto)]) || []);
                 addSection('SAÍDAS POR CATEGORIA', ['Categoria', 'Valor'], data?.periodo.saidas_por_categoria.map(item => [item.categoria, valueFormatter(item.valor)]) || []);
                 addSection('RECEITA POR CLIENTE', ['Cliente', 'Valor'], data?.periodo.receita_por_cliente.map(item => [item.cliente, valueFormatter(item.valor)]) || []);
+                addSection('PERFORMANCE POR CENTRO DE CUSTO', ['Centro de custo', 'Entradas', 'Saídas', 'Resultado'], performance?.centros.map(center => [center.nome, valueFormatter(center.entradas), valueFormatter(center.saidas), valueFormatter(center.resultado)]) || []);
+                addSection('JUROS E DESCONTOS', ['Indicador', 'Valor'], performance ? [['Juros pagos', valueFormatter(performance.desempenho.juros_pagos)], ['Descontos obtidos', valueFormatter(performance.desempenho.descontos_obtidos)], ['Juros recebidos', valueFormatter(performance.desempenho.juros_recebidos)], ['Descontos concedidos', valueFormatter(performance.desempenho.descontos_concedidos)]] : []);
+                addSection('EFICIÊNCIA DE PAGAMENTO', ['Liquidadas', 'Abertas', 'BPI', 'Total', 'Percentual'], performance ? [[String(performance.eficiencia.liquidadas), String(performance.eficiencia.abertas), String(performance.eficiencia.bpi), String(performance.eficiencia.total), `${performance.eficiencia.percentual}%`]] : []);
                 if (isMaster && data?.centros_custo) {
                   const centros = [...data.centros_custo.melhores, ...data.centros_custo.deficitarios];
                   addSection('CENTROS DE CUSTO', ['Centro de custo', 'Receitas', 'Despesas', 'Resultado'], [
@@ -247,6 +196,15 @@ export default function Dashboard() {
                 const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'dashboard_real.csv'; link.click(); window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
               }} disabled={loadingIndicadores || !indicadores} className="flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-neutral-700 text-white rounded-lg text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50"><Download className="w-5 h-5" /> Exportar CSV</button>
             </section>
+            {filtersActive && <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-surface-border bg-surface px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-secondary">
+                {formattedPeriod && <span className="rounded-full border border-surface-border px-3 py-1">{formattedPeriod}</span>}
+                {selectedAccount && <span className="rounded-full border border-surface-border px-3 py-1">{selectedAccount.nome}</span>}
+                {selectedCenter && <span className="rounded-full border border-surface-border px-3 py-1">{selectedCenter.nome}</span>}
+                <span className="basis-full text-[10px]">Saldos de caixa, saldo por conta, expectativa final e transferências aguardando Master são posições globais: não mudam com os filtros. A cobertura das provisões usa as provisões filtradas contra o caixa real da empresa.</span>
+              </div>
+              <button type="button" onClick={() => { const next = new URLSearchParams(searchParams); next.delete('mes'); next.delete('conta'); next.delete('centroCusto'); setSearchParams(next, { replace: true }); }} className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline">Limpar filtros</button>
+            </section>}
 
             <section className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
               {/* Saldo Principal (Operacional para Gerente, Duplo para Master) */}
@@ -256,7 +214,7 @@ export default function Dashboard() {
                   <span className="text-xs font-bold text-secondary uppercase tracking-wider">
                     {isMaster ? 'Saldos de Caixa' : 'Saldo Disponível (Operacional)'}
                   </span>
-                  <Landmark className="w-5 h-5 text-bank-truth-green" />
+                  <div className="flex items-center gap-2">{filtersActive && <span className="text-[8px] font-bold text-secondary">Global · não afetado pelo filtro</span>}<Landmark className="w-5 h-5 text-bank-truth-green" /></div>
                 </div>
                 
                 <div className="space-y-4">
@@ -295,7 +253,7 @@ export default function Dashboard() {
 
               <div className="bg-white dark:bg-surface p-6 rounded-xl border border-surface-border shadow-sm relative overflow-hidden group">
                 <div className="absolute top-0 left-0 w-1 h-full bg-primary"></div>
-                <div className="flex justify-between items-start mb-4"><span className="text-xs font-bold text-secondary uppercase tracking-wider">Expectativa Final</span><LineChart className="w-5 h-5 text-primary" /></div>
+                <div className="flex justify-between items-start mb-4"><span className="text-xs font-bold text-secondary uppercase tracking-wider">Expectativa Final</span><div className="flex items-center gap-2">{filtersActive && <span className="text-[8px] font-bold text-secondary">Global · não afetado pelo filtro</span>}<LineChart className="w-5 h-5 text-primary" /></div></div>
                 <h3 className="text-2xl font-bold font-mono text-on-surface">{valueFormatter(stats?.total_simulado || 0)}</h3>
                 <p className="text-xs text-secondary mt-2">Cenário previsto para final do período</p>
                 
@@ -313,12 +271,12 @@ export default function Dashboard() {
                 <div className="absolute top-0 left-0 w-1 h-full bg-[#FFA000]"></div>
                 <div className="flex justify-between items-start mb-4">
                   <span className="text-xs font-bold text-secondary uppercase tracking-wider">Fila de Trabalho</span>
-                  <Shield className="w-5 h-5 text-[#FFA000]" />
+                  <div className="flex flex-col items-end gap-1">{(selectedCCId || selectedAccountId) && <span className="text-[8px] font-bold text-secondary">Pendentes filtrados</span>}<Shield className="w-5 h-5 text-[#FFA000]" /></div>
                 </div>
                 
                 <div className="space-y-3">
                   <div
-                    onClick={() => navigate('/pagar')}
+                    onClick={() => navigate(`/pagar${selectedCCId ? `?centroCusto=${encodeURIComponent(selectedCCId)}` : ''}`)}
                     className="flex items-center justify-between cursor-pointer hover:bg-neutral-50 p-2 -mx-2 rounded-lg transition-colors group"
                   >
                     <div className="flex flex-col">
@@ -335,7 +293,7 @@ export default function Dashboard() {
                   <div className="h-px bg-surface-border/50 w-full"></div>
 
                   <div
-                    onClick={() => navigate('/receber')}
+                    onClick={() => navigate(`/receber${selectedCCId ? `?centroCusto=${encodeURIComponent(selectedCCId)}` : ''}`)}
                     className="flex items-center justify-between cursor-pointer hover:bg-neutral-50 p-2 -mx-2 rounded-lg transition-colors group"
                   >
                     <div className="flex flex-col">
@@ -374,10 +332,10 @@ export default function Dashboard() {
 
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-2"><Building2 className="w-5 h-5 text-secondary" /> SALDO POR CONTA</h4>
+                <div className="flex items-center gap-3"><h4 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-2"><Building2 className="w-5 h-5 text-secondary" /> SALDO POR CONTA</h4>{filtersActive && <span className="text-[8px] font-bold text-secondary">Global · não afetado pelo filtro</span>}</div>
                 {selectedAccountId && (
                   <button
-                    onClick={() => setSelectedAccountId(null)}
+                    onClick={() => updateFilter('conta', null)}
                     className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline"
                   >
                     Limpar Filtro Conta
@@ -395,12 +353,9 @@ export default function Dashboard() {
               )}
               <div ref={dragScrollAccounts.ref} {...dragScrollAccounts.props} className="flex gap-4 overflow-x-auto pb-2 scroll-smooth select-none px-0.5">
                 {/* Card Todas as Contas */}
-                <div
-                  onClick={() => setSelectedAccountId(null)}
-                  className={`flex-shrink-0 w-64 bg-white dark:bg-surface p-4 border rounded-lg flex flex-col group cursor-pointer transition-all ${
+                <button type="button" aria-pressed={selectedAccountId === null} onClick={() => updateFilter('conta', null)} className={`flex-shrink-0 w-64 bg-white dark:bg-surface p-4 border rounded-lg flex flex-col group cursor-pointer text-left transition-all ${
                     selectedAccountId === null ? 'border-primary ring-2 ring-primary/20 shadow-md scale-[1.02]' : 'border-surface-border hover:border-primary shadow-sm'
-                  }`}
-                >
+                  }`}>
                   <div className="flex items-center gap-3 mb-3">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold uppercase transition-colors ${
                       selectedAccountId === null ? 'bg-primary text-white' : 'bg-primary/10 text-primary'
@@ -422,14 +377,16 @@ export default function Dashboard() {
                        <span className="text-[8px] font-medium ml-1 lowercase">({isMaster ? 'confirmado' : 'real'})</span>
                      </p>
                   </div>
-                </div>
+                </button>
 
                 {accountsBalances.map((acc, i) => (
-                  <div
+                  <button
+                    type="button"
                     key={acc.id}
                     data-testid="dashboard-account-card"
-                    onClick={() => setSelectedAccountId(acc.id === selectedAccountId ? null : acc.id)}
-                    className={`flex-shrink-0 w-64 bg-white dark:bg-surface p-4 border rounded-lg flex flex-col group cursor-pointer transition-all ${
+                    aria-pressed={selectedAccountId === acc.id}
+                    onClick={() => updateFilter('conta', acc.id === selectedAccountId ? null : acc.id)}
+                    className={`flex-shrink-0 w-64 bg-white dark:bg-surface p-4 border rounded-lg flex flex-col group cursor-pointer text-left transition-all ${
                       selectedAccountId === acc.id ? 'border-primary ring-2 ring-primary/20 shadow-md scale-[1.02]' : 'border-surface-border hover:border-primary shadow-sm'
                     }`}
                   >
@@ -461,7 +418,7 @@ export default function Dashboard() {
                         <span className="text-[8px] font-medium ml-1 lowercase">({isMaster ? 'confirmado' : 'real'})</span>
                       </p>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
 
@@ -469,36 +426,32 @@ export default function Dashboard() {
 
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
               <div className="lg:col-span-2 bg-white dark:bg-surface p-6 rounded-xl border border-surface-border shadow-sm">
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-1">
                   <h4 className="text-sm font-bold uppercase tracking-wider text-on-surface">Performance por Centro de Custo</h4>
                   {selectedCCId && (
-                    <button
-                      onClick={() => setSelectedCCId(null)}
-                      className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline"
-                    >
-                      Limpar Filtro Centro
-                    </button>
+                    <button type="button" onClick={() => updateFilter('centroCusto', null)} className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline">Limpar Filtro Centro</button>
                   )}
                 </div>
+                <p className="text-[10px] text-secondary mb-3">Valores realizados/confirmados · mesmo critério de 'Saúde por Centro de Custo'</p>
+                <div className="flex items-center gap-4 mb-2 text-[10px] font-semibold text-secondary"><span className="flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-bank-truth-green" />Entradas</span><span className="flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-alert-red" />Saídas</span></div>
+                {centrosSemMovimento > 0 && <p className="mb-1 text-[9px] text-secondary">{centrosSemMovimento} centros sem movimento ocultos</p>}
+                {centrosComMovimento.length === 0 && <p className="py-12 text-center text-xs text-secondary">Sem movimento realizado no filtro atual.</p>}
                 <div className="relative h-64 w-full flex items-end justify-around gap-2 px-4 border-b border-surface-border pt-10">
-                  {costCenterBreakdown.map((cc, i) => {
-                    const maxVal = Math.max(...costCenterBreakdown.map(c => Math.max(c.entradas, c.saidas, 1))) * 1.1;
+                  {centrosComMovimento.map(cc => {
+                    const maxVal = Math.max(...centrosComMovimento.map(center => Math.max(center.entradas, center.saidas, 1))) * 1.1;
                     const isSelected = selectedCCId === cc.id;
                     return (
-                      <div
-                        key={cc.id}
-                        data-testid="dashboard-cc-bar"
-                        onClick={() => setSelectedCCId(isSelected ? null : cc.id)}
-                        className={`flex flex-col items-center gap-1 flex-1 h-full justify-end group cursor-pointer transition-all ${
-                          isSelected ? 'opacity-100 scale-105' : selectedCCId ? 'opacity-30 grayscale' : 'opacity-100'
-                        }`}
-                      >
+                      <button type="button" key={cc.id} data-testid="dashboard-cc-bar" aria-pressed={isSelected} title={`${cc.nome} · Entradas ${valueFormatter(cc.entradas)} · Saídas ${valueFormatter(cc.saidas)}`} onClick={() => updateFilter('centroCusto', isSelected ? null : cc.id)} className={`flex flex-col items-center gap-1 flex-1 h-full justify-end group cursor-pointer text-left transition-all ${isSelected ? 'opacity-100 scale-105' : selectedCCId ? 'opacity-30 grayscale' : 'opacity-100'}`}>
                         <div className="w-full flex justify-center items-end gap-1.5 h-44">
-                          <div className="bg-bank-truth-green w-6 rounded-t-sm relative transition-all duration-300" style={{ height: `${(cc.entradas / maxVal) * 100}%` }} />
-                          <div className="bg-alert-red w-6 rounded-t-sm relative transition-all duration-300" style={{ height: `${(cc.saidas / maxVal) * 100}%` }} />
+                          <div className="bg-bank-truth-green w-6 rounded-t-sm relative transition-all duration-300" style={{ height: `${(cc.entradas / maxVal) * 100}%` }}>
+                            <span className="absolute -top-4 left-1/2 -translate-x-1/2 font-mono text-[9px] text-secondary whitespace-nowrap">{cc.entradas ? compactFormatter(cc.entradas) : ''}</span>
+                          </div>
+                          <div className="bg-alert-red w-6 rounded-t-sm relative transition-all duration-300" style={{ height: `${(cc.saidas / maxVal) * 100}%` }}>
+                            <span className="absolute -top-4 left-1/2 -translate-x-1/2 font-mono text-[9px] text-secondary whitespace-nowrap">{cc.saidas ? compactFormatter(cc.saidas) : ''}</span>
+                          </div>
                         </div>
                         <span className={`text-[10px] font-bold mt-2 truncate max-w-full ${isSelected ? 'text-primary' : 'text-secondary'}`}>{cc.nome}</span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -514,31 +467,36 @@ export default function Dashboard() {
                   <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900 rounded-xl flex items-center justify-between">
                     <div>
                       <span className="text-[9px] font-black text-red-500 uppercase tracking-widest block">Juros Pagos (Desperdício)</span>
-                      <span className="text-sm font-mono font-black text-red-600 dark:text-red-400">{valueFormatter(totals.jurosPagos)}</span>
+                      <span className="text-sm font-mono font-black text-red-600 dark:text-red-400">{performance ? valueFormatter(performance.desempenho.juros_pagos) : '—'}</span>
                     </div>
                     <div className="text-[9px] font-black text-red-500 bg-red-100/50 dark:bg-red-900/50 px-2 py-1 rounded-lg">
-                      Evite Atrasos
+                      {performance ? (performance.desempenho.juros_pagos === 0 ? 'Sem juros pagos' : 'Evite Atrasos') : '—'}
                     </div>
                   </div>
 
                   <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900 rounded-xl flex items-center justify-between">
                     <div>
                       <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest block">Descontos Obtidos (Economia)</span>
-                      <span className="text-sm font-mono font-black text-emerald-600 dark:text-emerald-400">{valueFormatter(totals.descontosObtidos)}</span>
+                      <span className="text-sm font-mono font-black text-emerald-600 dark:text-emerald-400">{performance ? valueFormatter(performance.desempenho.descontos_obtidos) : '—'}</span>
                     </div>
                     <div className="text-[9px] font-black text-emerald-500 bg-emerald-100/50 dark:bg-emerald-900/50 px-2 py-1 rounded-lg">
-                      Excelente!
+                      {performance ? (performance.desempenho.descontos_obtidos === 0 ? 'Sem descontos no período' : 'Excelente!') : '—'}
                     </div>
+                  </div>
+                  <div className="space-y-1 text-[9px] text-secondary">
+                    <p>Juros recebidos: {performance ? valueFormatter(performance.desempenho.juros_recebidos) : '—'}</p>
+                    <p>Descontos concedidos: {performance ? valueFormatter(performance.desempenho.descontos_concedidos) : '—'}</p>
                   </div>
                 </div>
 
                 <div className="pt-4 border-t border-surface-border">
+                  <p className="text-[9px] text-secondary mb-2">Saídas do escopo: período, conta e centro de custo selecionados</p>
                   <div className="flex justify-between text-[10px] font-black uppercase text-secondary mb-1">
-                    <span>Eficiência de Pagamento</span>
-                    <span className="text-on-surface">{totals.paidPercent}% Liquidados</span>
+                    <span>Eficiência de Pagamento <span className="normal-case">{performance ? `${performance.eficiencia.liquidadas}/${performance.eficiencia.total} títulos` : '—'}</span></span>
+                    <span className="text-on-surface">{performance ? `${performance.eficiencia.percentual}% das saídas liquidadas` : '—'}</span>
                   </div>
                   <div className="w-full h-2 bg-neutral-100 dark:bg-surface-container rounded-full overflow-hidden">
-                    <div className="h-full bg-bank-truth-green transition-all duration-500" style={{ width: `${totals.paidPercent}%` }} />
+                    <div className="h-full bg-bank-truth-green transition-all duration-500" style={{ width: `${performance?.eficiencia.percentual ?? 0}%` }} />
                   </div>
                 </div>
               </div>
@@ -554,7 +512,8 @@ export default function Dashboard() {
                 <>
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <article className="bg-white dark:bg-surface p-6 rounded-xl border border-surface-border shadow-sm">
-                      <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-bold uppercase tracking-wider text-on-surface">Cobertura das Provisões</h3><ShieldCheck className="w-5 h-5 text-bank-truth-green" /></div>
+                      <div className="flex items-center justify-between mb-1"><h3 className="text-sm font-bold uppercase tracking-wider text-on-surface">Cobertura das Provisões</h3><ShieldCheck className="w-5 h-5 text-bank-truth-green" /></div>
+                      <p className="mb-4 text-[10px] text-secondary">Provisões do filtro atual · cobertura medida contra o caixa real da empresa</p>
                       <div className="grid grid-cols-3 gap-3 mb-4">
                         <div><p className="text-[10px] uppercase text-secondary">Provisões</p><p className="font-bold text-sm">{valueFormatter(indicadores.cobertura.total_provisoes)}</p></div>
                         <div><p className="text-[10px] uppercase text-secondary">Coberto</p><p className="font-bold text-sm text-bank-truth-green">{valueFormatter(indicadores.cobertura.total_coberto)}</p></div>
@@ -580,9 +539,9 @@ export default function Dashboard() {
                     <article className="bg-white dark:bg-surface p-6 rounded-xl border border-surface-border shadow-sm">
                       <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-bold uppercase tracking-wider text-on-surface">Inadimplência por Valor</h3><PieChartIcon className="w-5 h-5 text-primary" /></div>
                       {indicadores.carteira.total > 0 ? <div className="flex flex-col sm:flex-row items-center gap-4">
-                        <div className="h-48 w-full sm:w-1/2"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{ name: 'Pago regular', value: indicadores.carteira.pago_regular }, { name: 'Atrasado', value: indicadores.carteira.atrasado }, { name: 'Baixa por inatividade', value: indicadores.carteira.baixa_inatividade }]} dataKey="value" nameKey="name" innerRadius="56%" outerRadius="82%" paddingAngle={2}>{['#2E7D32', '#D32F2F', '#FFA000'].map(color => <Cell key={color} fill={color} />)}</Pie><Tooltip formatter={(value) => valueFormatter(Number(value))} /></PieChart></ResponsiveContainer></div>
+                        <div className="h-48 w-full sm:w-1/2"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{ name: 'Recebido ou a vencer', value: indicadores.carteira.pago_regular }, { name: 'Atrasado', value: indicadores.carteira.atrasado }, { name: 'Baixa por inatividade', value: indicadores.carteira.baixa_inatividade }]} dataKey="value" nameKey="name" innerRadius="56%" outerRadius="82%" paddingAngle={2}>{['#2E7D32', '#D32F2F', '#FFA000'].map(color => <Cell key={color} fill={color} />)}</Pie><Tooltip formatter={(value) => valueFormatter(Number(value))} /></PieChart></ResponsiveContainer></div>
                         <div className="w-full space-y-3">{[
-                          ['Pago regular', indicadores.carteira.pago_regular, 'bg-bank-truth-green'], ['Atrasado', indicadores.carteira.atrasado, 'bg-alert-red'], ['Baixa por inatividade', indicadores.carteira.baixa_inatividade, 'bg-pending-amber']
+                          ['Recebido ou a vencer', indicadores.carteira.pago_regular, 'bg-bank-truth-green'], ['Atrasado', indicadores.carteira.atrasado, 'bg-alert-red'], ['Baixa por inatividade', indicadores.carteira.baixa_inatividade, 'bg-pending-amber']
                         ].map(([label, value, color]) => <div key={String(label)} className="flex items-center justify-between gap-2 text-xs"><span className="flex items-center gap-2 text-secondary"><i className={`h-2.5 w-2.5 rounded-full ${color}`} />{label}</span><strong className="text-on-surface">{valueFormatter(Number(value))}</strong></div>)}</div>
                       </div> : <p className="py-12 text-center text-xs text-secondary">Sem dados de carteira para este período.</p>}
                     </article>
@@ -590,7 +549,7 @@ export default function Dashboard() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                     {[
-                      ['Liquidez corrente', indicadores.periodo.kpis.liquidez.toFixed(1)],
+                      ['Resultado realizado', valueFormatter(indicadores.periodo.kpis.resultado_realizado)],
                       ['Margem operacional', `${indicadores.periodo.kpis.margem.toFixed(1)}%`],
                       ['Saldo projetado', valueFormatter(indicadores.periodo.kpis.saldo_projetado)],
                       ['Realizado · entradas / saídas', `${valueFormatter(indicadores.periodo.kpis.realizado_entrada)} / ${valueFormatter(indicadores.periodo.kpis.realizado_saida)}`]
@@ -603,10 +562,10 @@ export default function Dashboard() {
                   </article>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <article className="bg-white dark:bg-surface p-6 rounded-xl border border-surface-border shadow-sm"><div className="flex items-center justify-between mb-4"><h3 className="text-sm font-bold uppercase tracking-wider text-on-surface">Saídas por Categoria</h3><Wallet className="w-5 h-5 text-alert-red" /></div>
+                    <article className="bg-white dark:bg-surface p-6 rounded-xl border border-surface-border shadow-sm"><div className="flex items-center justify-between mb-4"><h3 className="text-sm font-bold uppercase tracking-wider text-on-surface">Saídas por Categoria</h3><Wallet className="w-5 h-5 text-alert-red" /></div><p className="text-[10px] text-secondary -mt-2 mb-2">Valor previsto (inclui títulos em aberto)</p>
                       <div className="max-h-64 overflow-y-auto">{indicadores.periodo.saidas_por_categoria.length ? indicadores.periodo.saidas_por_categoria.map(item => <div key={item.categoria} className="flex justify-between gap-4 border-b border-surface-border/60 py-3 last:border-0"><span className="text-sm text-secondary">{item.categoria}</span><strong className="text-sm text-on-surface">{valueFormatter(item.valor)}</strong></div>) : <p className="py-10 text-center text-xs text-secondary">Sem saídas por categoria neste período.</p>}</div>
                     </article>
-                    <article className="bg-white dark:bg-surface p-6 rounded-xl border border-surface-border shadow-sm"><div className="flex items-center justify-between mb-4"><h3 className="text-sm font-bold uppercase tracking-wider text-on-surface">Concentração de Receita · Top 5 Clientes</h3><Users className="w-5 h-5 text-bank-truth-green" /></div>
+                    <article className="bg-white dark:bg-surface p-6 rounded-xl border border-surface-border shadow-sm"><div className="flex items-center justify-between mb-4"><h3 className="text-sm font-bold uppercase tracking-wider text-on-surface">Concentração de Receita · Top 5 Clientes</h3><Users className="w-5 h-5 text-bank-truth-green" /></div><p className="text-[10px] text-secondary -mt-2 mb-2">Valor recebido (somente liquidados)</p>
                       <div className="max-h-64 overflow-y-auto">{indicadores.periodo.receita_por_cliente.length ? indicadores.periodo.receita_por_cliente.slice(0, 5).map((item, index) => <div key={`${item.cliente}-${index}`} className="flex justify-between gap-4 border-b border-surface-border/60 py-3 last:border-0"><span className="truncate text-sm text-secondary">{index + 1}. {item.cliente}</span><strong className="shrink-0 text-sm text-on-surface">{valueFormatter(item.valor)}</strong></div>) : <p className="py-10 text-center text-xs text-secondary">Sem receitas por cliente neste período.</p>}</div>
                     </article>
                   </div>
@@ -624,7 +583,7 @@ export default function Dashboard() {
 
         {currentTab === 'cashflow' && (
           <section className="bg-white dark:bg-surface p-6 rounded-xl border border-surface-border shadow-sm animate-fade-in">
-             <div className="flex justify-between items-center mb-6">
+             <div className="flex justify-between items-center mb-1">
               <h4 className="text-sm font-bold uppercase tracking-wider text-on-surface">Histórico Recente de Fluxo</h4>
               <button
                 onClick={() => { setActiveTab('lancamentos'); window.scrollTo(0, 0); }}
@@ -633,14 +592,14 @@ export default function Dashboard() {
                 Ver Tudo →
               </button>
             </div>
+            <p className="text-[10px] text-secondary mb-4">Por data de pagamento · respeita período, conta e centro de custo</p>
              <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead><tr className="bg-neutral-50 text-neutral-400 border-b border-neutral-100 text-[9px] font-black uppercase tracking-widest"><th className="py-4 px-8">Data</th><th className="py-4 px-8">Descrição</th><th className="py-4 px-8">Entidade</th><th className="py-4 px-8 text-right">Valor</th></tr></thead>
                 <tbody className="text-[11px] font-bold">
-                  {lancamentos.filter(l => l.status_pagamento === 'pago').slice(0, 50).map(l => (
+                  {loadingRecentes ? <tr><td colSpan={4} className="py-8 text-center text-secondary">Carregando...</td></tr> : lancamentosRecentes.length === 0 ? <tr><td colSpan={4} className="py-8 text-center text-secondary">Nenhum lançamento no filtro atual</td></tr> : lancamentosRecentes.map(l => (
                     <tr key={l.id} className="border-b border-neutral-50 hover:bg-neutral-50">
-
-                      <td className="py-4 px-8 font-mono">{l.data_vencimento.split('-').reverse().join('/')}</td>
+                      <td className="py-4 px-8 font-mono">{(l.data_pagamento || l.data_vencimento).split('-').reverse().join('/')}</td>
                       <td className="py-4 px-8 uppercase">{l.observacoes || 'Lançamento'}</td>
                       <td className="py-4 px-8">{entidades.find(e => e.id === l.entidade_id)?.nome_razao_social || '-'}</td>
                       <td className={`py-4 px-8 text-right font-black ${l.tipo === 'saida' ? 'text-alert-red' : 'text-bank-truth-green'}`}>{valueFormatter(l.valor_previsto)}</td>

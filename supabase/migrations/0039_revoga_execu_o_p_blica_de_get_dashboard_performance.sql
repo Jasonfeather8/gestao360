@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.get_dashboard_performance(date, date, uuid, uuid) FROM PUBLIC

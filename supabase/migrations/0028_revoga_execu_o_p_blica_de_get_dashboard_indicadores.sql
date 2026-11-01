@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.get_dashboard_indicadores(date, date, uuid) FROM PUBLIC

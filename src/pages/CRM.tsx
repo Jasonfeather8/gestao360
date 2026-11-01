@@ -30,8 +30,6 @@ import { useEntidades, useEntidadeDocuments } from '../hooks/useData';
 import { useAuth } from '../hooks/useAuth';
 import { useUIStore } from '../store/uiStore';
 import { EntidadeNegocio } from '../types';
-import { supabase } from '@/integrations/supabase/client';
-import { useQuery } from '@tanstack/react-query';
 import Button from '../components/Button';
 import { WalletCards, FileText, Download } from 'lucide-react';
 
@@ -74,17 +72,6 @@ export default function CRM() {
       return v.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3').slice(0, 15);
     }
   };
-
-  const { data: stats } = useQuery({
-    queryKey: ['dashboardStats'],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-      const { data, error } = await supabase.rpc('get_dashboard_stats', { p_user_id: user.id });
-      if (error) throw error;
-      return data;
-    }
-  });
 
   const filtered = useMemo(() => {
     return entidades.filter(ent => {

@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.get_dashboard_stats(uuid) FROM PUBLIC
