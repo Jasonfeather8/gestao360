@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
@@ -506,6 +506,9 @@ export function useDashboardIndicadores(inicio?: string | null, fim?: string | n
     enabled: !!user?.id,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
+    // Mantém os números anteriores na tela enquanto os novos chegam: trocar de filtro não deve
+    // esvaziar (nem remontar) o painel.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -525,6 +528,7 @@ export function useDashboardStats(centroCustoId?: string | null, contaBancariaId
     enabled: !!user?.id,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -546,6 +550,7 @@ export function useDashboardPerformance(inicio?: string | null, fim?: string | n
     enabled: !!user?.id,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
+    placeholderData: keepPreviousData,
   });
 }
 

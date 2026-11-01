@@ -64,11 +64,11 @@ export default function Dashboard() {
   const monthEnd = selectedMonth
     ? `${selectedMonth}-${String(new Date(Number(selectedMonth.slice(0, 4)), Number(selectedMonth.slice(5, 7)), 0).getDate()).padStart(2, '0')}`
     : null;
-  const { data: indicadoresData, isLoading: loadingIndicadores } = useDashboardIndicadores(monthStart, monthEnd, selectedCCId, selectedAccountId);
+  const { data: indicadoresData, isLoading: loadingIndicadores, isFetching: fetchingIndicadores } = useDashboardIndicadores(monthStart, monthEnd, selectedCCId, selectedAccountId);
   const indicadores: DashboardIndicadores | undefined = indicadoresData;
-  const { data: stats, isLoading: loadingStats } = useDashboardStats(selectedCCId, selectedAccountId);
-  const { data: performance } = useDashboardPerformance(monthStart, monthEnd, selectedCCId, selectedAccountId);
-  const { data: lancamentosRecentes = [], isLoading: loadingRecentes } = useLancamentos({
+  const { data: stats, isLoading: loadingStats, isFetching: fetchingStats } = useDashboardStats(selectedCCId, selectedAccountId);
+  const { data: performance, isFetching: fetchingPerformance } = useDashboardPerformance(monthStart, monthEnd, selectedCCId, selectedAccountId);
+  const { data: lancamentosRecentes = [], isLoading: loadingRecentes, isFetching: fetchingRecentes } = useLancamentos({
     statusPagamento: 'pago', isFinanceiroView: true, centroCustoId: selectedCCId ?? undefined,
     contaId: selectedAccountId ?? undefined, startDate: monthStart ?? undefined, endDate: monthEnd ?? undefined,
     page: 1, pageSize: 50,
@@ -118,7 +118,12 @@ export default function Dashboard() {
  const centrosComMovimento = centrosPerformance.filter(center => center.entradas > 0 || center.saidas > 0);
  const centrosSemMovimento = centrosPerformance.length - centrosComMovimento.length;
 
-  if (loadingContas || loadingStats) {
+  // Spinner de tela cheia apenas no primeiro carregamento. Depois disso, trocar de filtro atualiza
+  // os dados em segundo plano: o painel permanece montado (e a rolagem, preservada).
+  const carregandoInicial = (loadingContas && contas.length === 0) || (loadingStats && !stats);
+  const atualizando = fetchingIndicadores || fetchingStats || fetchingPerformance || fetchingRecentes;
+
+  if (carregandoInicial) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-2">
@@ -135,6 +140,11 @@ export default function Dashboard() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-surface-border/50 pb-2">
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
             <h1 className="text-xl md:text-2xl font-bold tracking-tight text-primary uppercase">Dashboard Real-Time</h1>
+            {atualizando && (
+              <span aria-live="polite" className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-secondary">
+                <RefreshCw className="w-3 h-3 animate-spin" /> Atualizando
+              </span>
+            )}
             <div className="h-6 w-px bg-surface-border hidden sm:block" />
             <nav ref={dragScrollTabs.ref} {...dragScrollTabs.props} className="flex gap-4 sm:gap-6 select-none overflow-x-auto scrollbar-none whitespace-nowrap scroll-smooth pb-0.5">
               <button type="button" onClick={() => setCurrentTab('general')} className={`text-xs font-bold pb-2 transition-colors border-b-2 ${currentTab === 'general' ? 'text-primary border-primary' : 'text-secondary hover:text-primary border-transparent'}`}>Visão Geral</button>
