@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { rotaInicial } from '@/config/permissions';
 import { Shield, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export default function Login() {
-  const { session, isLoading: authLoading } = useAuth();
+  const { session, role, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   
   const [email, setEmail] = useState('');
@@ -16,9 +17,9 @@ export default function Login() {
 
   useEffect(() => {
     if (session) {
-      navigate('/dashboard');
+      navigate(rotaInicial(role));
     }
-  }, [session, navigate]);
+  }, [session, role, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +33,7 @@ export default function Login() {
       });
 
       if (error) throw error;
-      navigate('/dashboard');
+      navigate(rotaInicial(role));
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message === 'Invalid login credentials' ? 'E-mail ou senha inválidos.' : err.message);

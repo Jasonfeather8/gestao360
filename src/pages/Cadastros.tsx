@@ -49,7 +49,9 @@ export default function Cadastros() {
   const { data: categorias = [], createCategory, updateCategory, deleteCategory } = useCategorias();
   const { categoriasAjuste = [], createCategoriaAjuste, updateCategoriaAjuste, deleteCategoriaAjuste } = useCategoriasAjuste();
 
-  const [activeSubTab, setActiveSubTab] = useState<SubTabType>('contas');
+  // O Gerente não cadastra bancos: a aba de contas bancárias só existe para o
+  // Master, e ele entra pela primeira aba que pode administrar.
+  const [activeSubTab, setActiveSubTab] = useState<SubTabType>(() => (role === 'master' ? 'contas' : 'centros'));
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -271,12 +273,14 @@ export default function Cadastros() {
         </div>
         <Button
           onClick={() => {
-            if (activeSubTab === 'contas') {
+            if (activeSubTab === 'contas' && isMaster) {
               setEditingAccount(null); setBankName(''); setBankInitial(''); setIsCofreLocal(false); setIsNewAccountOpen(true);
             } else if (activeSubTab === 'centros') {
               setEditingCC(null); setCCName(''); setCCDesc(''); setIsNewCCOpen(true);
-            } else {
+            } else if (activeSubTab === 'categorias') {
               setEditingCat(null); setCatName(''); setIsNewCatOpen(true);
+            } else {
+              setEditingAjuste(null); setAjusteName(''); setIsNewAjusteOpen(true);
             }
           }}
         >
@@ -286,7 +290,9 @@ export default function Cadastros() {
       </div>
 
       <div ref={dragScrollTabs.ref} {...dragScrollTabs.props} className="flex border-b border-neutral-200 overflow-x-auto scrollbar-none whitespace-nowrap">
-        <button onClick={() => { setActiveSubTab('contas'); setCurrentPage(1); setSearchTerm(''); }} className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest border-b-4 transition-all ${activeSubTab === 'contas' ? 'border-primary text-primary' : 'border-transparent text-neutral-400 hover:text-neutral-900'}`}>Contas Bancárias</button>
+        {isMaster && (
+          <button onClick={() => { setActiveSubTab('contas'); setCurrentPage(1); setSearchTerm(''); }} className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest border-b-4 transition-all ${activeSubTab === 'contas' ? 'border-primary text-primary' : 'border-transparent text-neutral-400 hover:text-neutral-900'}`}>Contas Bancárias</button>
+        )}
         <button onClick={() => { setActiveSubTab('centros'); setCurrentPage(1); setSearchTerm(''); }} className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest border-b-4 transition-all ${activeSubTab === 'centros' ? 'border-primary text-primary' : 'border-transparent text-neutral-400 hover:text-neutral-900'}`}>Centros de Custo</button>
         <button onClick={() => { setActiveSubTab('categorias'); setCurrentPage(1); setSearchTerm(''); }} className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest border-b-4 transition-all ${activeSubTab === 'categorias' ? 'border-primary text-primary' : 'border-transparent text-neutral-400 hover:text-neutral-900'}`}>Categorias</button>
         <button onClick={() => { setActiveSubTab('ajustes'); setCurrentPage(1); setSearchTerm(''); }} className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest border-b-4 transition-all ${activeSubTab === 'ajustes' ? 'border-primary text-primary' : 'border-transparent text-neutral-400 hover:text-neutral-900'}`}>Motivos de Ajuste</button>
@@ -306,7 +312,7 @@ export default function Cadastros() {
           </div>
         </div>
 
-        {activeSubTab === 'contas' && (
+        {isMaster && activeSubTab === 'contas' && (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead><tr className="bg-neutral-50 text-neutral-400 border-b border-neutral-100 text-[9px] font-black uppercase tracking-widest"><th className="py-4 px-8">Instituição / Nome</th><th className="py-4 px-8">Data de Abertura</th><th className="py-4 px-8 text-right">Saldo Inicial</th><th className="py-4 px-8 text-center">Status</th><th className="py-4 px-8 text-right">Ações</th></tr></thead>

@@ -58,7 +58,9 @@ export default function Conciliacao() {
     setLancamentoPreset,
     setAvrPreset,
   } = useUIStore();
-  const podeAgirNaConciliacao = hasRole(['master']);
+  // Conciliação Bancária e Transferências são liberadas para Master e Gerente;
+  // aprovação e estorno no Financeiro continuam exclusivos do Master.
+  const podeAgirNaConciliacao = hasRole(['master', 'gerente']);
   const [searchParams] = useSearchParams();
   const abaDaUrl = searchParams.get('aba');
   const [abaAtiva, setAbaAtiva] = useState<'conciliacao' | 'migracao' | 'transferencias'>(() => (

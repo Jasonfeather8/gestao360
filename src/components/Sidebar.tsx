@@ -20,6 +20,7 @@ import {
 import { useUIStore, TabType } from '../store/uiStore';
 import { useAuth } from '../hooks/useAuth';
 import { RECORRENCIAS_HABILITADA } from '../config/features';
+import { perfisDaRota } from '../config/permissions';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -37,17 +38,19 @@ export default function Sidebar({ isOpen, onClose, isCollapsed }: SidebarProps) 
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Os perfis de cada item vêm da matriz em ../config/permissions, a mesma usada
+  // pelas rotas, para o menu e o acesso por URL nunca divergirem.
   const navItems = [
-    { id: 'dashboard' as TabType, label: 'Painel Geral', icon: LayoutDashboard, path: '/dashboard', roles: ['master', 'gerente', 'colaborador'] },
-    { id: 'pagar' as TabType, label: 'Contas a Pagar', icon: ArrowDownLeft, path: '/pagar', roles: ['master', 'gerente', 'colaborador'] },
-    { id: 'receber' as TabType, label: 'Contas a Receber', icon: ArrowUpRight, path: '/receber', roles: ['master', 'gerente', 'colaborador'] },
-    { id: 'lancamentos' as TabType, label: 'Financeiro / Extrato', icon: Coins, path: '/lancamentos', roles: ['master', 'gerente', 'colaborador'] },
-    { id: 'conciliacao' as TabType, label: 'Conciliação Bancária', icon: FileSpreadsheet, path: '/conciliacao', roles: ['master'] },
-    { id: 'cofre-local' as TabType, label: 'Cofre Local', icon: Wallet, path: '/cofre-local', roles: ['master', 'gerente', 'colaborador'] },
-    { id: 'recorrencias' as TabType, label: 'Gestão de Recorrências', icon: Repeat, path: '/recorrencias', roles: ['master', 'gerente'] },
-    { id: 'crm' as TabType, label: 'CRM & Entidades', icon: UserSquare2, path: '/crm', roles: ['master', 'gerente', 'colaborador'] },
-    { id: 'cadastros' as TabType, label: 'Estrutura & Cadastros', icon: ShieldCheck, path: '/cadastros', roles: ['master', 'gerente'] },
-    { id: 'configuracoes' as TabType, label: 'Configurações', icon: Settings, path: '/configuracoes', roles: ['master'] }
+    { id: 'dashboard' as TabType, label: 'Painel Geral', icon: LayoutDashboard, path: '/dashboard' },
+    { id: 'pagar' as TabType, label: 'Contas a Pagar', icon: ArrowDownLeft, path: '/pagar' },
+    { id: 'receber' as TabType, label: 'Contas a Receber', icon: ArrowUpRight, path: '/receber' },
+    { id: 'lancamentos' as TabType, label: 'Financeiro / Extrato', icon: Coins, path: '/lancamentos' },
+    { id: 'conciliacao' as TabType, label: 'Conciliação Bancária', icon: FileSpreadsheet, path: '/conciliacao' },
+    { id: 'cofre-local' as TabType, label: 'Cofre Local', icon: Wallet, path: '/cofre-local' },
+    { id: 'recorrencias' as TabType, label: 'Gestão de Recorrências', icon: Repeat, path: '/recorrencias' },
+    { id: 'crm' as TabType, label: 'CRM & Entidades', icon: UserSquare2, path: '/crm' },
+    { id: 'cadastros' as TabType, label: 'Estrutura & Cadastros', icon: ShieldCheck, path: '/cadastros' },
+    { id: 'configuracoes' as TabType, label: 'Configurações', icon: Settings, path: '/configuracoes' }
   ];
 
   return (
@@ -95,12 +98,13 @@ export default function Sidebar({ isOpen, onClose, isCollapsed }: SidebarProps) 
         {/* Navigation list */}
         <nav className={`flex-1 p-4 space-y-1.5 scrollbar-thin ${isCollapsed ? 'overflow-visible' : 'overflow-y-auto'}`}>
           {/* Controle de exibição da tela de recorrências em ../config/features. */}
-          {navItems.filter((item) => item.roles.includes(role) && (RECORRENCIAS_HABILITADA || item.path !== '/recorrencias')).map((item) => {
+          {navItems.filter((item) => perfisDaRota(item.path).includes(role) && (RECORRENCIAS_HABILITADA || item.path !== '/recorrencias')).map((item) => {
             const isActive = location.pathname.startsWith(item.path);
             const Icon = item.icon;
             return (
               <button
                 key={item.id}
+                data-testid={`nav-${item.id}`}
                 onClick={() => {
                   navigate(item.path);
                   setActiveTab(item.id);

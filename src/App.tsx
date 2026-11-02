@@ -11,6 +11,7 @@ import { useUIStore } from './store/uiStore';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { useNotifications } from './hooks/useData';
 import { RECORRENCIAS_HABILITADA } from './config/features';
+import { perfisDaRota, rotaInicial } from './config/permissions';
 
 // Custom layout components
 import Sidebar from './components/Sidebar';
@@ -153,7 +154,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function MasterRoute({ children }: { children: React.ReactNode }) {
+function RoleRoute({ children, allowed }: { children: React.ReactNode; allowed: string[] }) {
   const { session, role, isLoading } = useAuth();
 
   if (isLoading) {
@@ -168,11 +169,32 @@ function MasterRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (role !== 'master') {
-    return <Navigate to="/dashboard" replace />;
+  // Sem acesso à rota, o usuário volta para a tela inicial do próprio perfil
+  // em vez de ver uma área vazia ou uma tela que não é dele.
+  if (!allowed.includes(role)) {
+    return <Navigate to={rotaInicial(role)} replace />;
   }
 
   return <>{children}</>;
+}
+
+/** Destino padrão do perfil: usado na raiz e em rotas desconhecidas. */
+function HomeRedirect() {
+  const { session, role, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Navigate to={rotaInicial(role)} replace />;
 }
 
 function AppContent() {
@@ -246,27 +268,27 @@ function AppContent() {
                 <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
                   <div className="max-w-7xl mx-auto space-y-6">
                     <Routes>
-                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/" element={<HomeRedirect />} />
+                      <Route path="/dashboard" element={<RoleRoute allowed={perfisDaRota('/dashboard')}><Dashboard /></RoleRoute>} />
                       <Route path="/lancamentos" element={<Lancamentos />} />
                       <Route path="/pagar" element={<Pagar />} />
                       <Route path="/receber" element={<Receber />} />
                       <Route path="/cofre-local" element={<CofreLocal />} />
                       <Route path="/crm" element={<CRM />} />
 
-                      {/* Rota exclusiva do Master */}
-                      <Route path="/conciliacao" element={<MasterRoute><Conciliacao /></MasterRoute>} />
+                      {/* Master e Gerente: conciliação bancária e transferências. */}
+                      <Route path="/conciliacao" element={<RoleRoute allowed={perfisDaRota('/conciliacao')}><Conciliacao /></RoleRoute>} />
                       {/* Destino do deep link de notificação de aprovação do Master. */}
                       <Route path="/aprovacao-master" element={<Navigate to="/lancamentos" replace />} />
-                      <Route path="/recorrencias" element={RECORRENCIAS_HABILITADA ? <Recorrencias /> : <Navigate to="/dashboard" replace />} />
-                      <Route path="/cadastros" element={<Cadastros />} />
+                      <Route path="/recorrencias" element={RECORRENCIAS_HABILITADA ? <Recorrencias /> : <HomeRedirect />} />
+                      <Route path="/cadastros" element={<RoleRoute allowed={perfisDaRota('/cadastros')}><Cadastros /></RoleRoute>} />
 
-                      {/* Rotas exclusivas do Master */}
-                      <Route path="/configuracoes" element={<Configuracoes />} />
+                      {/* Rota exclusiva do Master */}
+                      <Route path="/configuracoes" element={<RoleRoute allowed={perfisDaRota('/configuracoes')}><Configuracoes /></RoleRoute>} />
                       <Route path="/notificacoes" element={<Notificacoes />} />
 
-                      {/* Rota desconhecida cai no painel, evitando área vazia em links antigos. */}
-                      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                      {/* Rota desconhecida cai na tela inicial do perfil, evitando área vazia em links antigos. */}
+                      <Route path="*" element={<HomeRedirect />} />
                     </Routes>
                   </div>
                 </main>
