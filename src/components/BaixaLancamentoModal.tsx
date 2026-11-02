@@ -29,6 +29,7 @@ import { useUIStore } from '../store/uiStore';
 import { useLancamentos, useLancamento, useContas, useEntidades, useCategorias, useCategoriasAjuste, useCentrosCusto, useContasSaldos, useLancamentoAnexos, useAnexarComprovante } from '../hooks/useData';
 
 import { useAuth } from '../hooks/useAuth';
+import { podeUsarBPI, podeVerSaldos } from '../config/permissions';
 import MoneyInput from './MoneyInput';
 import Button from './Button';
 import { calculateAdjustmentAmount } from '../utils/adjustments';
@@ -75,6 +76,8 @@ export default function BaixaLancamentoModal() {
   } = useUIStore();
 
   const { role } = useAuth();
+  const podeVerSaldo = podeVerSaldos(role);
+  const podeBPI = podeUsarBPI(role);
   const { data: lancamentos = [], baixaLancamento, updateLancamento } = useLancamentos();
   const { mutateAsync: anexarComprovante } = useAnexarComprovante();
   const { data: selectedLancamento } = useLancamento(selectedLancamentoIdForModal);
@@ -322,7 +325,7 @@ export default function BaixaLancamentoModal() {
   // Saldo Insuficiente validation (Item 1)
   const selectedContaSaldo = contas.find((c: any) => c.id === contaId)?.saldo_real || 0;
   const isSaida = lancamento?.tipo === 'saida';
-  const saldoInsuficienteBaixa = !isBpi && !isAVR && isSaida && valorDigitado > 0 && valorDigitado > selectedContaSaldo + 0.005;
+  const saldoInsuficienteBaixa = podeVerSaldo && !isBpi && !isAVR && isSaida && valorDigitado > 0 && valorDigitado > selectedContaSaldo + 0.005;
 
   const canSave = (!isObsRequired || isObsFilled) &&
                   (!isAVRReasonRequired || isAVRReasonSelected) &&
@@ -580,7 +583,7 @@ export default function BaixaLancamentoModal() {
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { id: 'financeira', label: 'Quitar', desc: 'Liquidação normal' },
-                    { id: 'bpi', label: 'BPI', desc: 'Baixa por inatividade' }
+                    ...(podeBPI ? [{ id: 'bpi', label: 'BPI', desc: 'Baixa por inatividade' }] : [])
                   ].map((opt, index) => (
                     <button
                       key={`tipo-baixa-${opt.id}-${index}`}
@@ -1098,7 +1101,7 @@ export default function BaixaLancamentoModal() {
                     className="w-full h-12 bg-neutral-50 border-2 border-neutral-100 rounded-2xl px-4 text-xs font-bold outline-none focus:border-primary appearance-none cursor-pointer disabled:opacity-50"
                   >
                     {contas.map((c: any, index: number) => (
-                      <option key={`conta-${c.id || 'item'}-${index}`} value={c.id}>{c.nome_banco} (Saldo: R$ {formatBRL(c.saldo_real)})</option>
+                      <option key={`conta-${c.id || 'item'}-${index}`} value={c.id}>{podeVerSaldo ? `${c.nome_banco} (Saldo: R$ ${formatBRL(c.saldo_real)})` : c.nome_banco || c.nome}</option>
                     ))}
                   </select>
                 </div>

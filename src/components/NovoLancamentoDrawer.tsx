@@ -591,7 +591,7 @@ export default function NovoLancamentoDrawer() {
   const saldoRecebimento = Math.max(0, calculations.subtotal);
   const valorRecebido = parseMoney(lancamentoFormDraft.valor_recebido);
   const valorOperacaoSaida = isSaidaImediata && valorRecebido > 0 ? valorRecebido : 0;
-  const saldoInsuficiente = isSaidaImediata && selectedConta
+  const saldoInsuficiente = role !== 'colaborador' && isSaidaImediata && selectedConta
     ? valorOperacaoSaida > (selectedConta as any).saldo_real + 0.005
     : false;
   const recebimentoAcimaSaldo = lancamentoFormDraft.ja_recebido && valorRecebido > saldoRecebimento + 0.005;
@@ -1427,7 +1427,7 @@ export default function NovoLancamentoDrawer() {
                             </div>
                             <div className="flex flex-col min-w-0">
                               <span className="text-[10px] font-black uppercase text-neutral-900 truncate">{cnt.nome_banco || cnt.nome}</span>
-                              <span className="text-[8px] font-bold text-neutral-400 uppercase tracking-widest">Saldo Real: R$ {formatBRL((cnt as any).saldo_real)}</span>
+                              {role !== 'colaborador' && <span className="text-[8px] font-bold text-neutral-400 uppercase tracking-widest">Saldo Real: R$ {formatBRL((cnt as any).saldo_real)}</span>}
                             </div>
                             {lancamentoFormDraft.conta_bancaria_id === cnt.id && (
                               <CheckCircle2 className="w-4 h-4 text-primary ml-auto" />

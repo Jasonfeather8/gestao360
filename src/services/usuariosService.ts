@@ -17,7 +17,8 @@ export const usuariosService = {
       email: p.email || '',
       perfil: p.role as any, // Conversão de role -> perfil
       status: p.status ?? true,
-      created_at: p.updated_at // Usando updated_at como fallback de created_at se necessário
+      created_at: p.updated_at, // Usando updated_at como fallback de created_at se necessário
+      contasLiberadas: p.contas_liberadas ?? []
     })) as UserProfile[];
   },
 

@@ -12,6 +12,7 @@ interface AccountFilterCardsProps {
   dragScrollProps: any;
   dragScrollRef: any;
   valueFormatter: (val: number) => string;
+  showBalances?: boolean;
 }
 
 export default function AccountFilterCards({
@@ -20,7 +21,8 @@ export default function AccountFilterCards({
   onSelect,
   dragScrollProps,
   dragScrollRef,
-  valueFormatter
+  valueFormatter,
+  showBalances = true
 }: AccountFilterCardsProps) {
   const { role } = useAuth();
   const isMaster = role === 'master';
@@ -77,25 +79,27 @@ export default function AccountFilterCards({
                 {isSelected && <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />}
               </div>
 
-              <div className="space-y-1 mt-auto">
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-black text-secondary uppercase tracking-tighter flex items-center gap-1">
-                    <Clock className="w-3 h-3" /> Operacional
-                  </span>
-                  <p className="text-[11px] font-black font-mono text-neutral-900">
-                    {valueFormatter(acc.operacionalBalance || 0)}
-                  </p>
-                </div>
+              {showBalances && (
+                <div className="space-y-1 mt-auto" data-testid="account-card-saldo">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black text-secondary uppercase tracking-tighter flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> Operacional
+                    </span>
+                    <p className="text-[11px] font-black font-mono text-neutral-900">
+                      {valueFormatter(acc.operacionalBalance || 0)}
+                    </p>
+                  </div>
 
-                <div className="flex items-center justify-between pt-1 border-t border-neutral-100">
-                  <span className={`text-[9px] font-black uppercase tracking-tighter flex items-center gap-1 ${isMaster ? 'text-bank-truth-green' : 'text-neutral-400'}`}>
-                    <ShieldCheck className="w-3 h-3" /> {isMaster ? 'Confirmado' : 'Real (Master)'}
-                  </span>
-                  <p className={`text-[11px] font-black font-mono ${isMaster ? 'text-bank-truth-green' : 'text-neutral-400'}`}>
-                    {valueFormatter(acc.auditadoBalance || 0)}
-                  </p>
+                  <div className="flex items-center justify-between pt-1 border-t border-neutral-100">
+                    <span className={`text-[9px] font-black uppercase tracking-tighter flex items-center gap-1 ${isMaster ? 'text-bank-truth-green' : 'text-neutral-400'}`}>
+                      <ShieldCheck className="w-3 h-3" /> {isMaster ? 'Confirmado' : 'Real (Master)'}
+                    </span>
+                    <p className={`text-[11px] font-black font-mono ${isMaster ? 'text-bank-truth-green' : 'text-neutral-400'}`}>
+                      {valueFormatter(acc.auditadoBalance || 0)}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           );
         })}

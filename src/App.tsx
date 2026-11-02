@@ -270,17 +270,17 @@ function AppContent() {
                     <Routes>
                       <Route path="/" element={<HomeRedirect />} />
                       <Route path="/dashboard" element={<RoleRoute allowed={perfisDaRota('/dashboard')}><Dashboard /></RoleRoute>} />
-                      <Route path="/lancamentos" element={<Lancamentos />} />
+                      <Route path="/lancamentos" element={<RoleRoute allowed={perfisDaRota('/lancamentos')}><Lancamentos /></RoleRoute>} />
                       <Route path="/pagar" element={<Pagar />} />
                       <Route path="/receber" element={<Receber />} />
-                      <Route path="/cofre-local" element={<CofreLocal />} />
-                      <Route path="/crm" element={<CRM />} />
+                      <Route path="/cofre-local" element={<RoleRoute allowed={perfisDaRota('/cofre-local')}><CofreLocal /></RoleRoute>} />
+                      <Route path="/crm" element={<RoleRoute allowed={perfisDaRota('/crm')}><CRM /></RoleRoute>} />
 
                       {/* Master e Gerente: conciliação bancária e transferências. */}
                       <Route path="/conciliacao" element={<RoleRoute allowed={perfisDaRota('/conciliacao')}><Conciliacao /></RoleRoute>} />
                       {/* Destino do deep link de notificação de aprovação do Master. */}
                       <Route path="/aprovacao-master" element={<Navigate to="/lancamentos" replace />} />
-                      <Route path="/recorrencias" element={RECORRENCIAS_HABILITADA ? <Recorrencias /> : <HomeRedirect />} />
+                      <Route path="/recorrencias" element={RECORRENCIAS_HABILITADA ? <RoleRoute allowed={perfisDaRota('/recorrencias')}><Recorrencias /></RoleRoute> : <HomeRedirect />} />
                       <Route path="/cadastros" element={<RoleRoute allowed={perfisDaRota('/cadastros')}><Cadastros /></RoleRoute>} />
 
                       {/* Rota exclusiva do Master */}

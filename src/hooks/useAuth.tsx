@@ -10,6 +10,7 @@ interface AuthContextType {
   session: Session | null;
   user: User | null;
   role: Role;
+  contasLiberadas: string[] | null;
   isLoading: boolean;
   signOut: () => Promise<void>;
   hasRole: (allowedRoles: Role[]) => boolean;
@@ -21,6 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<Role>('colaborador');
+  const [contasLiberadas, setContasLiberadas] = useState<string[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const queryClient = useQueryClient();
@@ -29,6 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const extractRole = async (currentUser: User | null, currentSession: Session | null) => {
     if (!currentUser) {
       setRole('colaborador');
+      setContasLiberadas(null);
       return;
     }
 
@@ -42,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .select('role')
         .eq('id', currentUser.id)
         .single();
-      
+
       if (data?.role) {
         userRole = data.role as Role;
         // Optionally refresh session to update JWT
@@ -50,7 +53,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    setRole(userRole || 'colaborador');
+    const resolvedRole = userRole || 'colaborador';
+    setRole(resolvedRole);
+    if (resolvedRole === 'colaborador') {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('contas_liberadas')
+        .eq('id', currentUser.id)
+        .single();
+      setContasLiberadas(error ? [] : data?.contas_liberadas ?? []);
+    } else {
+      setContasLiberadas(null);
+    }
     useUIStore.getState().setCurrentUserId(currentUser.id);
   };
 
@@ -66,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
       await extractRole(session?.user ?? null, session);
       setIsLoading(false);
-      
+
       if (event === 'SIGNED_OUT') {
         performDeepCleanup();
       }
@@ -78,14 +92,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const performDeepCleanup = () => {
     // 1. Clear React Query Cache (removes all fetched data from memory)
     queryClient.clear();
-    
+
     // 2. Reset Zustand UI Store to defaults
     useUIStore.getState().resetAllDrafts();
-    
+
     // 3. Reset Context
     setSession(null);
     setUser(null);
     setRole('colaborador');
+    setContasLiberadas(null);
   };
 
   const signOut = async () => {
@@ -99,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasRole = (allowedRoles: Role[]) => allowedRoles.includes(role);
 
   return (
-    <AuthContext.Provider value={{ session, user, role, isLoading, signOut, hasRole }}>
+    <AuthContext.Provider value={{ session, user, role, contasLiberadas, isLoading, signOut, hasRole }}>
       {children}
     </AuthContext.Provider>
   );

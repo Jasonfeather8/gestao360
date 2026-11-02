@@ -12,6 +12,8 @@ import {
 import { LancamentoFinanceiro } from '../../types';
 import { useLancamentoAnexos } from '../../hooks/useData';
 import PortalDropdown from '../PortalDropdown';
+import { useAuth } from '../../hooks/useAuth';
+import { podeUsarAVR } from '../../config/permissions';
 
 interface LancamentoActionMenuProps {
   item: LancamentoFinanceiro;
@@ -39,6 +41,7 @@ export default function LancamentoActionMenu({
   onVerTransferencia
 }: LancamentoActionMenuProps) {
   const { anexos = [] } = useLancamentoAnexos(item.id);
+  const { role } = useAuth();
   const hasAnexo = anexos.length > 0;
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -50,7 +53,7 @@ export default function LancamentoActionMenu({
       || item.status_pagamento === 'pago_parcial'
       || item.status_pagamento === 'quitação_pendente'
       || item.status_pagamento === 'bpi');
-  const mostrarAVR = !isTransferencia && isOperationalView && item.status_pagamento !== 'pago';
+  const mostrarAVR = !isTransferencia && isOperationalView && item.status_pagamento !== 'pago' && podeUsarAVR(role);
   const mostrarExcluir = isMaster && !isTransferencia;
   const temAcoesDeCadastro = mostrarAVR || mostrarExcluir;
 

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { DashboardIndicadores, DashboardPerformance, DashboardStats, ImportacaoDados } from '../types';
@@ -20,6 +20,7 @@ import { diagnosticLogger } from '../services/diagnosticLogger';
 import { persistirExtrato } from '../services/extrato/persistencia';
 import { conciliacaoService } from '../services/conciliacaoService';
 import { cofreLocalService } from '../services/cofreLocalService';
+import { filtrarContasDoPerfil } from '../config/permissions';
 
 export function useCofreLocalConta() {
   return useQuery({
@@ -186,24 +187,27 @@ export function useCategoriasAjuste() {
 }
 
 export function useContasSaldos() {
+  const { role } = useAuth();
   return useQuery({
     queryKey: ['contasSaldos'],
     queryFn: async () => {
       const { data, error } = await supabase.rpc('get_contas_saldos_reais');
       if (error) throw error;
       return data as Array<{ conta_id: string; saldo_confirmado: number; saldo_operacional: number }>;
-    }
+    },
+    enabled: role !== 'colaborador'
   });
 }
 
 export function useContas() {
   const queryClient = useQueryClient();
+  const { role, contasLiberadas } = useAuth();
   const query = useQuery({ queryKey: ['contas'], queryFn: contasService.getAll });
   const createMutation = useMutation({ mutationFn: (item: any) => contasService.create(item), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contas'] }) });
   const updateMutation = useMutation({ mutationFn: ({ id, data }: { id: string, data: any }) => contasService.update(id, data), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contas'] }) });
   const deleteMutation = useMutation({ mutationFn: (id: string) => contasService.delete(id), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contas'] }) });
 
-  return { ...query, createAccount: createMutation.mutateAsync, updateAccount: updateMutation.mutateAsync, deleteAccount: deleteMutation.mutateAsync, isCreating: createMutation.isPending };
+  return { ...query, data: filtrarContasDoPerfil(query.data ?? [], role, contasLiberadas), createAccount: createMutation.mutateAsync, updateAccount: updateMutation.mutateAsync, deleteAccount: deleteMutation.mutateAsync, isCreating: createMutation.isPending };
 }
 
 export function useTransferencias() {

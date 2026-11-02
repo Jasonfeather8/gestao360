@@ -7,6 +7,7 @@ export interface UserProfile {
   perfil: UserPerfil;
   status: boolean;
   created_at: string;
+  contasLiberadas?: string[];
 }
 
 export type EntidadeTipo = 'cliente' | 'fornecedor' | 'ambos';
