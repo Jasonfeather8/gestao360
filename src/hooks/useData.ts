@@ -201,18 +201,18 @@ export function useContasSaldos() {
 
 export function useContas() {
   const queryClient = useQueryClient();
-  const { role, contasLiberadas } = useAuth();
+  const { role, contasLiberadas, contasBloqueadas } = useAuth();
   const query = useQuery({ queryKey: ['contas'], queryFn: contasService.getAll });
   const createMutation = useMutation({ mutationFn: (item: any) => contasService.create(item), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contas'] }) });
   const updateMutation = useMutation({ mutationFn: ({ id, data }: { id: string, data: any }) => contasService.update(id, data), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contas'] }) });
   const deleteMutation = useMutation({ mutationFn: (id: string) => contasService.delete(id), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contas'] }) });
 
-  // O Colaborador só enxerga as contas liberadas pelo Master. A lista é memoizada
-  // para manter a identidade estável entre renders: vários consumidores usam
-  // `contas` em dependências de efeito e de useMemo.
+  // Gerente e Colaborador só enxergam as contas permitidas para eles. A lista é
+  // memoizada para manter a identidade estável entre renders: vários consumidores
+  // usam `contas` em dependências de efeito e de useMemo.
   const contasVisiveis = useMemo(
-    () => filtrarContasDoPerfil(query.data ?? [], role, contasLiberadas),
-    [query.data, role, contasLiberadas]
+    () => filtrarContasDoPerfil(query.data ?? [], role, contasLiberadas, contasBloqueadas),
+    [query.data, role, contasLiberadas, contasBloqueadas]
   );
 
   return { ...query, data: contasVisiveis, createAccount: createMutation.mutateAsync, updateAccount: updateMutation.mutateAsync, deleteAccount: deleteMutation.mutateAsync, isCreating: createMutation.isPending };

@@ -51,7 +51,7 @@ export async function createContaBancaria(admin: SupabaseClient, nome: string): 
 
 export async function createLancamentoAberto(
   admin: SupabaseClient,
-  { contaId, userId }: { contaId: string; userId: string },
+  { contaId, userId, valor = 123.45 }: { contaId: string; userId: string; valor?: number },
 ): Promise<string> {
   const today = new Date().toISOString().slice(0, 10);
   const { data, error } = await admin
@@ -60,8 +60,8 @@ export async function createLancamentoAberto(
       user_id: userId,
       usuario_criador_id: userId,
       tipo: "saida",
-      valor_previsto: 123.45,
-      valor_original: 123.45,
+      valor_previsto: valor,
+      valor_original: valor,
       data_vencimento: today,
       data_emissao: today,
       data_competencia: today,

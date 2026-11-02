@@ -31,12 +31,14 @@ import {
   Search
 } from 'lucide-react';
 
-import { useContas, useCentrosCusto, useCategorias, useCategoriasAjuste } from '../hooks/useData';
+import { useContas, useCentrosCusto, useCategorias, useCategoriasAjuste, useUsuarios } from '../hooks/useData';
 import { useAuth } from '../hooks/useAuth';
 import { useDragScroll } from '../hooks/useDragScroll';
 import MoneyInput from '../components/MoneyInput';
 import Button from '../components/Button';
 import { supabase } from '@/integrations/supabase/client';
+import { acessoPadraoDoPerfil, usuarioTemAcessoAConta } from '../config/permissions';
+import type { UserProfile } from '../types';
 
 type SubTabType = 'contas' | 'centros' | 'categorias' | 'ajustes';
 
@@ -44,6 +46,15 @@ export default function Cadastros() {
   const { role, hasRole } = useAuth();
   const dragScrollTabs = useDragScroll();
   const { data: contas = [], createAccount, updateAccount, deleteAccount } = useContas();
+  const { data: usuarios = [], updateUser } = useUsuarios();
+
+  // Gerentes e colaboradores são os únicos perfis que podem ser limitados por
+  // conta bancária; o Master nunca aparece nesta gestão.
+  const usuariosGerenciados = useMemo(
+    () => usuarios.filter(u => u.perfil === 'gerente' || u.perfil === 'colaborador'),
+    [usuarios]
+  );
+  const [acessosConta, setAcessosConta] = useState<Record<string, boolean>>({});
 
   const { data: centrosCusto = [], createCC, updateCC, deleteCC } = useCentrosCusto();
   const { data: categorias = [], createCategory, updateCategory, deleteCategory } = useCategorias();
@@ -93,13 +104,57 @@ export default function Cadastros() {
 
   const valueFormatter = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+  // ID da conta em edição; vazio ao criar uma conta nova, onde ainda não existe
+  // estado salvo e o switch parte do padrão do perfil.
+  const contaEmEdicaoId = editingAccount?.id ?? '';
+
+  const estadoEfetivo = (usuario: UserProfile, contaId: string) =>
+    usuarioTemAcessoAConta(usuario.perfil, contaId, usuario.contasLiberadas ?? null, usuario.contasBloqueadas ?? null);
+
+  // O que o Master acabou de alternar tem prioridade; sem alteração, o switch
+  // reflete o que já está salvo para a conta em edição — ou o padrão do perfil,
+  // quando a conta ainda está sendo criada.
+  const acessoDe = (usuario: UserProfile) => acessosConta[usuario.id]
+    ?? (editingAccount ? estadoEfetivo(usuario, contaEmEdicaoId) : acessoPadraoDoPerfil(usuario.perfil));
+
+  const openNewAccount = () => {
+    setEditingAccount(null);
+    setBankName('');
+    setBankInitial('');
+    setBankLogoUrl('');
+    setIsCofreLocal(false);
+    setAcessosConta({});
+    setIsNewAccountOpen(true);
+  };
+
   const openEditAccount = (c: any) => {
     setEditingAccount(c);
     setBankName(c.nome_banco || c.nome);
     setBankInitial(c.saldo_inicial.toFixed(2).replace('.', ','));
     setBankLogoUrl(c.logo_url || '');
     setIsCofreLocal(!!c.is_cofre_local);
+    setAcessosConta({});
     setIsNewAccountOpen(true);
+  };
+
+  // Grava só quem mudou de estado. O Colaborador é governado pela lista de contas
+  // liberadas (falha fechada) e o Gerente pela lista de contas bloqueadas (falha
+  // aberta), então cada perfil mantém o seu padrão.
+  const salvarAcessosDaConta = async (contaId: string) => {
+    const alterados = usuariosGerenciados.filter(usuario => estadoEfetivo(usuario, contaId) !== acessoDe(usuario));
+    await Promise.all(alterados.map(usuario => {
+      const permitido = acessoDe(usuario);
+      if (usuario.perfil === 'colaborador') {
+        const liberadas = permitido
+          ? Array.from(new Set([...(usuario.contasLiberadas ?? []), contaId]))
+          : (usuario.contasLiberadas ?? []).filter(id => id !== contaId);
+        return updateUser({ id: usuario.id, data: { contas_liberadas: liberadas } });
+      }
+      const bloqueadas = permitido
+        ? (usuario.contasBloqueadas ?? []).filter(id => id !== contaId)
+        : Array.from(new Set([...(usuario.contasBloqueadas ?? []), contaId]));
+      return updateUser({ id: usuario.id, data: { contas_bloqueadas: bloqueadas } });
+    }));
   };
 
   const openEditCC = (cc: any) => {
@@ -139,8 +194,9 @@ export default function Cadastros() {
             is_cofre_local: isCofreLocal
           }
         });
+        await salvarAcessosDaConta(editingAccount.id);
       } else {
-        await createAccount({
+        const novaConta: any = await createAccount({
           nome_banco: bankName,
           nome: bankName,
           agencia: '0001',
@@ -150,7 +206,9 @@ export default function Cadastros() {
           logo_url: bankLogoUrl,
           is_cofre_local: isCofreLocal
         });
+        if (novaConta?.id) await salvarAcessosDaConta(novaConta.id);
       }
+      setAcessosConta({});
       setIsNewAccountOpen(false);
       setEditingAccount(null);
       setBankName('');
@@ -274,7 +332,7 @@ export default function Cadastros() {
         <Button
           onClick={() => {
             if (activeSubTab === 'contas' && isMaster) {
-              setEditingAccount(null); setBankName(''); setBankInitial(''); setIsCofreLocal(false); setIsNewAccountOpen(true);
+              openNewAccount();
             } else if (activeSubTab === 'centros') {
               setEditingCC(null); setCCName(''); setCCDesc(''); setIsNewCCOpen(true);
             } else if (activeSubTab === 'categorias') {
@@ -340,7 +398,7 @@ export default function Cadastros() {
                     <td className="py-4 px-8 text-center"><span className="rounded-lg bg-emerald-50 text-bank-truth-green px-3 py-1.5 uppercase font-black text-[9px] tracking-widest">Operacional</span></td>
                     <td className="py-4 px-8 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => openEditAccount(c)} className="p-2 hover:bg-neutral-100 text-neutral-400 hover:text-neutral-900 rounded-xl transition-all"><Edit2 className="w-4 h-4" /></button>
+                        <button onClick={() => openEditAccount(c)} data-testid={`editar-conta-${c.id}`} className="p-2 hover:bg-neutral-100 text-neutral-400 hover:text-neutral-900 rounded-xl transition-all"><Edit2 className="w-4 h-4" /></button>
                         {hasRole(['master']) && (
                           <button onClick={() => setDeleteConfirm({ id: c.id, type: 'conta', name: c.nome_banco || c.nome })} className="p-2 hover:bg-red-50 text-neutral-300 hover:text-alert-red rounded-xl transition-all"><Trash2 className="w-4 h-4" /></button>
                         )}
@@ -478,9 +536,9 @@ export default function Cadastros() {
         {isNewAccountOpen && (
           <div key="cadastro-conta" className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsNewAccountOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-xs" />
-            <motion.form initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} onSubmit={handleAccountSubmit} className="bg-white w-full max-w-[440px] rounded-3xl shadow-2xl border-2 border-neutral-100 flex flex-col relative z-20 overflow-hidden">
+            <motion.form initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} onSubmit={handleAccountSubmit} className="bg-white w-full max-w-[560px] rounded-3xl shadow-2xl border-2 border-neutral-100 flex flex-col relative z-20 overflow-hidden">
               <header className="px-8 py-6 border-b border-neutral-50 flex justify-between items-center bg-neutral-50/50"><h2 className="text-sm font-black uppercase tracking-widest text-neutral-900">{editingAccount ? 'Editar Conta Bancária' : 'Nova Conta Bancária'}</h2><button type="button" onClick={() => setIsNewAccountOpen(false)} className="p-2 hover:bg-neutral-200 rounded-xl transition-colors"><X className="w-6 h-6" /></button></header>
-              <div className="p-10 space-y-6">
+              <div className="p-10 space-y-6 overflow-y-auto max-h-[65vh]">
                 <div className="flex flex-col items-center gap-4 mb-2">
                   <div className="relative group">
                     <div className="w-24 h-24 rounded-full bg-neutral-100 border-2 border-dashed border-neutral-300 flex items-center justify-center overflow-hidden transition-all group-hover:border-primary">
@@ -563,6 +621,67 @@ export default function Cadastros() {
                   </div>
                   <p className="text-[10px] font-medium text-neutral-500">Conta usada para movimentar dinheiro em espécie.</p>
                 </div>
+
+                {isMaster && (
+                  <div className="space-y-3 pt-2 border-t border-neutral-100" data-testid="acessos-conta">
+                    <div className="flex items-center justify-between pt-4">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Quem pode usar esta conta</span>
+                      <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">
+                        {usuariosGerenciados.filter(acessoDe).length} de {usuariosGerenciados.length}
+                      </span>
+                    </div>
+                    <div className="rounded-2xl border-2 border-neutral-100 overflow-hidden">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-neutral-50 text-neutral-400 text-[9px] font-black uppercase tracking-widest">
+                            <th className="py-3 px-4">Usuário</th>
+                            <th className="py-3 px-4 text-center">Conta</th>
+                            <th className="py-3 px-4 text-right">Acesso</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-[11px] font-bold">
+                          {usuariosGerenciados.length === 0 ? (
+                            <tr><td colSpan={3} className="py-6 px-4 text-center text-neutral-400 uppercase tracking-widest text-[9px]">Nenhum gerente ou colaborador cadastrado</td></tr>
+                          ) : usuariosGerenciados.map((usuario) => (
+                            <tr key={usuario.id} className="border-t border-neutral-100">
+                              <td className="py-3 px-4">
+                                <p className="text-neutral-900 font-black uppercase tracking-tighter">{usuario.nome || usuario.email}</p>
+                                <p className="text-[9px] text-neutral-400 uppercase tracking-widest">{usuario.perfil}</p>
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="flex items-center justify-center">
+                                  {bankLogoUrl ? (
+                                    <img src={bankLogoUrl} alt="Logo da conta" className="w-8 h-8 rounded-full object-cover border border-neutral-100" />
+                                  ) : (
+                                    <span className="w-8 h-8 rounded-full bg-neutral-100 text-neutral-400 flex items-center justify-center text-[10px] font-black uppercase">
+                                      {(bankName || '?').substring(0, 2)}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <button
+                                  type="button"
+                                  role="switch"
+                                  aria-checked={acessoDe(usuario)}
+                                  aria-label={`Acesso de ${usuario.nome || usuario.email}`}
+                                  data-testid={`acesso-conta-${usuario.id}`}
+                                  onClick={() => setAcessosConta(prev => ({ ...prev, [usuario.id]: !acessoDe(usuario) }))}
+                                  className={`w-12 h-6 rounded-full p-1 transition-all ${acessoDe(usuario) ? 'bg-bank-truth-green' : 'bg-neutral-200'}`}
+                                >
+                                  <div className={`w-4 h-4 bg-white rounded-full transition-all ${acessoDe(usuario) ? 'ml-6' : 'ml-0'}`} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-[10px] font-medium text-neutral-500">
+                      Gerentes e colaboradores desativados não veem esta conta nos filtros e seletores de conta, nem os lançamentos dela.
+                    </p>
+                  </div>
+                )}
 
               </div>
 

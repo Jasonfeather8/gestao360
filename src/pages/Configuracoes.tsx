@@ -33,9 +33,9 @@ import {
   AlertTriangle,
   Loader2
 } from 'lucide-react';
-import { useUsuarios, useAuditoriaLogs, useContas } from '../hooks/useData';
+import { useUsuarios, useAuditoriaLogs } from '../hooks/useData';
 import { useUIStore } from '../store/uiStore';
-import { UserPerfil, UserProfile, AuditoriaLog } from '../types';
+import { UserPerfil, AuditoriaLog } from '../types';
 import { useDragScroll } from '../hooks/useDragScroll';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -43,8 +43,6 @@ export default function Configuracoes() {
   const dragScrollTabs = useDragScroll();
   const { data: usuarios = [], inviteUser, updateUser, isInviting } = useUsuarios();
   const { data: auditLogs = [], isLoading: loadingAudit } = useAuditoriaLogs();
-  const { data: contas = [] } = useContas();
-  const contasAtivas = useMemo(() => contas.filter((conta: any) => conta.status !== 'excluido'), [contas]);
 
   const { 
     activeConfigSubTab, 
@@ -58,8 +56,6 @@ export default function Configuracoes() {
 
   const [teamSearch, setTeamSearch] = useState('');
   const [teamPage, setTeamPage] = useState(1);
-  const [usuarioBancosEditando, setUsuarioBancosEditando] = useState<UserProfile | null>(null);
-  const [bancosSelecionados, setBancosSelecionados] = useState<string[]>([]);
 
   const [newUserNome, setNewUserNome] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -224,22 +220,6 @@ export default function Configuracoes() {
     }
   };
 
-  const openBancosLiberados = (usuario: UserProfile) => {
-    setUsuarioBancosEditando(usuario);
-    setBancosSelecionados(usuario.contasLiberadas ?? []);
-  };
-
-  const salvarBancosLiberados = async () => {
-    if (!usuarioBancosEditando) return;
-    try {
-      await updateUser({ id: usuarioBancosEditando.id, data: { contas_liberadas: bancosSelecionados } });
-      setUsuarioBancosEditando(null);
-      showToast('Bancos liberados atualizados!', 'success');
-    } catch {
-      showToast('Erro ao atualizar bancos liberados.', 'error');
-    }
-  };
-
   const executeLegacyCSVImport = () => {
     if (!selectedCSVFile) return;
     setIsImportingProgress(true);
@@ -308,15 +288,14 @@ export default function Configuracoes() {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
-                <thead><tr className="bg-neutral-50 text-neutral-400 border-b border-neutral-100 text-[9px] font-black uppercase tracking-widest"><th className="py-4 px-8">Usuário</th><th className="py-4 px-8">Nível</th><th className="py-4 px-8 text-center">Status</th><th className="py-4 px-8">Bancos liberados</th><th className="py-4 px-8 text-right">Cargo</th></tr></thead>
+                <thead><tr className="bg-neutral-50 text-neutral-400 border-b border-neutral-100 text-[9px] font-black uppercase tracking-widest"><th className="py-4 px-8">Usuário</th><th className="py-4 px-8">Nível</th><th className="py-4 px-8 text-center">Status</th><th className="py-4 px-8 text-right">Cargo</th></tr></thead>
                 <tbody className="text-[11px] font-bold">
-                  {usuarios.length === 0 ? <tr><td colSpan={5} className="py-20 text-center opacity-40 uppercase tracking-widest">Nenhum usuário</td></tr> :
+                  {usuarios.length === 0 ? <tr><td colSpan={4} className="py-20 text-center opacity-40 uppercase tracking-widest">Nenhum usuário</td></tr> :
                   usuarios.map((u) => (
                     <tr key={u.id} className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-all">
                       <td className="py-4 px-8"><div className="flex items-center gap-4"><div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-black uppercase shadow-sm">{(u.nome || u.email || 'U').substring(0, 2)}</div><div><p className="text-neutral-900 font-black uppercase tracking-tighter">{u.nome || 'Pendente'}</p><p className="text-[10px] text-neutral-400 lowercase">{u.email}</p></div></div></td>
                       <td className="py-4 px-8"><span className="rounded-lg bg-neutral-100 text-neutral-600 px-3 py-1.5 uppercase font-black text-[9px] tracking-widest">{u.perfil || 'colaborador'}</span></td>
                       <td className="py-4 px-8 text-center"><button onClick={() => handleToggleUserActive(u.id, u.status)} className={`w-12 h-6 rounded-full p-1 transition-all ${u.status ? 'bg-bank-truth-green' : 'bg-neutral-200'}`}><div className={`w-4 h-4 bg-white rounded-full transition-all ${u.status ? 'ml-6' : 'ml-0'}`} /></button></td>
-                      <td className="py-4 px-8">{u.perfil === 'colaborador' ? <button type="button" data-testid={`liberar-bancos-${u.id}`} onClick={() => openBancosLiberados(u)} className="text-primary hover:underline">{(u.contasLiberadas ?? []).length} de {contasAtivas.length} bancos</button> : <span>Acesso total</span>}</td>
                       <td className="py-4 px-8 text-right"><select value={u.perfil || 'colaborador'} onChange={(e) => handleRoleChange(u.id, e.target.value as any)} className="bg-white border-2 border-neutral-100 rounded-lg text-[10px] font-black uppercase px-3 py-2 focus:border-primary outline-none cursor-pointer"><option value="colaborador">Analista</option><option value="gerente">Gestor</option><option value="master">Master</option></select></td>
                     </tr>
                   ))}
@@ -330,31 +309,6 @@ export default function Configuracoes() {
 
       {/* Modals with AnimatePresence */}
       <AnimatePresence>
-        {usuarioBancosEditando && (
-          <div key="config-bancos-liberados" className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <button type="button" aria-label="Fechar" onClick={() => setUsuarioBancosEditando(null)} className="absolute inset-0 bg-black/60" />
-            <div data-testid="modal-bancos-liberados" className="relative z-10 bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl space-y-6">
-              <h2 className="text-lg font-black uppercase">Bancos liberados</h2>
-              <div className="max-h-96 overflow-y-auto space-y-3">
-                {contasAtivas.map((conta: any) => (
-                  <label key={conta.id} className="flex items-center gap-3 p-3 rounded-xl border border-neutral-100">
-                    <input
-                      type="checkbox"
-                      data-testid={`banco-${conta.id}`}
-                      checked={bancosSelecionados.includes(conta.id)}
-                      onChange={(event) => setBancosSelecionados(current => event.target.checked ? [...current, conta.id] : current.filter(id => id !== conta.id))}
-                    />
-                    <span>{conta.nome_banco || conta.nome}</span>
-                  </label>
-                ))}
-              </div>
-              <div className="flex justify-end gap-3">
-                <button type="button" onClick={() => setUsuarioBancosEditando(null)} className="px-5 py-3">Cancelar</button>
-                <button type="button" onClick={salvarBancosLiberados} className="px-6 py-3 rounded-xl bg-neutral-900 text-white">Salvar</button>
-              </div>
-            </div>
-          </div>
-        )}
         {isNovoUsuarioOpen && (
           <div key="config-novo-usuario" className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setModalOpen('isNovoUsuarioOpen', false)} className="absolute inset-0 bg-black/60 backdrop-blur-xs" />

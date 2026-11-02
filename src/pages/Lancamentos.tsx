@@ -46,7 +46,7 @@ import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import AccountFilterCards from '../components/Lancamentos/AccountFilterCards';
 import LancamentoActionMenu from '../components/Lancamentos/LancamentoActionMenu';
 import FinanceiroStatusFilter from '../components/Lancamentos/FinanceiroStatusFilter';
-import { filtrarContasDoPerfil, idsContasDoPerfil, podeVerSaldos } from '../config/permissions';
+import { idsContasDoPerfil, podeVerSaldos } from '../config/permissions';
 
 type LancamentoExibido = LancamentoFinanceiro & { transferenciaEspelhoIds?: string[] };
 
@@ -67,7 +67,7 @@ export default function Lancamentos({
   initialTypeFilter,
   initialStatusPagamento
 }: LancamentosProps) {
-  const { role, contasLiberadas } = useAuth();
+  const { role, contasLiberadas, contasBloqueadas } = useAuth();
   const {
     setModalOpen,
     setSelectedLancamentoIdForModal,
@@ -205,6 +205,15 @@ export default function Lancamentos({
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [selectedLogItem, setSelectedLogItem] = useState<LancamentoFinanceiro | null>(null);
 
+  // `useContas` já entrega apenas as contas permitidas ao perfil. Vem antes da
+  // consulta porque os IDs delimitam quais lançamentos o perfil pode ver.
+  const { data: rawContas = [] } = useContas();
+  const activeContas = useMemo(() => rawContas.filter((c: any) => c.status !== 'excluido'), [rawContas]);
+  const idsContasPermitidas = useMemo(
+    () => idsContasDoPerfil(role, contasLiberadas, contasBloqueadas, rawContas.map((c: any) => c.id)),
+    [contasBloqueadas, contasLiberadas, rawContas, role]
+  );
+
   const {
     data: allLancamentos = [],
     totalCount = 0,
@@ -227,7 +236,7 @@ export default function Lancamentos({
     operationalView: isOperationalView,
     authorId: authorIdFilter,
     categoryId: categoryIdFilter,
-    contaId: contaIdFilter.length > 0 ? contaIdFilter : idsContasDoPerfil(role, contasLiberadas),
+    contaId: contaIdFilter.length > 0 ? contaIdFilter : idsContasPermitidas,
     centroCustoId: centroCustoIdFilter,
     condicao: condicaoFilter,
     temDesconto: temDescontoFilter,
@@ -302,12 +311,8 @@ export default function Lancamentos({
   const { data: entidades = [] } = useEntidades();
   const { data: categorias = [] } = useCategorias();
   const { data: usuarios = [] } = useUsuarios();
-  const { data: rawContas = [] } = useContas();
   const { data: centrosCusto = [] } = useCentrosCusto();
   const { categoriasAjuste = [] } = useCategoriasAjuste();
-
-  const activeContas = useMemo(() => rawContas.filter((c: any) => c.status !== 'excluido'), [rawContas]);
-  const contasVisiveis = useMemo(() => filtrarContasDoPerfil(activeContas, role, contasLiberadas), [activeContas, role, contasLiberadas]);
 
   useEffect(() => {
     const lancamentoId = searchParams.get('id');
@@ -366,12 +371,12 @@ export default function Lancamentos({
   );
 
   const resolvedFinanceiroContaIds = useMemo(() => {
-    const baseContaIds = contaIdFilter.length > 0 ? contaIdFilter : idsContasDoPerfil(role, contasLiberadas);
+    const baseContaIds = contaIdFilter.length > 0 ? contaIdFilter : idsContasPermitidas;
     if (selectedAccountIds.length === 0) return baseContaIds;
     if (baseContaIds.length === 0) return selectedAccountIds;
     const matchingAccountIds = selectedAccountIds.filter(id => baseContaIds.includes(id));
     return matchingAccountIds.length > 0 ? matchingAccountIds : ['00000000-0000-0000-0000-000000000000'];
-  }, [contaIdFilter, contasLiberadas, role, selectedAccountIds]);
+  }, [contaIdFilter, idsContasPermitidas, selectedAccountIds]);
 
   const financeiroStatusFilters = useMemo(() => ({
     searchTerm: debouncedSearchTerm,
@@ -540,7 +545,7 @@ export default function Lancamentos({
   const { data: contasSaldos = [] } = useContasSaldos();
 
   const accountCardsData = useMemo(() => {
-    return contasVisiveis.map(acc => {
+    return activeContas.map(acc => {
       const saldoObj = contasSaldos.find(s => s.conta_id === acc.id);
       return {
         ...acc,
@@ -548,7 +553,7 @@ export default function Lancamentos({
         operacionalBalance: saldoObj ? Number(saldoObj.saldo_operacional) : (acc.saldo_inicial || 0)
       };
     });
-  }, [contasVisiveis, contasSaldos]);
+  }, [activeContas, contasSaldos]);
 
   const selectedPrintLancamentos = displayedLancamentos.filter(item => selectedLancamentoIdsForBatch.includes(item.id));
   const selectedOperationalLancamentos = isOperationalView ? selectedPrintLancamentos : [];
@@ -729,7 +734,7 @@ export default function Lancamentos({
   };
 
   const renderBancoCell = (item: LancamentoFinanceiro) => {
-    const conta = contasVisiveis.find(account => account.id === item.conta_bancaria_id);
+    const conta = activeContas.find(account => account.id === item.conta_bancaria_id);
     const isTransferenciaEspelho = Boolean(item.transferencia_id)
       && (item.transferencia_lado === 'origem' || item.transferencia_lado === 'destino');
     const transferencia = item.transferencia_id ? transferenciasById.get(item.transferencia_id) : undefined;
@@ -930,7 +935,7 @@ export default function Lancamentos({
                 value={contaIdFilter}
                 onChange={setContaIdFilter}
                 allLabel="Todas as Contas"
-                options={contasVisiveis.map(c => ({ id: c.id, label: c.nome_banco || c.nome }))}
+                options={activeContas.map(c => ({ id: c.id, label: c.nome_banco || c.nome }))}
               />
             </div>
 
@@ -1147,8 +1152,8 @@ export default function Lancamentos({
                 <tr><td colSpan={isOperationalView ? 15 : 12} className="py-24 text-center"><div className="flex flex-col items-center gap-3 opacity-40"><Clock className="w-10 h-10 animate-spin text-primary" /><p className="font-black uppercase text-[10px] tracking-widest">Sincronizando registros...</p></div></td></tr>
               ) : isError ? (
                 <tr><td colSpan={isOperationalView ? 15 : 12} className="py-24 text-center"><div className="flex flex-col items-center gap-3 text-alert-red"><AlertTriangle className="w-10 h-10" /><p className="font-black uppercase text-[10px] tracking-widest">Erro ao carregar dados. Tente simplificar a busca.</p></div></td></tr>
-              ) : isColaborador && contasVisiveis.length === 0 ? (
-                <tr><td colSpan={isOperationalView ? 15 : 12} className="py-12 text-center"><div data-testid="sem-bancos-liberados" className="font-bold text-sm text-secondary">Nenhum banco liberado para o seu usuário. Solicite ao Master a liberação das contas.</div></td></tr>
+              ) : role !== 'master' && activeContas.length === 0 ? (
+                <tr><td colSpan={isOperationalView ? 15 : 12} className="py-12 text-center"><div data-testid="sem-bancos-liberados" className="font-bold text-sm text-secondary">Nenhuma conta bancária liberada para o seu usuário. Solicite ao Master a liberação.</div></td></tr>
               ) : displayedLancamentos.length === 0 ? (
                 <tr><td colSpan={isOperationalView ? 15 : 12} className="py-24 text-center"><div className="flex flex-col items-center gap-3 opacity-20"><Receipt className="w-12 h-12" /><p className="font-black uppercase text-[10px] tracking-widest">Nenhum lançamento localizado</p></div></td></tr>
               ) : (

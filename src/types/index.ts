@@ -8,6 +8,7 @@ export interface UserProfile {
   status: boolean;
   created_at: string;
   contasLiberadas?: string[];
+  contasBloqueadas?: string[];
 }
 
 export type EntidadeTipo = 'cliente' | 'fornecedor' | 'ambos';

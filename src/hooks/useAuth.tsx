@@ -11,6 +11,7 @@ interface AuthContextType {
   user: User | null;
   role: Role;
   contasLiberadas: string[] | null;
+  contasBloqueadas: string[] | null;
   isLoading: boolean;
   signOut: () => Promise<void>;
   hasRole: (allowedRoles: Role[]) => boolean;
@@ -23,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<Role>('colaborador');
   const [contasLiberadas, setContasLiberadas] = useState<string[] | null>(null);
+  const [contasBloqueadas, setContasBloqueadas] = useState<string[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const queryClient = useQueryClient();
@@ -32,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!currentUser) {
       setRole('colaborador');
       setContasLiberadas(null);
+      setContasBloqueadas(null);
       return;
     }
 
@@ -55,15 +58,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const resolvedRole = userRole || 'colaborador';
     setRole(resolvedRole);
-    if (resolvedRole === 'colaborador') {
+    // O Master nunca é limitado por conta bancária: só Gerente e Colaborador
+    // carregam as listas de contas liberadas/bloqueadas (lidas antes de liberar
+    // a tela, para não haver "flash" de contas que o perfil não pode acessar).
+    if (resolvedRole === 'master') {
+      setContasLiberadas(null);
+      setContasBloqueadas(null);
+    } else {
       const { data, error } = await supabase
         .from('profiles')
-        .select('contas_liberadas')
+        .select('contas_liberadas, contas_bloqueadas')
         .eq('id', currentUser.id)
         .single();
       setContasLiberadas(error ? [] : data?.contas_liberadas ?? []);
-    } else {
-      setContasLiberadas(null);
+      setContasBloqueadas(error ? [] : data?.contas_bloqueadas ?? []);
     }
     useUIStore.getState().setCurrentUserId(currentUser.id);
   };
@@ -101,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setRole('colaborador');
     setContasLiberadas(null);
+    setContasBloqueadas(null);
   };
 
   const signOut = async () => {
@@ -114,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasRole = (allowedRoles: Role[]) => allowedRoles.includes(role);
 
   return (
-    <AuthContext.Provider value={{ session, user, role, contasLiberadas, isLoading, signOut, hasRole }}>
+    <AuthContext.Provider value={{ session, user, role, contasLiberadas, contasBloqueadas, isLoading, signOut, hasRole }}>
       {children}
     </AuthContext.Provider>
   );

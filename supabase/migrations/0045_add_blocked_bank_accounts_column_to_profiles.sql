@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS contas_bloqueadas uuid[] DEFAULT '{}'::uuid[];

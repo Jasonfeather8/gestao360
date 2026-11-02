@@ -30,23 +30,58 @@ export function rotaInicial(perfil: UserPerfil): string {
   return '/pagar';
 }
 
-/** Contas bancárias que o perfil pode ver. Master e Gerente veem todas; o
- * Colaborador vê apenas as liberadas pelo Master (falha fechada sem liberação). */
+/**
+ * Contas bancárias que o perfil pode acessar. O Master nunca é limitado.
+ * O Gerente começa com todas as contas e o Colaborador apenas com as liberadas
+ * pelo Master (falha fechada); em ambos, as contas bloqueadas ficam de fora.
+ */
 export function filtrarContasDoPerfil<T extends { id: string }>(
   contas: T[],
   perfil: UserPerfil,
   contasLiberadas: string[] | null,
+  contasBloqueadas: string[] | null,
 ): T[] {
-  if (perfil !== 'colaborador') return contas;
-  if (!contasLiberadas?.length) return [];
-  return contas.filter(conta => contasLiberadas.includes(conta.id));
+  if (perfil === 'master') return contas;
+  const permitidas = perfil === 'colaborador'
+    ? contas.filter(conta => (contasLiberadas ?? []).includes(conta.id))
+    : contas;
+  if (!contasBloqueadas?.length) return permitidas;
+  return permitidas.filter(conta => !contasBloqueadas.includes(conta.id));
 }
 
-/** IDs de conta usados para filtrar consultas. Lista vazia = sem filtro (Master/Gerente);
- * o Colaborador sem bancos liberados não vê título nenhum. */
-export function idsContasDoPerfil(perfil: UserPerfil, contasLiberadas: string[] | null): string[] {
-  if (perfil !== 'colaborador') return [];
-  return contasLiberadas?.length ? contasLiberadas : [SEM_CONTA_LIBERADA];
+/** Estado de acesso efetivo de um usuário para uma conta bancária. */
+export function usuarioTemAcessoAConta(
+  perfil: UserPerfil,
+  contaId: string,
+  contasLiberadas: string[] | null,
+  contasBloqueadas: string[] | null,
+): boolean {
+  if (perfil === 'master') return true;
+  if ((contasBloqueadas ?? []).includes(contaId)) return false;
+  if (perfil === 'colaborador') return (contasLiberadas ?? []).includes(contaId);
+  return true;
+}
+
+/** Estado inicial do switch para uma conta nova: o Gerente já entra com acesso
+ * e o Colaborador só depois que o Master liberar. */
+export const acessoPadraoDoPerfil = (perfil: UserPerfil) => perfil !== 'colaborador';
+
+/**
+ * IDs de conta usados para filtrar a consulta de lançamentos. Lista vazia = sem
+ * filtro. O Master nunca é filtrado; o Colaborador é sempre filtrado (falha
+ * fechada) e o Gerente só quando tem alguma conta bloqueada — assim a consulta
+ * dele segue idêntica enquanto nenhum banco for desativado.
+ */
+export function idsContasDoPerfil(
+  perfil: UserPerfil,
+  contasLiberadas: string[] | null,
+  contasBloqueadas: string[] | null,
+  idsPermitidas: string[],
+): string[] {
+  if (perfil === 'master') return [];
+  if (perfil !== 'colaborador' && !(contasBloqueadas ?? []).length) return [];
+  if (perfil === 'colaborador' && !(contasLiberadas ?? []).length) return [SEM_CONTA_LIBERADA];
+  return idsPermitidas.length ? idsPermitidas : [SEM_CONTA_LIBERADA];
 }
 
 export const podeVerSaldos = (perfil: UserPerfil) => perfil !== 'colaborador';
