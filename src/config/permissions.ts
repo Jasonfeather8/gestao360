@@ -16,7 +16,6 @@ export const ROTAS_POR_PERFIL: Record<string, UserPerfil[]> = {
   '/crm': ['master', 'gerente'],
   '/cadastros': ['master', 'gerente'],
   '/configuracoes': ['master'],
-  '/teste-emails': ['master'],
 };
 
 export const SEM_CONTA_LIBERADA = '00000000-0000-0000-0000-000000000000';

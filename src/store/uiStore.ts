@@ -13,8 +13,7 @@ export type TabType =
   | 'crm'
   | 'cadastros'
   | 'configuracoes'
-  | 'notificacoes'
-  | 'teste-emails';
+  | 'notificacoes';
 
 interface UIState {
   // Theme and routing
