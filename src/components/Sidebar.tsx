@@ -14,7 +14,8 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Receipt,
-  Wallet
+  Wallet,
+  Mail
 } from 'lucide-react';
 
 import { useUIStore, TabType } from '../store/uiStore';
@@ -50,7 +51,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed }: SidebarProps) 
     { id: 'recorrencias' as TabType, label: 'Gestão de Recorrências', icon: Repeat, path: '/recorrencias' },
     { id: 'crm' as TabType, label: 'CRM & Entidades', icon: UserSquare2, path: '/crm' },
     { id: 'cadastros' as TabType, label: 'Estrutura & Cadastros', icon: ShieldCheck, path: '/cadastros' },
-    { id: 'configuracoes' as TabType, label: 'Configurações', icon: Settings, path: '/configuracoes' }
+    { id: 'configuracoes' as TabType, label: 'Configurações', icon: Settings, path: '/configuracoes' },
+    { id: 'teste-emails' as TabType, label: 'Teste de emails', icon: Mail, path: '/teste-emails' }
   ];
 
   return (

@@ -36,6 +36,7 @@ import CRM from './pages/CRM';
 import Cadastros from './pages/Cadastros';
 import Configuracoes from './pages/Configuracoes';
 import Notificacoes from './pages/Notificacoes';
+import TesteEmails from './pages/TesteEmails';
 import Pagar from './pages/Pagar';
 import Receber from './pages/Receber';
 import CofreLocal from './pages/CofreLocal';
@@ -283,8 +284,9 @@ function AppContent() {
                       <Route path="/recorrencias" element={RECORRENCIAS_HABILITADA ? <RoleRoute allowed={perfisDaRota('/recorrencias')}><Recorrencias /></RoleRoute> : <HomeRedirect />} />
                       <Route path="/cadastros" element={<RoleRoute allowed={perfisDaRota('/cadastros')}><Cadastros /></RoleRoute>} />
 
-                      {/* Rota exclusiva do Master */}
+                      {/* Rotas exclusivas do Master */}
                       <Route path="/configuracoes" element={<RoleRoute allowed={perfisDaRota('/configuracoes')}><Configuracoes /></RoleRoute>} />
+                      <Route path="/teste-emails" element={<RoleRoute allowed={perfisDaRota('/teste-emails')}><TesteEmails /></RoleRoute>} />
                       <Route path="/notificacoes" element={<Notificacoes />} />
 
                       {/* Rota desconhecida cai na tela inicial do perfil, evitando área vazia em links antigos. */}
