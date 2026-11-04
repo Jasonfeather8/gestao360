@@ -78,12 +78,16 @@ export default function ComprovanteDrawer() {
           >
             <div className="px-6 py-5 border-b border-surface-border flex items-center justify-between bg-white shrink-0 print:border-none">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-neutral-900 rounded-xl flex items-center justify-center text-white font-black text-lg">
-                  G
+                <div className="w-10 h-10 bg-neutral-900 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
+                  <img
+                    src="/brand/mesquita-icon.jpg"
+                    alt="Mesquita Soluções Empresariais"
+                    className="w-6 h-6 object-contain invert mix-blend-screen"
+                  />
                 </div>
                 <div>
                   <h2 className="text-sm font-black uppercase text-on-surface tracking-wider">Comprovante de Lançamento</h2>
-                  <p className="text-[10px] font-bold text-secondary uppercase tracking-widest mt-0.5">Gestão 360 • ERP Financeiro</p>
+                  <p className="text-[10px] font-bold text-secondary uppercase tracking-widest mt-0.5">Mesquita Soluções Empresariais • ERP Financeiro</p>
                 </div>
               </div>
               <button

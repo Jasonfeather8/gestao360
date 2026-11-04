@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { rotaInicial } from '@/config/permissions';
-import { Shield, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export default function Login() {
   const { session, role, isLoading: authLoading } = useAuth();
@@ -54,15 +54,11 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4 sm:p-6 lg:p-8">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
-            <Shield className="w-8 h-8 text-primary" />
-          </div>
-          <h2 className="text-3xl font-black tracking-tight text-on-background">
-            Gestão 360
-          </h2>
-          <p className="mt-2 text-sm text-secondary font-medium uppercase tracking-wider">
-            Verdade Bancária Integrada
-          </p>
+          <img
+            src="/brand/mesquita-logo-vertical.jpg"
+            alt="Mesquita Soluções Empresariais"
+            className="h-28 w-auto mx-auto mix-blend-multiply"
+          />
         </div>
 
         <div className="bg-surface p-8 rounded-2xl border border-surface-border shadow-xl">
@@ -135,7 +131,7 @@ export default function Login() {
 
         <div className="text-center">
           <p className="text-xs text-secondary font-medium">
-            © {new Date().getFullYear()} Gestão 360 - Todos os direitos reservados.
+            © {new Date().getFullYear()} Mesquita Soluções Empresariais - Todos os direitos reservados.
           </p>
         </div>
       </div>

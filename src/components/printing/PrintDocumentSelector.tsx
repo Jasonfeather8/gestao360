@@ -28,8 +28,11 @@ function Header({ type }: { type: PrintDocumentType }) {
   return (
     <header className="new-print-header">
       <div>
-        <strong>Gestão 360</strong>
-        <span>ERP Financeiro</span>
+        <img
+          src="/brand/mesquita-logo-horizontal.jpg"
+          alt="Mesquita Soluções Empresariais"
+          className="h-8 w-auto max-w-full invert mix-blend-multiply"
+        />
       </div>
       <div className="new-print-title">
         <strong>{typeLabel(type)}</strong>

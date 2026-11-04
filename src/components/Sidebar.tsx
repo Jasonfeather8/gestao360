@@ -74,13 +74,15 @@ export default function Sidebar({ isOpen, onClose, isCollapsed }: SidebarProps) 
         {/* Product branding */}
         <div className={`p-6 border-b border-surface-border flex items-center transition-all ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-on-primary font-black text-lg shadow-sm font-sans tracking-tighter shrink-0">
-              G
-            </div>
+            <img
+              src="/brand/mesquita-icon.jpg"
+              alt="Mesquita Soluções Empresariais"
+              className="w-8 h-8 object-contain mix-blend-multiply shrink-0"
+            />
             {!isCollapsed && (
               <div className="animate-fade-in whitespace-nowrap overflow-hidden">
-                <span className="font-extrabold text-sm tracking-tight text-on-background block">Gestão 360</span>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-primary block">CFO ERP Headquarters</span>
+                <span className="font-extrabold text-sm tracking-tight text-on-background block">MESQUITA</span>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-primary block">Soluções Empresariais</span>
               </div>
             )}
           </div>

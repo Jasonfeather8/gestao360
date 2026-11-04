@@ -227,8 +227,13 @@ export default function LancamentoDetailsSlide() {
           <div className="max-w-2xl mx-auto border-2 border-black p-8 rounded-xl space-y-6">
             <div className="flex justify-between items-start border-b-2 border-black pb-4">
               <div>
+                <img
+                  src="/brand/mesquita-logo-horizontal.jpg"
+                  alt="Mesquita Soluções Empresariais"
+                  className="h-7 w-auto invert mix-blend-multiply mb-2"
+                />
                 <h1 className="text-xl font-black uppercase tracking-wider">Comprovante de Lançamento</h1>
-                <p className="text-xs uppercase font-bold text-gray-600">Gestão 360 - CFO ERP Headquarters</p>
+                <p className="text-xs uppercase font-bold text-gray-600">Mesquita Soluções Empresariais - CFO ERP Headquarters</p>
               </div>
               <div className="text-right">
                 <span className="text-xs font-mono font-bold block">ID: #{lancamento.id.slice(0, 8)}</span>
