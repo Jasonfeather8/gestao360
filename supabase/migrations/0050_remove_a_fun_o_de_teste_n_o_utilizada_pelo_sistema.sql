@@ -1,0 +1,1 @@
+drop function if exists public.limpar_lancamentos_teste();
