@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { rotaInicial } from '@/config/permissions';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
@@ -8,6 +8,8 @@ import { Eye, EyeOff, Loader2 } from 'lucide-react';
 export default function Login() {
   const { session, role, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const mensagem = (location.state as { mensagem?: string } | null)?.mensagem;
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -63,6 +65,11 @@ export default function Login() {
 
         <div className="bg-surface p-8 rounded-2xl border border-surface-border shadow-xl">
           <form onSubmit={handleLogin} className="space-y-6">
+            {mensagem && (
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 text-sm font-medium">
+                {mensagem}
+              </div>
+            )}
             {error && (
               <div className="p-3 rounded-lg bg-alert-red/10 border border-alert-red/20 text-alert-red text-sm font-medium">
                 {error}
@@ -126,6 +133,15 @@ export default function Login() {
                 'Entrar'
               )}
             </button>
+            <div className="text-center -mt-3">
+              <Link
+                to="/esqueci-senha"
+                data-testid="esqueci-senha-link"
+                className="text-sm font-semibold text-primary hover:underline"
+              >
+                Esqueci minha senha
+              </Link>
+            </div>
           </form>
         </div>
 

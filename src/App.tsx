@@ -28,6 +28,8 @@ import NewLaunchButton from './components/NewLaunchButton';
 // Custom pages
 
 import Login from './pages/Login';
+import EsqueciSenha from './pages/EsqueciSenha';
+import RedefinirSenha from './pages/RedefinirSenha';
 import Dashboard from './pages/Dashboard';
 import Lancamentos from './pages/Lancamentos';
 import Conciliacao from './pages/Conciliacao';
@@ -206,6 +208,8 @@ function AppContent() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/esqueci-senha" element={<EsqueciSenha />} />
+      <Route path="/redefinir-senha" element={<RedefinirSenha />} />
       <Route
         path="*"
         element={
