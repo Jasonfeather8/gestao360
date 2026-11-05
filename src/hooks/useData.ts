@@ -199,6 +199,23 @@ export function useContasSaldos() {
   });
 }
 
+export function useSaldosLancamentos(lancamentoIds: string[]) {
+  const { role } = useAuth();
+  const { dataUpdatedAt } = useContasSaldos();
+  const ids = useMemo(() => Array.from(new Set(lancamentoIds)).sort(), [lancamentoIds]);
+  return useQuery({
+    queryKey: ['saldosLancamentos', ids, dataUpdatedAt],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_saldos_operacionais_lancamentos', { p_lancamento_ids: ids });
+      if (error) throw error;
+      // O PostgREST devolve `numeric` como texto: converter para número na origem.
+      return (data as Array<{ lancamento_id: string; saldo_apos: number | string }>)
+        .map(linha => ({ lancamento_id: linha.lancamento_id, saldo_apos: Number(linha.saldo_apos) }));
+    },
+    enabled: role !== 'colaborador' && ids.length > 0,
+  });
+}
+
 export function useContas() {
   const queryClient = useQueryClient();
   const { role, contasLiberadas, contasBloqueadas } = useAuth();

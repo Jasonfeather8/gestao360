@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.get_saldos_operacionais_lancamentos(uuid[]) TO authenticated;

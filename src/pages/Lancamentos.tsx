@@ -34,7 +34,7 @@ import {
   Link2
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useLancamentos, useContas, useEntidades, useCategorias, useUsuarios, useCentrosCusto, useCategoriasAjuste, useContasSaldos, useTransferencias } from '../hooks/useData';
+import { useLancamentos, useContas, useEntidades, useCategorias, useUsuarios, useCentrosCusto, useCategoriasAjuste, useContasSaldos, useSaldosLancamentos, useTransferencias } from '../hooks/useData';
 import { useAuth } from '../hooks/useAuth';
 import { useUIStore } from '../store/uiStore';
 import { useDragScroll } from '../hooks/useDragScroll';
@@ -546,6 +546,12 @@ export default function Lancamentos({
   };
 
   const { data: contasSaldos = [] } = useContasSaldos();
+  const saldosLancamentosIds = useMemo(() => displayedLancamentos.map(item => item.id), [displayedLancamentos]);
+  const { data: saldosLancamentos = [] } = useSaldosLancamentos(saldosLancamentosIds);
+  const saldosLancamentosPorId = useMemo(
+    () => new Map(saldosLancamentos.map(saldo => [saldo.lancamento_id, saldo.saldo_apos])),
+    [saldosLancamentos]
+  );
 
   const accountCardsData = useMemo(() => {
     return activeContas.map(acc => {
@@ -602,7 +608,7 @@ export default function Lancamentos({
     { valorPrevisto: 0, desconto: 0, acrescimo: 0, valorPago: 0, liquido: 0, aPagar: 0, entradas: 0, saidas: 0 }
   );
 
-  const mirrorColumnCount = isOperationalView ? 15 : 12;
+  const mirrorColumnCount = isOperationalView ? 15 : 13;
   const hasMeasuredMirrorColumns = columnWidths.length === mirrorColumnCount;
   const mirrorGridWidth = hasMeasuredMirrorColumns
     ? `${columnWidths.reduce((total, width) => total + width, 0)}px`
@@ -1140,6 +1146,7 @@ export default function Lancamentos({
                     <th className="py-5 px-4">Entidade</th>
                     <th className="py-5 px-4">Vencimento</th>
                     <th className="py-5 px-4">Pagamento</th>
+                    {isFinanceiroView && <th className="py-5 px-4 text-right">Total dia</th>}
                     <th className="py-5 px-4 text-right">Valor</th>
                     <th className="py-5 px-4 text-center">Aprovação</th>
                     <th className="py-5 px-4 text-center">Conciliação</th>
@@ -1152,13 +1159,13 @@ export default function Lancamentos({
             </thead>
             <tbody className="text-[11px] font-bold">
               {isLoading ? (
-                <tr><td colSpan={isOperationalView ? 15 : 12} className="py-24 text-center"><div className="flex flex-col items-center gap-3 opacity-40"><Clock className="w-10 h-10 animate-spin text-primary" /><p className="font-black uppercase text-[10px] tracking-widest">Sincronizando registros...</p></div></td></tr>
+                <tr><td colSpan={isOperationalView ? 15 : 13} className="py-24 text-center"><div className="flex flex-col items-center gap-3 opacity-40"><Clock className="w-10 h-10 animate-spin text-primary" /><p className="font-black uppercase text-[10px] tracking-widest">Sincronizando registros...</p></div></td></tr>
               ) : isError ? (
-                <tr><td colSpan={isOperationalView ? 15 : 12} className="py-24 text-center"><div className="flex flex-col items-center gap-3 text-alert-red"><AlertTriangle className="w-10 h-10" /><p className="font-black uppercase text-[10px] tracking-widest">Erro ao carregar dados. Tente simplificar a busca.</p></div></td></tr>
+                <tr><td colSpan={isOperationalView ? 15 : 13} className="py-24 text-center"><div className="flex flex-col items-center gap-3 text-alert-red"><AlertTriangle className="w-10 h-10" /><p className="font-black uppercase text-[10px] tracking-widest">Erro ao carregar dados. Tente simplificar a busca.</p></div></td></tr>
               ) : role !== 'master' && activeContas.length === 0 ? (
-                <tr><td colSpan={isOperationalView ? 15 : 12} className="py-12 text-center"><div data-testid="sem-bancos-liberados" className="font-bold text-sm text-secondary">Nenhuma conta bancária liberada para o seu usuário. Solicite ao Master a liberação.</div></td></tr>
+                <tr><td colSpan={isOperationalView ? 15 : 13} className="py-12 text-center"><div data-testid="sem-bancos-liberados" className="font-bold text-sm text-secondary">Nenhuma conta bancária liberada para o seu usuário. Solicite ao Master a liberação.</div></td></tr>
               ) : displayedLancamentos.length === 0 ? (
-                <tr><td colSpan={isOperationalView ? 15 : 12} className="py-24 text-center"><div className="flex flex-col items-center gap-3 opacity-20"><Receipt className="w-12 h-12" /><p className="font-black uppercase text-[10px] tracking-widest">Nenhum lançamento localizado</p></div></td></tr>
+                <tr><td colSpan={isOperationalView ? 15 : 13} className="py-24 text-center"><div className="flex flex-col items-center gap-3 opacity-20"><Receipt className="w-12 h-12" /><p className="font-black uppercase text-[10px] tracking-widest">Nenhum lançamento localizado</p></div></td></tr>
               ) : (
                 <>
                   {displayedLancamentos.map((item, idx) => {
@@ -1167,6 +1174,7 @@ export default function Lancamentos({
                     && (item.transferencia_lado === 'origem' || item.transferencia_lado === 'destino');
                   const podeAprovarPeloSelo = isFinanceiroView && isMaster && item.status_aprovacao !== 'confirmado_master';
                   const days = getDaysOverdue(item.data_vencimento);
+                  const saldoLancamento = saldosLancamentosPorId.get(item.id);
 
                   return (
                     <tr
@@ -1320,6 +1328,13 @@ export default function Lancamentos({
                             )}
                           </td>
 
+                          {isFinanceiroView && (
+                            <td className="py-3 px-4 text-right font-black font-mono text-xs text-neutral-900">
+                              {podeVerSaldos(role) && item.conta_bancaria_id && saldoLancamento != null
+                                ? valueFormatter(saldoLancamento)
+                                : '—'}
+                            </td>
+                          )}
                           <td className={`py-3 px-4 text-right font-black font-mono text-xs ${item.tipo === 'entrada' ? 'text-bank-truth-green' : 'text-neutral-950'}`}>
                             <span className="flex flex-col items-end">
                               {valueFormatter(getValorLiquido(item))}
@@ -1457,6 +1472,7 @@ export default function Lancamentos({
                 <>
                   <div className="py-3 px-4" />
                   <div className="py-3 px-4 font-black uppercase tracking-widest text-neutral-900">TOTAL</div>
+                  <div className="py-3 px-4" />
                   <div className="py-3 px-4" />
                   <div className="py-3 px-4" />
                   <div className="py-3 px-4" />
