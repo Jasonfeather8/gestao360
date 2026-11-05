@@ -415,6 +415,9 @@ export default function NovoLancamentoDrawer() {
     return categorias.filter(c => c.tipo === lancamentoFormDraft.tipo);
   }, [categorias, lancamentoFormDraft.tipo]);
 
+  // Regra do seletor de Entidade / Destinatário: Receita/Entrada aceita apenas
+  // Cliente, Despesa/Saída aceita apenas Fornecedor, e quem é do tipo "Ambos"
+  // atende às duas direções. A direção manda no filtro.
   const entidadesCompativeis = useMemo(() => {
     const tipoPermitido = lancamentoFormDraft.tipo === 'saida' ? 'fornecedor' : 'cliente';
     return entidades.filter(e =>
@@ -1097,7 +1100,7 @@ export default function NovoLancamentoDrawer() {
                   <div className={shouldLockEntity ? 'opacity-50 pointer-events-none' : ''}>
                     <SearchableSelect
                       label="Entidade / Destinatário"
-                      placeholder="Selecione um cliente / fornecedor"
+                      placeholder={lancamentoFormDraft.tipo === 'saida' ? 'Selecione um fornecedor' : 'Selecione um cliente'}
                       value={lancamentoFormDraft.entidade_id}
                       onChange={(val) => setLancamentoFormDraft({ entidade_id: val })}
                       options={entidadesCompativeis.map(e => ({
@@ -1113,6 +1116,11 @@ export default function NovoLancamentoDrawer() {
                       }}
                     />
                   </div>
+                  {!shouldLockEntity && entidades.length > 0 && entidadesCompativeis.length === 0 && (
+                    <p className="text-[10px] font-black uppercase tracking-widest text-pending-amber">
+                      Nenhum {lancamentoFormDraft.tipo === 'saida' ? 'fornecedor' : 'cliente'} cadastrado. Use o Cadastro Rápido para incluir.
+                    </p>
+                  )}
                 </div>
 
                 <div className={`grid gap-4 ${isAVREdit ? 'grid-cols-1' : 'grid-cols-2'}`}>
