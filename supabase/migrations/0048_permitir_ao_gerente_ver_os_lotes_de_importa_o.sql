@@ -1,0 +1,1 @@
+ALTER POLICY importacoes_dados_select ON public.importacoes_dados USING (((user_id = auth.uid()) OR (current_user_role() IN ('master', 'gerente'))))

@@ -1,0 +1,1 @@
+ALTER POLICY importacoes_dados_itens_select ON public.importacoes_dados_itens USING ((EXISTS (SELECT 1 FROM public.importacoes_dados d WHERE d.id = importacoes_dados_itens.lote_id AND ((d.user_id = auth.uid()) OR (current_user_role() IN ('master', 'gerente'))))))

@@ -16,6 +16,13 @@ const campos: { campo: MigracaoCampo; rotulo: string }[] = [
   { campo: 'ref', rotulo: 'Ref.' }, { campo: 'anotacoes', rotulo: 'Anotações' }, { campo: 'recebido', rotulo: 'Recebido' },
 ];
 const classeCampo = 'rounded-lg border border-surface-border bg-white px-2 py-1.5 text-xs text-on-surface outline-none transition focus-visible:ring-2 focus-visible:ring-primary dark:bg-surface';
+/** O PostgrestError do Supabase nem sempre é um Error, então o `instanceof Error`
+ * trocava a mensagem real devolvida pelo banco por um texto genérico. */
+const mensagemDoErro = (cause: unknown, reserva: string): string => {
+  if (cause instanceof Error && cause.message) return cause.message;
+  const mensagem = (cause as { message?: unknown } | null)?.message;
+  return typeof mensagem === 'string' && mensagem.trim() ? mensagem : reserva;
+};
 type CampoManual = keyof MigracaoEscolhasManuais;
 type CadastroRapido = { linhaId: string; campo: 'cliente' | 'categoria' | 'centroCusto'; nome: string; tipo: 'entrada' | 'saida' | null; erro: string; carregando: boolean };
 
@@ -218,7 +225,7 @@ export default function MigracaoDados() {
       }
       setCadastroRapido(null);
     } catch (cause) {
-      setCadastroRapido({ ...formulario, carregando: false, erro: cause instanceof Error ? cause.message : 'Não foi possível cadastrar.' });
+      setCadastroRapido({ ...formulario, carregando: false, erro: mensagemDoErro(cause, 'Não foi possível cadastrar.') });
     }
   };
 
@@ -234,7 +241,7 @@ export default function MigracaoDados() {
         await queryClient.invalidateQueries({ queryKey: [key] });
       }
     } catch (cause) {
-      setErro(cause instanceof Error ? cause.message : 'Não foi possível importar as linhas selecionadas.');
+      setErro(mensagemDoErro(cause, 'Não foi possível importar as linhas selecionadas.'));
     } finally {
       setImportando(false);
     }
@@ -243,7 +250,7 @@ export default function MigracaoDados() {
   const undo = async (id: string) => {
     if (!window.confirm('Deseja desfazer este lote? Os lançamentos importados serão removidos.')) return;
     try { await desfazer.mutateAsync(id); }
-    catch (cause) { setErro(cause instanceof Error ? cause.message : 'Não foi possível desfazer o lote.'); }
+    catch (cause) { setErro(mensagemDoErro(cause, 'Não foi possível desfazer o lote.')); }
   };
 
   const opcoesCampo = (campo: 'cliente' | 'conta' | 'categoria' | 'centroCusto') => campo === 'cliente' ? cadastros.clientes : campo === 'conta' ? cadastros.contas : campo === 'categoria' ? cadastros.categorias : cadastros.centrosCusto;
