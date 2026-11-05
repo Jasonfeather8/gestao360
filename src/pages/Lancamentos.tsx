@@ -34,7 +34,7 @@ import {
   Link2
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useLancamentos, useContas, useEntidades, useCategorias, useUsuarios, useCentrosCusto, useCategoriasAjuste, useContasSaldos, useSaldosLancamentos, useTransferencias } from '../hooks/useData';
+import { useLancamentos, useContas, useEntidades, useCategorias, useUsuarios, useCentrosCusto, useCategoriasAjuste, useContasSaldos, useSaldosLancamentos, useLancamentoAnexosByIds, useTransferencias } from '../hooks/useData';
 import { useAuth } from '../hooks/useAuth';
 import { useUIStore } from '../store/uiStore';
 import { useDragScroll } from '../hooks/useDragScroll';
@@ -46,6 +46,7 @@ import MultiSelectDropdown from '../components/MultiSelectDropdown';
 import AccountFilterCards from '../components/Lancamentos/AccountFilterCards';
 import LancamentoActionMenu from '../components/Lancamentos/LancamentoActionMenu';
 import FinanceiroStatusFilter from '../components/Lancamentos/FinanceiroStatusFilter';
+import ReciboModal from '../components/Lancamentos/ReciboModal';
 import { idsContasDoPerfil, podeVerSaldos } from '../config/permissions';
 
 type LancamentoExibido = LancamentoFinanceiro & { transferenciaEspelhoIds?: string[] };
@@ -546,8 +547,18 @@ export default function Lancamentos({
   };
 
   const { data: contasSaldos = [] } = useContasSaldos();
-  const saldosLancamentosIds = useMemo(() => displayedLancamentos.map(item => item.id), [displayedLancamentos]);
-  const { data: saldosLancamentos = [] } = useSaldosLancamentos(saldosLancamentosIds);
+  const idsExibidos = useMemo(() => displayedLancamentos.map(item => item.id), [displayedLancamentos]);
+  const { data: saldosLancamentos = [] } = useSaldosLancamentos(idsExibidos);
+  const { data: anexosDosLancamentos = [] } = useLancamentoAnexosByIds(idsExibidos);
+  const anexosPorLancamento = useMemo(() => {
+    const contagem = new Map<string, number>();
+    anexosDosLancamentos.forEach(anexo => {
+      contagem.set(anexo.lancamento_id, (contagem.get(anexo.lancamento_id) || 0) + 1);
+    });
+    return contagem;
+  }, [anexosDosLancamentos]);
+  const temComprovante = (item: LancamentoFinanceiro) => (anexosPorLancamento.get(item.id) || 0) > 0 || Boolean(item.comprovante_url);
+  const [reciboLancamento, setReciboLancamento] = useState<LancamentoFinanceiro | null>(null);
   const saldosLancamentosPorId = useMemo(
     () => new Map(saldosLancamentos.map(saldo => [saldo.lancamento_id, saldo.saldo_apos])),
     [saldosLancamentos]
@@ -1263,12 +1274,10 @@ export default function Lancamentos({
                           <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
-                              onClick={() => {
-                                setSelectedLancamentoIdForModal(item.id);
-                                setModalOpen('isComprovanteOpen', true);
-                              }}
-                              className="p-1.5 rounded-lg hover:bg-neutral-100 text-primary transition-all inline-flex items-center justify-center gap-1"
-                              title="Ver Comprovante e Recibo"
+                              onClick={() => setReciboLancamento(item)}
+                              disabled={!temComprovante(item)}
+                              className={`p-1.5 rounded-lg transition-all inline-flex items-center justify-center gap-1 ${temComprovante(item) ? 'hover:bg-neutral-100 text-bank-truth-green' : 'text-neutral-300 cursor-not-allowed'}`}
+                              title={temComprovante(item) ? 'Ver recibo' : 'Sem comprovante anexado'}
                             >
                               <Paperclip className="w-4 h-4" />
                             </button>
@@ -1369,12 +1378,10 @@ export default function Lancamentos({
                           <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
-                              onClick={() => {
-                                setSelectedLancamentoIdForModal(item.id);
-                                setModalOpen('isComprovanteOpen', true);
-                              }}
-                              className="p-1.5 rounded-lg hover:bg-neutral-100 text-primary transition-all inline-flex items-center justify-center gap-1"
-                              title="Ver Comprovante e Recibo"
+                              onClick={() => setReciboLancamento(item)}
+                              disabled={!temComprovante(item)}
+                              className={`p-1.5 rounded-lg transition-all inline-flex items-center justify-center gap-1 ${temComprovante(item) ? 'hover:bg-neutral-100 text-bank-truth-green' : 'text-neutral-300 cursor-not-allowed'}`}
+                              title={temComprovante(item) ? 'Ver recibo' : 'Sem comprovante anexado'}
                             >
                               <Paperclip className="w-4 h-4" />
                             </button>
@@ -1737,6 +1744,8 @@ export default function Lancamentos({
           </div>
         )}
       </AnimatePresence>
+
+      <ReciboModal lancamento={reciboLancamento} onClose={() => setReciboLancamento(null)} />
     </div>
   );
 }

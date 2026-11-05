@@ -53,6 +53,7 @@ import { ptBR } from 'date-fns/locale';
 import { PrintDocumentSelector } from '../printing/PrintDocumentSelector';
 import type { PrintableDocumentData } from '../printing/types';
 import { calculateAdjustmentAmount } from '../../utils/adjustments';
+import { isSafeAttachmentUrl } from '../../utils/anexos';
 
 export default function LancamentoDetailsSlide() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -153,16 +154,6 @@ export default function LancamentoDetailsSlide() {
       return `${numericValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}% (${formatCurrency(calculateAdjustmentAmount(numericValue, type, base))})`;
     }
     return formatCurrency(numericValue);
-  };
-
-  const isSafeAttachmentUrl = (url: unknown): url is string => {
-    if (typeof url !== 'string' || !url) return false;
-    try {
-      const parsed = new URL(url, window.location.origin);
-      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-    } catch {
-      return false;
-    }
   };
 
   const getParcelaAnexos = (parcelaId: string | null | undefined) => anexos.filter(anexo => anexo.lancamento_id === parcelaId);
