@@ -23,6 +23,9 @@ const mensagemDoErro = (cause: unknown, reserva: string): string => {
   const mensagem = (cause as { message?: unknown } | null)?.message;
   return typeof mensagem === 'string' && mensagem.trim() ? mensagem : reserva;
 };
+/** Linhas que o usuário pode marcar para importar: duplicadas, canceladas e com
+ * erro de leitura ficam de fora — é a mesma regra do checkbox de cada linha. */
+const podeIncluir = (linha: MigracaoLinha) => !['duplicada', 'cancelada', 'erro'].includes(linha.situacao);
 type CampoManual = keyof MigracaoEscolhasManuais;
 type CadastroRapido = { linhaId: string; campo: 'cliente' | 'categoria' | 'centroCusto'; nome: string; tipo: 'entrada' | 'saida' | null; erro: string; carregando: boolean };
 
@@ -274,7 +277,7 @@ export default function MigracaoDados() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <label className="flex items-center gap-2 text-sm font-semibold text-on-surface"><input type="checkbox" checked={somentePendencias} onChange={(event) => setSomentePendencias(event.target.checked)} className="h-4 w-4 accent-primary focus-visible:ring-2 focus-visible:ring-primary" />Somente pendências</label>
             <div className="flex flex-wrap gap-2">
-              <button type="button" disabled={importando || remapeando} onClick={() => setLinhas((current) => current.map((linha) => ({ ...linha, incluir: linha.situacao === 'pronta', incluirManual: true })))} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">Selecionar todas</button>
+              <button type="button" disabled={importando || remapeando} onClick={() => setLinhas((current) => current.map((linha) => (podeIncluir(linha) ? { ...linha, incluir: true, incluirManual: true } : linha)))} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">Selecionar todas</button>
               <button type="button" disabled={importando || remapeando} onClick={() => setLinhas((current) => current.map((linha) => ({ ...linha, incluir: false, incluirManual: true })))} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">Limpar seleção</button>
               <button type="button" disabled={contadores.selecionadas === 0 || remapeando || importando} onClick={() => void importar()} className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">{importando ? 'Importando…' : `Importar ${contadores.selecionadas}`}</button>
             </div>
@@ -288,7 +291,7 @@ export default function MigracaoDados() {
               <tbody>{linhasVisiveis.map((linha) => {
                 const pendente = linha.situacao === 'pendente';
                 return <tr key={linha.id} className={`border-t border-surface-border ${pendente ? 'bg-pending-amber/5' : ''}`}>
-                  <td className="px-3 py-3"><label className="flex items-center gap-2 text-xs font-semibold text-on-surface"><input aria-label={`Incluir linha ${linha.linhaOrigem}`} type="checkbox" checked={linha.incluir} disabled={['duplicada', 'cancelada', 'erro'].includes(linha.situacao)} onChange={(event) => atualizarLinha(linha.id, { incluir: event.target.checked, incluirManual: true })} className="h-4 w-4 accent-primary focus-visible:ring-2 focus-visible:ring-primary" />Incluir</label></td>
+                  <td className="px-3 py-3"><label className="flex items-center gap-2 text-xs font-semibold text-on-surface"><input aria-label={`Incluir linha ${linha.linhaOrigem}`} type="checkbox" checked={linha.incluir} disabled={!podeIncluir(linha)} onChange={(event) => atualizarLinha(linha.id, { incluir: event.target.checked, incluirManual: true })} className="h-4 w-4 accent-primary focus-visible:ring-2 focus-visible:ring-primary" />Incluir</label></td>
                   <td className="px-3 py-3 text-on-surface">{linha.linhaOrigem}</td>
                   <td className={`px-3 py-3 font-bold ${corSituacao[linha.situacao]}`}>{labelSituacao[linha.situacao]}</td>
                   <td className="px-3 py-3"><input aria-label={`Valor da linha ${linha.linhaOrigem}`} type="number" min="0" step="0.01" value={linha.valor ?? ''} onChange={(event) => { const valor = event.target.value === '' ? null : Math.abs(Number(event.target.value)); atualizarLinha(linha.id, { valor }); }} className={`${classeCampo} w-28 ${pendente && linha.valor === null ? 'border-pending-amber ring-1 ring-pending-amber' : ''}`} /></td>
