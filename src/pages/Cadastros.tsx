@@ -91,6 +91,7 @@ export default function Cadastros() {
 
   const [bankName, setBankName] = useState('');
   const [bankInitial, setBankInitial] = useState('');
+  const [bankDataAbertura, setBankDataAbertura] = useState('');
   const [bankLogoUrl, setBankLogoUrl] = useState('');
   const [isCofreLocal, setIsCofreLocal] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -104,6 +105,18 @@ export default function Cadastros() {
   const [searchTerm, setSearchTerm] = useState('');
 
   const valueFormatter = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+  // A data de abertura é um dia puro: trabalha sempre com a parte de data do valor
+  // gravado, para não deslocar o dia pelo fuso no campo de edição nem na listagem.
+  const dataDeHoje = () => {
+    const hoje = new Date();
+    return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+  };
+
+  const formatarDataAbertura = (valor: string | null | undefined) => {
+    const [ano, mes, dia] = String(valor ?? '').slice(0, 10).split('-');
+    return ano && mes && dia ? `${dia}/${mes}/${ano}` : '—';
+  };
 
   // ID da conta em edição; vazio ao criar uma conta nova, onde ainda não existe
   // estado salvo e o switch parte do padrão do perfil.
@@ -122,6 +135,7 @@ export default function Cadastros() {
     setEditingAccount(null);
     setBankName('');
     setBankInitial('');
+    setBankDataAbertura(dataDeHoje());
     setBankLogoUrl('');
     setIsCofreLocal(false);
     setAcessosConta({});
@@ -132,6 +146,7 @@ export default function Cadastros() {
     setEditingAccount(c);
     setBankName(c.nome_banco || c.nome);
     setBankInitial(c.saldo_inicial.toFixed(2).replace('.', ','));
+    setBankDataAbertura(c.data_abertura ? String(c.data_abertura).slice(0, 10) : '');
     setBankLogoUrl(c.logo_url || '');
     setIsCofreLocal(!!c.is_cofre_local);
     setAcessosConta({});
@@ -192,6 +207,7 @@ export default function Cadastros() {
             nome_banco: bankName,
             nome: bankName,
             saldo_inicial: saldo,
+            data_abertura: bankDataAbertura || undefined,
             logo_url: bankLogoUrl,
             is_cofre_local: isCofreLocal
           }
@@ -204,7 +220,7 @@ export default function Cadastros() {
           agencia: '0001',
           conta: '00000-0',
           saldo_inicial: saldo,
-          data_abertura: new Date().toISOString(),
+          data_abertura: bankDataAbertura || new Date().toISOString(),
           logo_url: bankLogoUrl,
           is_cofre_local: isCofreLocal
         });
@@ -215,6 +231,7 @@ export default function Cadastros() {
       setEditingAccount(null);
       setBankName('');
       setBankInitial('');
+      setBankDataAbertura('');
       setBankLogoUrl('');
       setIsCofreLocal(false);
     } catch (err: any) {
@@ -400,7 +417,7 @@ export default function Cadastros() {
                         </div>
                       </div>
                     </td>
-                    <td className="py-4 px-8 font-mono text-neutral-500">{new Date(c.data_abertura).toLocaleDateString()}</td>
+                    <td className="py-4 px-8 font-mono text-neutral-500">{formatarDataAbertura(c.data_abertura)}</td>
                     <td className="py-4 px-8 text-right font-mono text-bank-truth-green">{valueFormatter(c.saldo_inicial)}</td>
                     <td className="py-4 px-8 text-center"><span className="rounded-lg bg-emerald-50 text-bank-truth-green px-3 py-1.5 uppercase font-black text-[9px] tracking-widest">Operacional</span></td>
                     <td className="py-4 px-8 text-right">
@@ -611,6 +628,18 @@ export default function Cadastros() {
                     required
                   />
                 </div>
+                {isMaster && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">Data de Abertura</label>
+                    <input
+                      type="date"
+                      value={bankDataAbertura}
+                      onChange={(e) => setBankDataAbertura(e.target.value)}
+                      className="w-full h-12 bg-neutral-50 border-2 border-neutral-100 rounded-2xl px-5 text-xs font-black focus:border-primary outline-none"
+                    />
+                    <p className="text-[10px] font-medium text-neutral-500">Data de referência do saldo inicial. É a data exibida na lista de contas.</p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Esse Banco é Cofre Local?</span>
                   <div className="flex gap-2">
