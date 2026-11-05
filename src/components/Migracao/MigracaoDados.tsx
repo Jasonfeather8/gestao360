@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { chavesRepetidas, detectarColunas, importarLinhas, lerPlanilha, recalcularLinha, remontarLinhas } from '../../services/migracao';
 import type { MigracaoEscolhasManuais } from '../../services/migracao';
 import type { MigracaoCadastros, MigracaoCampo, MigracaoColunas, MigracaoLinha, PlanilhaMigracao } from '../../types';
+import { podeSalvarNome } from '../../utils/validacaoNomes';
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const campos: { campo: MigracaoCampo; rotulo: string }[] = [
@@ -213,6 +214,12 @@ export default function MigracaoDados() {
       setCadastroRapido({ ...formulario, erro: 'Selecione Entrada ou Saída.' });
       return;
     }
+    const nomeLiberado = formulario.campo === 'cliente'
+      ? podeSalvarNome(nome, entidades, { nomeDe: (entidade) => entidade.nome_razao_social, rotulo: 'cliente/fornecedor' })
+      : formulario.campo === 'categoria'
+        ? podeSalvarNome(nome, categorias, { nomeDe: (categoria) => categoria.nome, rotulo: 'categoria' })
+        : podeSalvarNome(nome, centrosCusto, { nomeDe: (centro) => centro.nome, rotulo: 'centro de custo' });
+    if (!nomeLiberado) return;
     setCadastroRapido({ ...formulario, carregando: true, erro: '' });
     try {
       if (formulario.campo === 'cliente') {

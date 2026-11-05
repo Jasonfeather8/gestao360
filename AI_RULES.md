@@ -24,6 +24,9 @@
   - Use `src/hooks/useData.ts` as the central point for data access.
   - Mock data is located in `src/mocks/` for development.
   - Business logic/Services are located in `src/services/`.
+- **Nomes de cadastros** (bancos, categorias, centros de custo, motivos de ajuste, entidades):
+  - Nome igual é bloqueado; nome muito parecido (>80% de similaridade, provável erro de digitação) pede confirmação.
+  - Valide na tela com `src/utils/validacaoNomes.ts` (`podeSalvarNome`). A garantia dura é do banco: função `public.normalizar_nome` + índices únicos `*_nome_normalizado_unico`.
 - **Icons**: Exclusively use `lucide-react`. Ensure icons are sized consistently (usually `w-4 h-4` or `w-5 h-5`).
 - **Development Workflow**:
   - The main entry point is `src/App.tsx`.

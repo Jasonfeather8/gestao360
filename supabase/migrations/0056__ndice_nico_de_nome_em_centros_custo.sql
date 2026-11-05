@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX centros_custo_nome_normalizado_unico ON public.centros_custo (public.normalizar_nome(nome)) WHERE coalesce(status, 'ativo') NOT IN ('inativo', 'excluido')

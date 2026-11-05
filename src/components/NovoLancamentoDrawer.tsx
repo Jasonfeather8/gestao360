@@ -33,6 +33,7 @@ import type { PrintableDocumentData } from './printing/types';
 import { supabase } from '@/integrations/supabase/client';
 import Button from './Button';
 import { calculateAdjustmentAmount } from '../utils/adjustments';
+import { mensagemErroNomeDuplicado, podeSalvarNome } from '../utils/validacaoNomes';
 
 function formatBRL(value: any): string {
   if (value === null || value === undefined) return '';
@@ -937,28 +938,31 @@ export default function NovoLancamentoDrawer() {
 
   const handleQuickCatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!podeSalvarNome(quickCatName, rawCategorias, { nomeDe: (categoria) => categoria.nome, rotulo: 'categoria' })) return;
     try {
       const newCat = await createCategory({ nome: quickCatName, tipo: lancamentoFormDraft.tipo });
       if (newCat) setLancamentoFormDraft({ categoria_id: (newCat as any).id });
       setIsQuickCatOpen(false);
       setQuickCatName('');
       showToast('Categoria criada!', 'success');
-    } catch (err) { showToast('Erro ao criar categoria', 'error'); }
+    } catch (err) { showToast(mensagemErroNomeDuplicado(err) ?? 'Erro ao criar categoria', 'error'); }
   };
 
   const handleQuickCCSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!podeSalvarNome(quickCCName, rawCentros, { nomeDe: (centro) => centro.nome, rotulo: 'centro de custo' })) return;
     try {
       const newCC = await createCC({ nome: quickCCName, descricao: '' });
       if (newCC) setLancamentoFormDraft({ centro_custo_id: (newCC as any).id });
       setIsQuickCCOpen(false);
       setQuickCCName('');
       showToast('Centro de custo criado!', 'success');
-    } catch (err) { showToast('Erro ao criar centro', 'error'); }
+    } catch (err) { showToast(mensagemErroNomeDuplicado(err) ?? 'Erro ao criar centro', 'error'); }
   };
 
   const handleQuickAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!podeSalvarNome<(typeof rawContas)[number]>(quickAccountName, rawContas, { nomeDe: (conta) => conta.nome_banco || conta.nome, rotulo: 'banco' })) return;
     try {
       const newAccount = await createAccount({
         nome_banco: quickAccountName,
@@ -973,11 +977,12 @@ export default function NovoLancamentoDrawer() {
       setQuickAccountName('');
       setQuickAccountSaldo('0,00');
       showToast('Conta bancária criada!', 'success');
-    } catch (err) { showToast('Erro ao criar conta', 'error'); }
+    } catch (err) { showToast(mensagemErroNomeDuplicado(err) ?? 'Erro ao criar conta', 'error'); }
   };
 
   const handleQuickReasonSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!podeSalvarNome(quickReasonName, categoriasAjuste, { nomeDe: (motivo) => motivo.nome, rotulo: 'motivo de ajuste' })) return;
     try {
       const result = await createCategoriaAjuste({ nome: quickReasonName, tipo: quickAddReasonType });
       if (quickAddReasonType === 'desconto') {
@@ -988,7 +993,7 @@ export default function NovoLancamentoDrawer() {
       setIsQuickReasonOpen(false);
       setQuickReasonName('');
       showToast('Motivo criado!', 'success');
-    } catch (err) { showToast('Erro ao criar motivo', 'error'); }
+    } catch (err) { showToast(mensagemErroNomeDuplicado(err) ?? 'Erro ao criar motivo', 'error'); }
   };
 
   return (

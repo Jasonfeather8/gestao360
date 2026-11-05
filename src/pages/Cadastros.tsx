@@ -39,6 +39,7 @@ import Button from '../components/Button';
 import { supabase } from '@/integrations/supabase/client';
 import { acessoPadraoDoPerfil, usuarioTemAcessoAConta } from '../config/permissions';
 import type { UserProfile } from '../types';
+import { mensagemErroNomeDuplicado, podeSalvarNome } from '../utils/validacaoNomes';
 
 type SubTabType = 'contas' | 'centros' | 'categorias' | 'ajustes';
 
@@ -181,6 +182,7 @@ export default function Cadastros() {
   const handleAccountSubmit = async (e: React.FormEvent) => {
 
     e.preventDefault();
+    if (!podeSalvarNome<(typeof contas)[number]>(bankName, contas, { nomeDe: (conta) => conta.nome_banco || conta.nome, ignorarId: editingAccount?.id, rotulo: 'banco' })) return;
     try {
       const saldo = parseFloat(bankInitial.replace(/\D/g, '')) / 100 || 0;
       if (editingAccount) {
@@ -220,7 +222,9 @@ export default function Cadastros() {
         .filter((message): message is string => typeof message === 'string')
         .join(' ');
       const errorCode = err?.code ?? err?.cause?.code;
-      if (errorCode === '23505' || errorMessages.includes('contas_bancarias_unico_cofre_local')) {
+      if (errorMessages.includes('contas_bancarias_nome_normalizado_unico')) {
+        alert('Já existe uma conta com esse nome. Escolha outro nome.');
+      } else if (errorCode === '23505' || errorMessages.includes('contas_bancarias_unico_cofre_local')) {
         alert('Apenas uma conta bancária pode ser o Cofre Local. Desmarque o Cofre Local da conta existente antes de marcar outra.');
       } else {
         alert('Erro ao salvar conta');
@@ -230,6 +234,7 @@ export default function Cadastros() {
 
   const handleCCSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!podeSalvarNome(ccName, centrosCusto, { nomeDe: (centro) => centro.nome, ignorarId: editingCC?.id, rotulo: 'centro de custo' })) return;
     try {
       if (editingCC) {
         await updateCC({ id: editingCC.id, data: { nome: ccName, descricao: ccDesc }});
@@ -240,11 +245,12 @@ export default function Cadastros() {
       setEditingCC(null);
       setCCName('');
       setCCDesc('');
-    } catch (err) { alert('Erro ao salvar centro de custo'); }
+    } catch (err) { alert(mensagemErroNomeDuplicado(err) ?? 'Erro ao salvar centro de custo'); }
   };
 
   const handleCatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!podeSalvarNome(catName, categorias, { nomeDe: (categoria) => categoria.nome, ignorarId: editingCat?.id, rotulo: 'categoria' })) return;
     try {
       if (editingCat) {
         await updateCategory({ id: editingCat.id, data: { nome: catName, tipo: catType }});
@@ -254,11 +260,12 @@ export default function Cadastros() {
       setIsNewCatOpen(false);
       setEditingCat(null);
       setCatName('');
-    } catch (err) { alert('Erro ao salvar categoria'); }
+    } catch (err) { alert(mensagemErroNomeDuplicado(err) ?? 'Erro ao salvar categoria'); }
   };
 
   const handleAjusteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!podeSalvarNome(ajusteName, categoriasAjuste, { nomeDe: (motivo) => motivo.nome, ignorarId: editingAjuste?.id, rotulo: 'motivo de ajuste' })) return;
     try {
       if (editingAjuste) {
         await updateCategoriaAjuste({ id: editingAjuste.id, data: { nome: ajusteName, tipo: ajusteType }});
@@ -268,7 +275,7 @@ export default function Cadastros() {
       setIsNewAjusteOpen(false);
       setEditingAjuste(null);
       setAjusteName('');
-    } catch (err) { alert('Erro ao salvar categoria de ajuste'); }
+    } catch (err) { alert(mensagemErroNomeDuplicado(err) ?? 'Erro ao salvar categoria de ajuste'); }
   };
 
   const confirmDelete = async () => {

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX categorias_financeiras_nome_normalizado_unico ON public.categorias_financeiras (public.normalizar_nome(nome)) WHERE coalesce(status, 'ativo') NOT IN ('inativo', 'excluido')

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX entidades_negocio_nome_normalizado_unico ON public.entidades_negocio (public.normalizar_nome(nome_razao_social))

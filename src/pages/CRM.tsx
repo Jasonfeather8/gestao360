@@ -32,6 +32,7 @@ import { useUIStore } from '../store/uiStore';
 import { EntidadeNegocio } from '../types';
 import Button from '../components/Button';
 import { WalletCards, FileText, Download } from 'lucide-react';
+import { podeSalvarNome } from '../utils/validacaoNomes';
 
 export default function CRM() {
   const { role } = useAuth();
@@ -104,6 +105,7 @@ export default function CRM() {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEntity) return;
+    if (!podeSalvarNome(profileNome, entidades, { nomeDe: (entidade) => entidade.nome_razao_social, ignorarId: selectedEntity.id, rotulo: 'cliente/fornecedor' })) return;
     try {
       await updateEntity({
         id: selectedEntity.id,

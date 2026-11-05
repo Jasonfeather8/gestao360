@@ -34,6 +34,7 @@ import MoneyInput from './MoneyInput';
 import Button from './Button';
 import { calculateAdjustmentAmount } from '../utils/adjustments';
 import { supabase } from '@/integrations/supabase/client';
+import { mensagemErroNomeDuplicado, podeSalvarNome } from '../utils/validacaoNomes';
 
 // Os tipos do motion não declaram `key`, mas o React exige key única entre os
 // filhos diretos do AnimatePresence externo (filhos sem key colidem em "").
@@ -509,6 +510,7 @@ export default function BaixaLancamentoModal() {
 
   const handleQuickAddReason = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!podeSalvarNome(quickAddName, categoriasAjuste, { nomeDe: (motivo) => motivo.nome, rotulo: 'motivo de ajuste' })) return;
     try {
       const result = await createCategoriaAjuste({ nome: quickAddName, tipo: quickAddType });
       if (quickAddType === 'desconto') setMotivoDescontoId(result.id);
@@ -517,7 +519,7 @@ export default function BaixaLancamentoModal() {
       setIsQuickAddOpen(false);
       setQuickAddName('');
     } catch (err: any) {
-      alert('Erro ao criar categoria: ' + err.message);
+      alert(mensagemErroNomeDuplicado(err) ?? ('Erro ao criar categoria: ' + err.message));
     }
   };
 

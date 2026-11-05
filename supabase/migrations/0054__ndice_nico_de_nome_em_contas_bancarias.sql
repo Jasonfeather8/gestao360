@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX contas_bancarias_nome_normalizado_unico ON public.contas_bancarias (public.normalizar_nome(coalesce(nome_banco, nome))) WHERE coalesce(status, 'ativo') NOT IN ('inativo', 'excluido')

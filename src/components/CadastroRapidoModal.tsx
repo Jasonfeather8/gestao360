@@ -17,6 +17,7 @@ import { useUIStore } from '../store/uiStore';
 import { useEntidades } from '../hooks/useData';
 import { supabase } from '@/integrations/supabase/client';
 import Button from './Button';
+import { podeSalvarNome } from '../utils/validacaoNomes';
 
 type TabType = 'dados' | 'endereco' | 'documentos';
 
@@ -38,7 +39,7 @@ export default function CadastroRapidoModal() {
     resetEntidadeFormDraft
   } = useUIStore();
   
-  const { createEntity } = useEntidades();
+  const { data: entidades = [], createEntity } = useEntidades();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('dados');
   const [files, setFiles] = useState<LocalFile[]>([]);
@@ -108,6 +109,7 @@ export default function CadastroRapidoModal() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!podeSalvarNome(entidadeFormDraft.nome_razao_social, entidades, { nomeDe: (entidade) => entidade.nome_razao_social, rotulo: 'cliente/fornecedor' })) return;
     setIsSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
