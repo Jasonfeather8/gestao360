@@ -187,7 +187,7 @@ function avaliar(
   if (escolhasManuais.centroCusto) atualizada.centroCustoId = escolhasManuais.centroCusto;
 
   const pendencias: string[] = [];
-  if (!atualizada.clienteId) pendencias.push('Selecione o cliente');
+  if (!atualizada.clienteId) pendencias.push('Selecione o cliente / fornecedor');
   if (!atualizada.contaId) pendencias.push('Selecione a conta');
   if (!atualizada.categoriaId) pendencias.push('Selecione a categoria');
   if (!atualizada.centroCustoId) pendencias.push('Selecione o centro de custo');

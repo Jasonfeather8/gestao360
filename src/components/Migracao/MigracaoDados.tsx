@@ -60,7 +60,7 @@ export default function MigracaoDados() {
 
   const cadastros = useMemo<MigracaoCadastros>(() => ({
     contas: contas.filter((item) => !('status' in item) || item.status !== 'excluido').map((item) => ({ id: item.id, nome: item.nome })),
-    clientes: entidades.filter((item) => item.tipo === 'cliente' || item.tipo === 'ambos').map((item) => ({ id: item.id, nome: item.nome_razao_social })),
+    clientes: entidades.map((item) => ({ id: item.id, nome: item.nome_razao_social })),
     categorias: categorias.filter((item) => !('status' in item) || item.status !== 'excluido').map((item) => ({ id: item.id, nome: item.nome })),
     centrosCusto: centrosCusto.filter((item) => !('status' in item) || item.status !== 'excluido').map((item) => ({ id: item.id, nome: item.nome })),
   }), [contas, entidades, categorias, centrosCusto]);
@@ -216,7 +216,8 @@ export default function MigracaoDados() {
     setCadastroRapido({ ...formulario, carregando: true, erro: '' });
     try {
       if (formulario.campo === 'cliente') {
-        const criado = await createEntity({ tipo: 'cliente', nome_razao_social: nome, documento: null, status_sincronizacao: true, status_base: 'ativo' } as Parameters<typeof createEntity>[0]);
+        const tipoEntidade = linha.tipo === 'saida' ? 'fornecedor' : linha.tipo === 'entrada' ? 'cliente' : 'ambos';
+        const criado = await createEntity({ tipo: tipoEntidade, nome_razao_social: nome, documento: null, status_sincronizacao: true, status_base: 'ativo' } as Parameters<typeof createEntity>[0]);
         aplicarGrupo(linha, 'cliente', criado.id, { id: criado.id, nome: criado.nome_razao_social });
       } else if (formulario.campo === 'categoria') {
         const tipo = formulario.tipo as 'entrada' | 'saida';
@@ -287,7 +288,7 @@ export default function MigracaoDados() {
           {resultado && <section role="status" className="rounded-xl border border-bank-truth-green/30 bg-bank-truth-green/10 p-4"><div className="flex items-center gap-2 font-bold text-bank-truth-green"><CheckCircle2 className="h-5 w-5" />Importação concluída</div><div className="mt-2 grid gap-2 text-sm text-on-surface sm:grid-cols-2"><p>Importadas: <strong>{resultado.importadas}</strong></p><p>Valor total: <strong>{moeda.format(resultado.valor_total)}</strong></p><p className="sm:col-span-2">ID do lote: <strong className="break-all">{resultado.lote_id}</strong></p></div>{resultado.erros.length > 0 && <div className="mt-3 text-sm text-alert-red"><p className="font-bold">Erros ({resultado.erros.length})</p><ul className="mt-1 list-inside list-disc">{resultado.erros.map((item, index) => <li key={`${item.linha}-${index}`}>Linha {item.linha}: {item.motivo}</li>)}</ul></div>}</section>}
           <div className="overflow-x-auto rounded-xl border border-surface-border">
             <table className="min-w-[1500px] w-full border-collapse text-left text-xs">
-              <thead className="bg-surface-container-low"><tr>{['Incluir', 'Linha', 'Situação', 'Valor', 'Entrada/Saída', 'Vencimento', 'Cliente', 'Conta', 'Categoria', 'Centro de Custo', 'Descrição', 'Resultado previsto'].map((title) => <th key={title} className="px-3 py-3 text-[10px] font-black uppercase tracking-widest text-secondary">{title}</th>)}</tr></thead>
+              <thead className="bg-surface-container-low"><tr>{['Incluir', 'Linha', 'Situação', 'Valor', 'Entrada/Saída', 'Vencimento', 'Cliente / Fornecedor', 'Conta', 'Categoria', 'Centro de Custo', 'Descrição', 'Resultado previsto'].map((title) => <th key={title} className="px-3 py-3 text-[10px] font-black uppercase tracking-widest text-secondary">{title}</th>)}</tr></thead>
               <tbody>{linhasVisiveis.map((linha) => {
                 const pendente = linha.situacao === 'pendente';
                 return <tr key={linha.id} className={`border-t border-surface-border ${pendente ? 'bg-pending-amber/5' : ''}`}>
@@ -303,7 +304,7 @@ export default function MigracaoDados() {
                     const nomeOriginal = nomesOriginais.current[`${linha.id}:${field}`] ?? '';
                     const formularioAberto = cadastroRapido?.linhaId === linha.id && cadastroRapido.campo === field;
                     const podeCadastrar = nomeOriginal.trim() !== '' && (field === 'cliente' ? !!user : field === 'categoria' || field === 'centroCusto' ? hasRole(['master', 'gerente']) : false);
-                    const rotulosCadastro = { cliente: 'cliente', conta: 'conta', categoria: 'categoria', centroCusto: 'centro de custo' };
+                    const rotulosCadastro = { cliente: 'cliente/fornecedor', conta: 'conta', categoria: 'categoria', centroCusto: 'centro de custo' };
                     return <td key={field} className="px-3 py-3"><div className="flex min-w-40 flex-col gap-1">
                       <select aria-label={`${field} da linha ${linha.linhaOrigem}`} value={currentId} onChange={(event) => {
                         registrarEscolha(linha, field, event.target.value);
