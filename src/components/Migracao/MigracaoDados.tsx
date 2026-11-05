@@ -24,9 +24,9 @@ const mensagemDoErro = (cause: unknown, reserva: string): string => {
   const mensagem = (cause as { message?: unknown } | null)?.message;
   return typeof mensagem === 'string' && mensagem.trim() ? mensagem : reserva;
 };
-/** Linhas que o usuário pode marcar para importar: duplicadas, canceladas e com
- * erro de leitura ficam de fora — é a mesma regra do checkbox de cada linha. */
-const podeIncluir = (linha: MigracaoLinha) => !['duplicada', 'cancelada', 'erro'].includes(linha.situacao);
+/** Só entra na importação a linha cujo Resultado Previsto está verde ("Pronta").
+ * Pendentes, duplicadas, canceladas e com erro ficam de fora — mesma regra do checkbox. */
+const podeIncluir = (linha: MigracaoLinha) => linha.situacao === 'pronta';
 type CampoManual = keyof MigracaoEscolhasManuais;
 type CadastroRapido = { linhaId: string; campo: 'cliente' | 'categoria' | 'centroCusto'; nome: string; tipo: 'entrada' | 'saida' | null; erro: string; carregando: boolean };
 

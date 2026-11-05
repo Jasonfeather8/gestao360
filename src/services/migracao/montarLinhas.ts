@@ -213,7 +213,13 @@ function avaliar(
   else atualizada.situacao = 'pronta';
 
   atualizada.resultadoPrevisto = descreverResultado(atualizada, repetidaNoArquivo);
-  if (!atualizada.incluirManual) atualizada.incluir = atualizada.situacao === 'pronta';
+  // Só a linha "Pronta" (Resultado Previsto verde) pode ser incluída na importação.
+  if (atualizada.situacao !== 'pronta') {
+    atualizada.incluir = false;
+    atualizada.incluirManual = false;
+  } else if (!atualizada.incluirManual) {
+    atualizada.incluir = true;
+  }
 
   return atualizada;
 }
