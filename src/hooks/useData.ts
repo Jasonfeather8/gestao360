@@ -193,7 +193,9 @@ export function useContasSaldos() {
     queryFn: async () => {
       const { data, error } = await supabase.rpc('get_contas_saldos_reais');
       if (error) throw error;
-      return data as Array<{ conta_id: string; saldo_confirmado: number; saldo_operacional: number }>;
+      // O saldo confirmado (Master) só é devolvido para o perfil Master; para os
+      // demais perfis a função retorna null e a tela mostra apenas o Operacional.
+      return data as Array<{ conta_id: string; saldo_confirmado: number | null; saldo_operacional: number }>;
     },
     enabled: role !== 'colaborador'
   });
