@@ -1,78 +1,29 @@
-import React, { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { useState, useMemo } from 'react';
 import { 
-  Building2, 
   Search, 
   Plus, 
   Trash2, 
-  X, 
-  User,
   Users,
   Building,
-  History,
-
-  ShieldCheck, 
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  Filter,
-  TrendingUp,
-  Mail,
-  Phone,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  Receipt,
-  ArrowRight
+  CheckCircle2
 } from 'lucide-react';
-import { useEntidades, useEntidadeDocuments } from '../hooks/useData';
+import { useEntidades } from '../hooks/useData';
 import { useAuth } from '../hooks/useAuth';
 import { useUIStore } from '../store/uiStore';
 import { EntidadeNegocio } from '../types';
 import Button from '../components/Button';
-import { WalletCards, FileText, Download } from 'lucide-react';
-import { podeSalvarNome } from '../utils/validacaoNomes';
 
 export default function CRM() {
   const { role } = useAuth();
-  const { data: entidades = [], createEntity, updateEntity, deleteEntity } = useEntidades();
-  const { isCadastroRapidoOpen, setModalOpen, entidadeFormDraft, setEntidadeFormDraft, resetAllDrafts } = useUIStore();
+  const { data: entidades = [], deleteEntity } = useEntidades();
+  const { setModalOpen, setEntidadeFormDraft, setEntidadeEmEdicaoId } = useUIStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [tipoFilter, setTipoFilter] = useState<'all' | 'cliente' | 'fornecedor'>('all');
-  const [selectedEntity, setSelectedEntity] = useState<EntidadeNegocio | null>(null);
-
-  const { documents: existingDocuments, deleteDocument } = useEntidadeDocuments(selectedEntity?.id || null);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
-
-  // Form states for profile
-  const [profileNome, setProfileNome] = useState('');
-  const [profileDocumento, setProfileDocumento] = useState('');
-  const [profileEmail, setProfileEmail] = useState('');
-  const [profileTelefone, setProfileTelefone] = useState('');
-  const [profileStatus, setProfileStatus] = useState<'ativo' | 'inativo' | 'bpi'>('ativo');
-
-  const maskCpfCnpj = (value: string) => {
-    const v = value.replace(/\D/g, '');
-    if (v.length <= 11) {
-      return v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
-    } else {
-      return v.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{1,2})/, '$1.$2.$3/$4-$5').slice(0, 18);
-    }
-  };
-
-  const maskPhone = (value: string) => {
-    const v = value.replace(/\D/g, '');
-    if (v.length <= 10) {
-      return v.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
-    } else {
-      return v.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3').slice(0, 15);
-    }
-  };
 
   const filtered = useMemo(() => {
     return entidades.filter(ent => {
@@ -93,33 +44,31 @@ export default function CRM() {
 
   const totalPages = Math.max(Math.ceil(filtered.length / itemsPerPage), 1);
 
+  // Abre o mesmo modal completo do cadastro, já preenchido com os dados da entidade.
   const handleOpenProfile = (ent: EntidadeNegocio) => {
-    setSelectedEntity(ent);
-    setProfileNome(ent.nome_razao_social);
-    setProfileDocumento(ent.documento || '');
-    setProfileEmail(ent.email || '');
-    setProfileTelefone(ent.telefone || '');
-    setProfileStatus(ent.status_base || 'ativo');
+    setEntidadeFormDraft({
+      tipo: ent.tipo,
+      tipo_pessoa: ent.tipo_pessoa || 'PF',
+      nome_razao_social: ent.nome_razao_social,
+      documento: ent.documento || '',
+      email: ent.email || '',
+      telefone: ent.telefone || '',
+      cep: ent.cep || '',
+      endereco: ent.endereco || '',
+      numero: ent.numero || '',
+      complemento: ent.complemento || '',
+      bairro: ent.bairro || '',
+      cidade: ent.cidade || '',
+      uf: ent.uf || '',
+      status_base: ent.status_base || 'ativo',
+    });
+    setEntidadeEmEdicaoId(ent.id);
+    setModalOpen('isCadastroRapidoOpen', true);
   };
 
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedEntity) return;
-    if (!podeSalvarNome(profileNome, entidades, { nomeDe: (entidade) => entidade.nome_razao_social, ignorarId: selectedEntity.id, rotulo: 'cliente/fornecedor' })) return;
-    try {
-      await updateEntity({
-        id: selectedEntity.id,
-        data: { nome_razao_social: profileNome, documento: profileDocumento, email: profileEmail, telefone: profileTelefone, status_base: profileStatus }
-      });
-      setSelectedEntity(null);
-    } catch (err) {
-      alert('Erro ao atualizar');
-    }
-  };
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // Use the global modal instead or logic already moved to CadastroRapidoModal
+  const handleNovoCadastro = () => {
+    setEntidadeEmEdicaoId(null);
+    setModalOpen('isCadastroRapidoOpen', true);
   };
 
   return (
@@ -129,9 +78,7 @@ export default function CRM() {
           <h1 className="text-2xl font-black uppercase tracking-tighter text-neutral-900">CRM de Entidades</h1>
           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mt-1">Gestão de Clientes, Fornecedores e Histórico de Relacionamento</p>
         </div>
-        <Button
-          onClick={() => setModalOpen('isCadastroRapidoOpen', true)}
-        >
+        <Button onClick={handleNovoCadastro}>
           Novo Cadastro
           <Plus className="w-4 h-4" />
         </Button>
@@ -205,7 +152,7 @@ export default function CRM() {
             </thead>
             <tbody className="text-[11px] font-bold">
               {paginated.length === 0 ? (
-                <tr><td colSpan={5} className="py-20 text-center opacity-40 uppercase tracking-widest font-black text-xs">Nenhum registro encontrado</td></tr>
+                <tr><td colSpan={6} className="py-20 text-center opacity-40 uppercase tracking-widest font-black text-xs">Nenhum registro encontrado</td></tr>
               ) : (
                 paginated.map(ent => (
                   <tr
@@ -296,142 +243,6 @@ export default function CRM() {
           </div>
         </div>
       </div>
-
-      <AnimatePresence>
-        {/* Profile Slide Panel */}
-        {selectedEntity && (
-          <div className="fixed inset-0 z-50 flex justify-end overflow-hidden">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedEntity(null)} className="absolute inset-0 bg-black/60 backdrop-blur-xs" />
-            <motion.form 
-              initial={{ x: '100%' }} 
-              animate={{ x: 0 }} 
-              exit={{ x: '100%' }} 
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }} 
-              onSubmit={handleUpdate}
-              className="w-full md:w-[500px] h-full bg-white shadow-2xl flex flex-col relative z-20"
-            >
-              <header className="px-8 py-6 border-b border-neutral-100 bg-neutral-50 shrink-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-primary text-white flex items-center justify-center font-black text-xl shadow-lg">
-                      {profileNome.substring(0, 2).toUpperCase()}
-                    </div>
-                    <div>
-                      <h2 className="text-sm font-black uppercase tracking-widest text-neutral-900">{profileNome}</h2>
-                      <p className="text-[10px] text-neutral-400 font-mono">Edição de Perfil</p>
-                    </div>
-                  </div>
-
-                  <button type="button" onClick={() => setSelectedEntity(null)} className="p-2 hover:bg-neutral-200 rounded-xl transition-colors">
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
-              </header>
-
-              <div className="flex-1 overflow-y-auto p-10 space-y-10">
-                {/* Form Section */}
-                <div className="space-y-6">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary flex items-center gap-2">
-                    <User className="w-4 h-4" /> Informações do Cadastro
-                  </h3>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">Nome / Razão Social</label>
-                      <input type="text" value={profileNome} onChange={(e) => setProfileNome(e.target.value)} className="w-full h-12 bg-neutral-50 border-2 border-neutral-100 rounded-2xl px-5 text-xs font-black outline-none focus:border-primary transition-all" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">CPF / CNPJ</label>
-                      <input type="text" value={profileDocumento} onChange={(e) => setProfileDocumento(maskCpfCnpj(e.target.value))} className="w-full h-12 bg-neutral-50 border-2 border-neutral-100 rounded-2xl px-5 text-xs font-black outline-none focus:border-primary transition-all font-mono" placeholder="000.000.000-00" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">Email Corporativo</label>
-                        <input type="email" value={profileEmail} onChange={(e) => setProfileEmail(e.target.value)} className="w-full h-12 bg-neutral-50 border-2 border-neutral-100 rounded-2xl px-5 text-xs font-black outline-none focus:border-primary transition-all" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">Telefone</label>
-                        <input type="text" value={profileTelefone} onChange={(e) => setProfileTelefone(maskPhone(e.target.value))} className="w-full h-12 bg-neutral-50 border-2 border-neutral-100 rounded-2xl px-5 text-xs font-black outline-none focus:border-primary transition-all" placeholder="(00) 00000-0000" />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">Status na Base</label>
-                      <select value={profileStatus} onChange={(e) => setProfileStatus(e.target.value as any)} className="w-full h-12 bg-neutral-50 border-2 border-neutral-100 rounded-2xl px-5 text-xs font-black outline-none cursor-pointer appearance-none">
-                        <option value="ativo">Ativo</option>
-                        <option value="inativo">Inativo</option>
-                        <option value="bpi">BPI (Baixado)</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Documents Section */}
-                <div className="space-y-6">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary flex items-center gap-2">
-                    <FileText className="w-4 h-4" /> Documentos Vinculados ({existingDocuments.length})
-                  </h3>
-                  <div className="space-y-2">
-                    {existingDocuments.length > 0 ? (
-                      existingDocuments.map((doc: any) => (
-                        <div key={doc.id} className="flex items-center justify-between p-4 bg-neutral-50 border-2 border-neutral-100 rounded-2xl group hover:border-primary/20 transition-all">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                              <FileText className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <p className="text-[10px] font-black uppercase tracking-tight text-neutral-900">{doc.nome}</p>
-                              <p className="text-[8px] text-neutral-400">{(doc.tamanho / 1024 / 1024).toFixed(2)} MB • PDF</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                            <a
-                              href={doc.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-2 hover:bg-white rounded-lg text-primary transition-all"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (confirm('Excluir este documento?')) {
-                                  const path = doc.url.split('documents/')[1];
-                                  deleteDocument({ id: doc.id, path });
-                                }
-                              }}
-                              className="p-2 hover:bg-white rounded-lg text-alert-red transition-all"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="p-8 text-center bg-neutral-50 border-2 border-dashed border-neutral-200 rounded-3xl">
-                        <FileText className="w-8 h-8 mx-auto text-neutral-300 mb-2" />
-                        <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Nenhum documento anexado</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-
-              <footer className="px-10 py-8 border-t border-neutral-100 bg-neutral-50/50 flex justify-end gap-3 shrink-0">
-                <button type="button" onClick={() => setSelectedEntity(null)} className="px-6 py-2 font-black text-[10px] uppercase tracking-widest text-neutral-400 hover:text-neutral-900 transition-colors">Cancelar</button>
-                <Button type="submit">
-                  Atualizar
-                  <CheckCircle2 className="w-4 h-4" />
-                </Button>
-              </footer>
-
-            </motion.form>
-          </div>
-        )}
-
-        {/* Create Modal - Handled by global CadastroRapidoModal */}
-      </AnimatePresence>
     </div>
   );
 }

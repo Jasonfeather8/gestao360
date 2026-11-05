@@ -25,6 +25,14 @@ export interface EntidadeNegocio {
   telefone?: string;
   data_nascimento?: string;
   status_base?: 'ativo' | 'inativo' | 'bpi';
+  tipo_pessoa?: 'PF' | 'PJ';
+  cep?: string | null;
+  endereco?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
 }
 
 export interface CentroCusto {

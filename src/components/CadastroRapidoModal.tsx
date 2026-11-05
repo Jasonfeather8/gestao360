@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, 
@@ -11,10 +11,11 @@ import {
   Upload,
   Trash2,
   FileIcon,
+  Download,
   Search
 } from 'lucide-react';
 import { useUIStore } from '../store/uiStore';
-import { useEntidades } from '../hooks/useData';
+import { useEntidades, useEntidadeDocuments } from '../hooks/useData';
 import { supabase } from '@/integrations/supabase/client';
 import Button from './Button';
 import { podeSalvarNome } from '../utils/validacaoNomes';
@@ -34,16 +35,37 @@ export default function CadastroRapidoModal() {
     setModalOpen,
     entidadeFormDraft,
     setEntidadeFormDraft,
+    entidadeEmEdicaoId,
+    setEntidadeEmEdicaoId,
     lancamentoFormDraft,
     setLancamentoFormDraft,
     resetEntidadeFormDraft
   } = useUIStore();
-  
-  const { data: entidades = [], createEntity } = useEntidades();
+
+  const isEdicao = !!entidadeEmEdicaoId;
+  const { data: entidades = [], createEntity, updateEntity } = useEntidades();
+  const {
+    documents: existingDocuments,
+    deleteDocument,
+    refetch: refetchDocuments
+  } = useEntidadeDocuments(entidadeEmEdicaoId);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('dados');
   const [files, setFiles] = useState<LocalFile[]>([]);
   const [isSearchingCep, setIsSearchingCep] = useState(false);
+
+  // Ao fechar uma edição, descarta o rascunho que foi preenchido com os dados da
+  // entidade, para que um novo cadastro não comece com dados de outro registro.
+  const estavaAbertoRef = useRef(false);
+  useEffect(() => {
+    const estavaAberto = estavaAbertoRef.current;
+    estavaAbertoRef.current = isCadastroRapidoOpen;
+    if (!estavaAberto || isCadastroRapidoOpen || !entidadeEmEdicaoId) return;
+    setEntidadeEmEdicaoId(null);
+    resetEntidadeFormDraft();
+    setFiles([]);
+    setActiveTab('dados');
+  }, [isCadastroRapidoOpen, entidadeEmEdicaoId, setEntidadeEmEdicaoId, resetEntidadeFormDraft]);
 
   const maskCpfCnpj = (value: string) => {
     const v = value.replace(/\D/g, '');
@@ -107,14 +129,46 @@ export default function CadastroRapidoModal() {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const uploadFiles = async (entityId: string, userId?: string) => {
+    for (let i = 0; i < files.length; i++) {
+      const fileItem = files[i] as LocalFile;
+      const fileExt = fileItem.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `entidades/${entityId}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(filePath, fileItem.file);
+
+      if (uploadError) continue;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('documents')
+        .getPublicUrl(filePath);
+
+      await (supabase.from('entidade_documentos') as any).insert({
+        entidade_id: entityId,
+        nome: fileItem.name,
+        url: publicUrl,
+        tamanho: fileItem.size,
+        tipo_arquivo: fileItem.type,
+        user_id: userId
+      });
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!podeSalvarNome(entidadeFormDraft.nome_razao_social, entidades, { nomeDe: (entidade) => entidade.nome_razao_social, rotulo: 'cliente/fornecedor' })) return;
+    if (!podeSalvarNome(entidadeFormDraft.nome_razao_social, entidades, {
+      nomeDe: (entidade) => entidade.nome_razao_social,
+      ignorarId: entidadeEmEdicaoId,
+      rotulo: 'cliente/fornecedor'
+    })) return;
     setIsSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
-      const newEntityData = {
+
+      const entityData = {
         tipo: (entidadeFormDraft.tipo || 'cliente') as any,
         tipo_pessoa: entidadeFormDraft.tipo_pessoa,
         nome_razao_social: entidadeFormDraft.nome_razao_social,
@@ -128,40 +182,34 @@ export default function CadastroRapidoModal() {
         bairro: entidadeFormDraft.bairro || null,
         cidade: entidadeFormDraft.cidade || null,
         uf: entidadeFormDraft.uf || null,
+      };
+
+      if (isEdicao && entidadeEmEdicaoId) {
+        await updateEntity({
+          id: entidadeEmEdicaoId,
+          data: { ...entityData, status_base: entidadeFormDraft.status_base }
+        });
+
+        if (files.length > 0) {
+          await uploadFiles(entidadeEmEdicaoId, user?.id);
+          await refetchDocuments();
+        }
+
+        setFiles([]);
+        setActiveTab('dados');
+        setModalOpen('isCadastroRapidoOpen', false);
+        return;
+      }
+
+      const newEntity = await createEntity({
+        ...entityData,
         status_base: 'ativo',
         status_sincronizacao: true,
         user_id: user?.id
-      };
+      } as any);
 
-      const newEntity = await createEntity(newEntityData as any);
-
-      // Handle file uploads if any
       if (newEntity && files.length > 0) {
-        for (let i = 0; i < files.length; i++) {
-          const fileItem = files[i] as LocalFile;
-          const fileExt = fileItem.name.split('.').pop();
-          const fileName = `${Math.random()}.${fileExt}`;
-          const filePath = `entidades/${(newEntity as any).id}/${fileName}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from('documents')
-            .upload(filePath, fileItem.file);
-
-          if (!uploadError) {
-            const { data: { publicUrl } } = supabase.storage
-              .from('documents')
-              .getPublicUrl(filePath);
-
-            await (supabase.from('entidade_documentos') as any).insert({
-              entidade_id: (newEntity as any).id,
-              nome: fileItem.name,
-              url: publicUrl,
-              tamanho: fileItem.size,
-              tipo_arquivo: fileItem.type,
-              user_id: user?.id
-            });
-          }
-        }
+        await uploadFiles((newEntity as any).id, user?.id);
       }
 
       // Limpa apenas o rascunho da entidade: o rascunho do painel de lançamento
@@ -181,7 +229,9 @@ export default function CadastroRapidoModal() {
       setModalOpen('isCadastroRapidoOpen', false);
     } catch (err) {
       console.error(err);
-      alert('Erro ao criar entidade. Verifique se os campos estão corretos.');
+      alert(isEdicao
+        ? 'Erro ao salvar as alterações. Verifique se os campos estão corretos.'
+        : 'Erro ao criar entidade. Verifique se os campos estão corretos.');
     } finally {
       setIsSubmitting(false);
     }
@@ -202,7 +252,7 @@ export default function CadastroRapidoModal() {
             initial={{ scale: 0.9, opacity: 0 }} 
             animate={{ scale: 1, opacity: 1 }} 
             exit={{ scale: 0.9, opacity: 0 }} 
-            onSubmit={handleCreate}
+            onSubmit={handleSubmit}
             className="bg-white w-full max-w-[500px] rounded-3xl shadow-2xl border-2 border-neutral-100 flex flex-col relative z-20 overflow-hidden"
           >
             <header className="px-8 py-6 border-b border-neutral-100 flex justify-between items-center bg-neutral-50/50">
@@ -211,8 +261,8 @@ export default function CadastroRapidoModal() {
                   <UserPlus className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-black uppercase tracking-widest text-neutral-900">Cadastro do Colaborador</h2>
-                  <span className="text-[10px] font-black text-primary uppercase tracking-widest">Inserir Novo Registro Profissional</span>
+                  <h2 className="text-sm font-black uppercase tracking-widest text-neutral-900">{isEdicao ? 'Editar Cadastro' : 'Cadastro do Colaborador'}</h2>
+                  <span className="text-[10px] font-black text-primary uppercase tracking-widest">{isEdicao ? 'Atualizar Registro Existente' : 'Inserir Novo Registro Profissional'}</span>
                 </div>
               </div>
               <button type="button" onClick={() => setModalOpen('isCadastroRapidoOpen', false)} className="p-2 hover:bg-neutral-200 rounded-xl transition-colors">
@@ -308,6 +358,21 @@ export default function CadastroRapidoModal() {
                       placeholder={entidadeFormDraft.tipo_pessoa === 'PF' ? '000.000.000-00' : '00.000.000/0000-00'}
                     />
                   </div>
+
+                  {isEdicao && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">Status na Base</label>
+                      <select
+                        value={entidadeFormDraft.status_base}
+                        onChange={(e) => setEntidadeFormDraft({ status_base: e.target.value as any })}
+                        className="w-full h-12 bg-neutral-50 border-2 border-neutral-100 rounded-2xl px-5 text-xs font-black outline-none cursor-pointer appearance-none"
+                      >
+                        <option value="ativo">Ativo</option>
+                        <option value="inativo">Inativo</option>
+                        <option value="bpi">BPI (Baixado)</option>
+                      </select>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -425,6 +490,56 @@ export default function CadastroRapidoModal() {
 
               {activeTab === 'documentos' && (
                 <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+                  {isEdicao && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">Documentos Cadastrados ({existingDocuments.length})</label>
+                      <div className="space-y-2">
+                        {existingDocuments.length === 0 ? (
+                          <div className="p-6 text-center bg-neutral-50 border-2 border-dashed border-neutral-200 rounded-3xl">
+                            <FileText className="w-6 h-6 mx-auto text-neutral-300 mb-2" />
+                            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Nenhum documento anexado</p>
+                          </div>
+                        ) : (
+                          existingDocuments.map((doc: any) => (
+                            <div key={doc.id} className="flex items-center justify-between p-4 bg-neutral-50 border-2 border-neutral-100 rounded-2xl group hover:border-primary/30 transition-all">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center text-primary">
+                                  <FileText className="w-4 h-4" />
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-[11px] font-black text-neutral-900 truncate max-w-[200px]">{doc.nome}</span>
+                                  <span className="text-[9px] font-bold text-neutral-400">{(doc.tamanho / 1024).toFixed(1)} KB</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <a
+                                  href={doc.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-2 text-neutral-300 hover:text-primary transition-colors"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (confirm('Excluir este documento?')) {
+                                      const path = doc.url.split('documents/')[1];
+                                      deleteDocument({ id: doc.id, path });
+                                    }
+                                  }}
+                                  className="p-2 text-neutral-300 hover:text-alert-red transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">Carregar Documentos</label>
                     <div className="relative group cursor-pointer h-32 border-2 border-dashed border-neutral-200 rounded-3xl hover:border-primary transition-all flex flex-col items-center justify-center gap-3 text-secondary hover:text-primary bg-neutral-50/50">
@@ -443,7 +558,7 @@ export default function CadastroRapidoModal() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">Lista de Documentos ({files.length})</label>
+                    <label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">{isEdicao ? 'Documentos a Enviar' : 'Lista de Documentos'} ({files.length})</label>
                     <div className="space-y-2 min-h-[100px]">
                       {files.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-10 opacity-30">
@@ -488,7 +603,7 @@ export default function CadastroRapidoModal() {
               </button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                {isSubmitting ? 'Salvando...' : 'Adicionar Colaborador'}
+                {isSubmitting ? 'Salvando...' : isEdicao ? 'Salvar Alterações' : 'Adicionar Colaborador'}
               </Button>
             </footer>
           </motion.form>

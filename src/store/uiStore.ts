@@ -47,6 +47,8 @@ interface UIState {
   selectedLancamentoIdsForBatch: string[];
   selectedTransferenciaAprovacao: { id: string; rotulo: string } | null;
   selectedRecorrenciaAction: 'single' | 'all' | null;
+  // Entidade do CRM aberta para edição no modal de cadastro (null = novo cadastro)
+  entidadeEmEdicaoId: string | null;
 
   // Temp Draft states so users don't lose typed progress
   lancamentoFormDraft: {
@@ -92,6 +94,7 @@ interface UIState {
     bairro: string;
     cidade: string;
     uf: string;
+    status_base: 'ativo' | 'inativo' | 'bpi';
   };
 
   // Scroll locations to preserve context
@@ -103,7 +106,7 @@ interface UIState {
   setActiveConfigSubTab: (sub: 'equipe' | 'auditoria' | 'legacy') => void;
   setCurrentUserId: (id: string) => void;
   
-  setModalOpen: (modal: keyof Omit<UIState, 'theme' | 'activeTab' | 'activeConfigSubTab' | 'currentUserId' | 'scrollPositions' | 'selectedLancamentoIdForModal' | 'selectedLancamentoIdsForBatch' | 'selectedTransferenciaAprovacao' | 'selectedRecorrenciaAction' | 'lancamentoFormDraft' | 'lancamentoPreset' | 'conciliacaoPosLancamento' | 'baixaPreset' | 'avrPreset' | 'entidadeFormDraft' | 'setTheme' | 'setActiveTab' | 'setActiveConfigSubTab' | 'setCurrentUserId' | 'setModalOpen' | 'setSelectedLancamentoIdForModal' | 'setSelectedLancamentoIdsForBatch' | 'setSelectedTransferenciaAprovacao' | 'setSelectedRecorrenciaAction' | 'setLancamentoFormDraft' | 'setLancamentoPreset' | 'setConciliacaoPosLancamento' | 'setBaixaPreset' | 'setAvrPreset' | 'setEntidadeFormDraft' | 'setScrollPosition'>, value: boolean) => void;
+  setModalOpen: (modal: keyof Omit<UIState, 'theme' | 'activeTab' | 'activeConfigSubTab' | 'currentUserId' | 'scrollPositions' | 'selectedLancamentoIdForModal' | 'selectedLancamentoIdsForBatch' | 'selectedTransferenciaAprovacao' | 'selectedRecorrenciaAction' | 'entidadeEmEdicaoId' | 'lancamentoFormDraft' | 'lancamentoPreset' | 'conciliacaoPosLancamento' | 'baixaPreset' | 'avrPreset' | 'entidadeFormDraft' | 'setTheme' | 'setActiveTab' | 'setActiveConfigSubTab' | 'setCurrentUserId' | 'setModalOpen' | 'setSelectedLancamentoIdForModal' | 'setSelectedLancamentoIdsForBatch' | 'setSelectedTransferenciaAprovacao' | 'setSelectedRecorrenciaAction' | 'setEntidadeEmEdicaoId' | 'setLancamentoFormDraft' | 'setLancamentoPreset' | 'setConciliacaoPosLancamento' | 'setBaixaPreset' | 'setAvrPreset' | 'setEntidadeFormDraft' | 'setScrollPosition'>, value: boolean) => void;
   
   setSelectedLancamentoIdForModal: (id: string | null) => void;
   setSelectedLancamentoIdsForBatch: (ids: string[]) => void;
@@ -116,6 +119,7 @@ interface UIState {
   setBaixaPreset: (preset: { lancamentoId: string; dataPagamento: string; aprovarDepois: boolean } | null) => void;
   setAvrPreset: (preset: { lancamentoId: string; valor: string } | null) => void;
   setEntidadeFormDraft: (draft: Partial<UIState['entidadeFormDraft']>) => void;
+  setEntidadeEmEdicaoId: (id: string | null) => void;
   setScrollPosition: (key: string, position: number) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   resetLancamentoFormDraft: () => void;
@@ -166,6 +170,7 @@ const initialDrafts = {
     bairro: '',
     cidade: '',
     uf: '',
+    status_base: 'ativo' as const,
   }
 };
 
@@ -200,6 +205,7 @@ export const useUIStore = create<UIState>()(
       selectedTransferenciaAprovacao: null,
 
       selectedRecorrenciaAction: null,
+      entidadeEmEdicaoId: null,
 
       lancamentoFormDraft: initialDrafts.lancamentoFormDraft,
       entidadeFormDraft: initialDrafts.entidadeFormDraft,
@@ -228,6 +234,8 @@ export const useUIStore = create<UIState>()(
       setEntidadeFormDraft: (draft) => set((state) => ({
         entidadeFormDraft: { ...state.entidadeFormDraft, ...draft }
       })),
+
+      setEntidadeEmEdicaoId: (entidadeEmEdicaoId) => set({ entidadeEmEdicaoId }),
       
       setScrollPosition: (key, position) => set((state) => ({
         scrollPositions: { ...state.scrollPositions, [key]: position }
@@ -245,7 +253,8 @@ export const useUIStore = create<UIState>()(
 
       resetAllDrafts: () => set({
         lancamentoFormDraft: { ...initialDrafts.lancamentoFormDraft },
-        entidadeFormDraft: { ...initialDrafts.entidadeFormDraft }
+        entidadeFormDraft: { ...initialDrafts.entidadeFormDraft },
+        entidadeEmEdicaoId: null
       })
     }),
     {
