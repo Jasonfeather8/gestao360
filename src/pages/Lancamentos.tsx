@@ -584,16 +584,18 @@ export default function Lancamentos({
       const acrescimo = calculateAdjustmentAmount(item.acrescimo_valor, item.acrescimo_tipo, item.valor_previsto);
       const valorPago = item.valor_recebido || 0;
       const hasDocumentCode = item.codigo_sequencial != null;
+      // Totais assinados pela natureza do fluxo: entradas somam e saídas subtraem.
+      const sinal = item.tipo === 'entrada' ? 1 : -1;
 
       if (!hasDocumentCode || !operationalDocumentCodes.has(item.codigo_sequencial)) {
-        totals.valorDocOriginal += item.valor_original || item.valor_previsto;
+        totals.valorDocOriginal += sinal * (item.valor_original || item.valor_previsto);
         if (hasDocumentCode) operationalDocumentCodes.add(item.codigo_sequencial);
       }
-      totals.valorParcOriginal += item.valor_previsto;
-      totals.desconto += desconto;
-      totals.acrescimo += acrescimo;
-      totals.valorPago += valorPago;
-      totals.aPagar += Math.max(0, item.valor_previsto - desconto + acrescimo - valorPago);
+      totals.valorParcOriginal += sinal * item.valor_previsto;
+      totals.desconto += sinal * desconto;
+      totals.acrescimo += sinal * acrescimo;
+      totals.valorPago += sinal * valorPago;
+      totals.aPagar += sinal * Math.max(0, item.valor_previsto - desconto + acrescimo - valorPago);
       return totals;
     },
     { valorDocOriginal: 0, valorParcOriginal: 0, desconto: 0, acrescimo: 0, valorPago: 0, aPagar: 0 }
@@ -610,7 +612,8 @@ export default function Lancamentos({
       totals.desconto += desconto;
       totals.acrescimo += acrescimo;
       totals.valorPago += valorPago;
-      totals.liquido += liquido;
+      // O Total é líquido: entradas somam e saídas subtraem.
+      totals.liquido += item.tipo === 'entrada' ? liquido : -liquido;
       totals.aPagar += Math.max(0, item.valor_previsto - desconto + acrescimo - valorPago);
       if (item.tipo === 'entrada') totals.entradas += liquido;
       if (item.tipo === 'saida') totals.saidas += liquido;
