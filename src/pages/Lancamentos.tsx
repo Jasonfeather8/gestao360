@@ -89,6 +89,9 @@ export default function Lancamentos({
 
   const isMaster = role === 'master';
   const isColaborador = role === 'colaborador';
+  // Master e Gerente podem marcar títulos na listagem (relatório em PDF do filtro);
+  // a aprovação em lote continua exclusiva do Master.
+  const podeSelecionarLancamentos = role === 'master' || role === 'gerente';
   const isFinanceiroView = !typeOverride && !titleOverride;
   const isOperationalView = !!typeOverride;
 
@@ -480,7 +483,7 @@ export default function Lancamentos({
   };
 
   const toggleSelectAll = () => {
-    if (!isMaster) return;
+    if (!podeSelecionarLancamentos) return;
     if (selectedLancamentoIdsForBatch.length === selectableLancamentos.length) {
       setSelectedLancamentoIdsForBatch([]);
     } else {
@@ -489,7 +492,7 @@ export default function Lancamentos({
   };
 
   const toggleSelectOne = (id: string) => {
-    if (!isMaster) return;
+    if (!podeSelecionarLancamentos) return;
     setSelectedLancamentoIdsForBatch(
       selectedLancamentoIdsForBatch.includes(id)
         ? selectedLancamentoIdsForBatch.filter(i => i !== id)
@@ -1105,7 +1108,7 @@ export default function Lancamentos({
             <thead>
               <tr className="bg-neutral-50/50 text-neutral-400 border-b border-neutral-100 text-[9px] font-black uppercase tracking-widest select-none">
                 <th className="py-5 px-4 w-10 text-center">
-                  {isMaster && selectableLancamentos.length > 0 && (
+                  {podeSelecionarLancamentos && selectableLancamentos.length > 0 && (
                     <input
                       type="checkbox"
                       checked={selectedLancamentoIdsForBatch.length === selectableLancamentos.length}
@@ -1175,7 +1178,7 @@ export default function Lancamentos({
                       className={`border-b border-neutral-50 hover:bg-neutral-50/50 transition-all cursor-pointer group ${isSelected ? 'bg-primary/5 border-primary/10' : ''}`}
                     >
                       <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        {isMaster && !isTransferenciaEspelho && (
+                        {podeSelecionarLancamentos && !isTransferenciaEspelho && (
                           <input
                             type="checkbox"
                             checked={isSelected}
