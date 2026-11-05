@@ -90,14 +90,18 @@ export default function AccountFilterCards({
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-between pt-1 border-t border-neutral-100">
-                    <span className={`text-[9px] font-black uppercase tracking-tighter flex items-center gap-1 ${isMaster ? 'text-bank-truth-green' : 'text-neutral-400'}`}>
-                      <ShieldCheck className="w-3 h-3" /> {isMaster ? 'Confirmado' : 'Real (Master)'}
-                    </span>
-                    <p className={`text-[11px] font-black font-mono ${isMaster ? 'text-bank-truth-green' : 'text-neutral-400'}`}>
-                      {valueFormatter(acc.auditadoBalance || 0)}
-                    </p>
-                  </div>
+                  {/* Saldo Master (confirmado) só é visível para o perfil Master;
+                      os demais perfis veem apenas o saldo Operacional. */}
+                  {isMaster && (
+                    <div className="flex items-center justify-between pt-1 border-t border-neutral-100">
+                      <span className="text-[9px] font-black uppercase tracking-tighter flex items-center gap-1 text-bank-truth-green">
+                        <ShieldCheck className="w-3 h-3" /> Confirmado
+                      </span>
+                      <p className="text-[11px] font-black font-mono text-bank-truth-green">
+                        {valueFormatter(acc.auditadoBalance || 0)}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
