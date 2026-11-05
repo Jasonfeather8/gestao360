@@ -416,7 +416,7 @@ export default function Conciliacao() {
   const resumoTiles = resultado ? [
     { label: 'Entradas no extrato', valor: moeda.format(resultado.resumo.totalEntradas), cor: 'text-bank-truth-green' },
     { label: 'Saídas no extrato', valor: moeda.format(resultado.resumo.totalSaidas), cor: 'text-alert-red' },
-    { label: 'Conciliados', valor: resultado.resumo.conciliados, cor: 'text-bank-truth-green' },
+    { label: 'Pares sugeridos', valor: resultado.resumo.conciliados, cor: 'text-bank-truth-green' },
     { label: 'Divergentes', valor: resultado.resumo.divergentes, cor: 'text-alert-red' },
     { label: 'Falta no ERP', valor: resultado.resumo.pendentesBanco, cor: 'text-pending-amber' },
     { label: 'Falta no extrato', valor: resultado.resumo.pendentesErp, cor: 'text-bpi-blue' },
@@ -494,7 +494,12 @@ export default function Conciliacao() {
           <motion.div key="extrato-carregado" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5">
             {resultado && extrato.linhas.length > 0 && (() => {
               const totalLinhas = extrato.linhas.length;
-              const percentual = Math.min(100, Math.round((resultado.resumo.conciliados / totalLinhas) * 100));
+              // O progresso acompanha a conciliação de verdade: conta apenas as linhas do extrato
+              // já vinculadas a um lançamento do ERP. Linhas sem transação persistida não são conciliáveis.
+              const linhasConciliaveis = extrato.linhas.filter((linha) => Boolean(linha.transacaoBancoId)).length;
+              const linhasConciliadas = extrato.linhas.filter((linha) => Boolean(linha.transacaoBancoId && statusConciliacao[linha.transacaoBancoId])).length;
+              const linhasNaoConciliaveis = totalLinhas - linhasConciliaveis;
+              const percentual = linhasConciliaveis > 0 ? Math.min(100, Math.round((linhasConciliadas / linhasConciliaveis) * 100)) : 0;
               return (
                 <section className="sticky top-0 z-30 rounded-2xl border border-surface-border bg-white/95 px-4 py-3 shadow-sm backdrop-blur dark:bg-surface/95">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -503,10 +508,17 @@ export default function Conciliacao() {
                       <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-container-low">
                         <div className="h-full bg-bank-truth-green transition-all" style={{ width: `${percentual}%` }} />
                       </div>
-                      <span className="shrink-0 text-xs text-on-surface-variant">{resultado.resumo.conciliados} de {totalLinhas} linhas</span>
+                      <span
+                        className="shrink-0 text-xs text-on-surface-variant"
+                        title={linhasNaoConciliaveis > 0 ? `${linhasNaoConciliaveis} linha(s) do extrato não fazem parte da conciliação persistida e não podem ser conciliadas.` : undefined}
+                      >
+                        {linhasConciliadas} de {linhasConciliaveis} linhas conciliáveis
+                      </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold">
-                      <span className="text-bank-truth-green">{resultado.resumo.conciliados} conciliados</span>
+                      <span className="text-bank-truth-green">{linhasConciliadas} conciliados</span>
+                      <span className="font-semibold text-on-surface-variant">Comparação:</span>
+                      <span className="text-on-surface-variant">{resultado.resumo.conciliados} pares sugeridos</span>
                       <span className="text-alert-red">{resultado.resumo.divergentes} divergentes</span>
                       <span className="text-pending-amber">{resultado.resumo.pendentesBanco} falta no ERP</span>
                       <span className="text-bpi-blue">{resultado.resumo.pendentesErp} falta no extrato</span>
