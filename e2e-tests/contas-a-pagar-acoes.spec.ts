@@ -13,6 +13,8 @@ import {
   payPartially,
   readOperationalBalance,
   rowWithAmount,
+  searchField,
+  uniqueMarker,
 } from "./fixtures/contas-a-pagar";
 
 test.setTimeout(120_000);
@@ -46,9 +48,10 @@ test("Master exclui um título pelo menu de ações", async ({ page }) => {
   await expect(row).toHaveCount(0, { timeout: 30_000 });
 });
 
-test("Master estorna um título baixado parcialmente e o saldo da conta volta", async ({ page }) => {
+test("Master estorna no Financeiro um título baixado parcialmente e o saldo da conta volta", async ({ page }) => {
   await openPayables(page);
-  const { bankName } = await createPayable(page, { amountDigits: "288200" });
+  const marcador = uniqueMarker("ESTORNO PARCIAL");
+  const { bankName } = await createPayable(page, { amountDigits: "288200", observacoes: marcador });
 
   const row = rowWithAmount(page, "2.882,00").first();
   await expect(row).toBeVisible({ timeout: 30_000 });
@@ -61,13 +64,28 @@ test("Master estorna um título baixado parcialmente e o saldo da conta volta", 
     { timeout: 30_000 },
   ).toBe(Math.round((saldoAntes - 800) * 100) / 100);
 
-  page.on("dialog", dialog => dialog.accept());
+  // Contas a Pagar não tem estorno: o menu ⋮ desta tela oferece AVR e Excluir.
   await row.getByTestId("lancamento-action-menu").click();
+  await expect(page.getByTestId("action-avr")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("action-excluir")).toBeVisible();
+  await expect(page.getByTestId("action-estornar")).toHaveCount(0);
+
+  // O estorno de um título já baixado é feito no Financeiro, pelo Master.
+  await page.goto("/lancamentos", { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await searchField(page).fill(marcador);
+  const linhaFinanceiro = rowWithAmount(page, "2.882,00").first();
+  await expect(linhaFinanceiro).toBeVisible({ timeout: 30_000 });
+  page.once("dialog", dialog => void dialog.accept());
+  await linhaFinanceiro.getByTestId("lancamento-action-menu").click();
   await page.getByTestId("action-estornar").click();
 
-  // O título volta aberto, com o valor inteiro e o saldo da conta restaurado.
-  await expect(row.getByText("Pago Parcial")).toHaveCount(0, { timeout: 30_000 });
-  await expect(row.getByRole("button", { name: /dar baixa/i })).toBeVisible();
+  // De volta a Contas a Pagar o título está aberto de novo e o saldo foi restaurado.
+  await openPayables(page);
+  await searchField(page).fill(marcador);
+  const rowAberto = rowWithAmount(page, "2.882,00").first();
+  await expect(rowAberto).toBeVisible({ timeout: 30_000 });
+  await expect(rowAberto.getByText("Pago Parcial")).toHaveCount(0, { timeout: 30_000 });
+  await expect(rowAberto.getByRole("button", { name: /dar baixa/i })).toBeVisible();
   await expect.poll(
     async () => Math.round((await readOperationalBalance(page, bankName)) * 100) / 100,
     { timeout: 30_000 },

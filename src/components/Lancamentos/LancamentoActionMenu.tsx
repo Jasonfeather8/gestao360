@@ -17,7 +17,10 @@ import { podeUsarAVR } from '../../config/permissions';
 
 interface LancamentoActionMenuProps {
   item: LancamentoFinanceiro;
-  isMaster: boolean;
+  /** Excluir o título (Master e Gerente). */
+  podeExcluir: boolean;
+  /** Estornar é ação do Financeiro e exclusiva do Master. */
+  podeEstornar: boolean;
   isActive: boolean;
   isOperationalView?: boolean;
   onToggle: () => void;
@@ -30,7 +33,8 @@ interface LancamentoActionMenuProps {
 
 export default function LancamentoActionMenu({
   item,
-  isMaster,
+  podeExcluir,
+  podeEstornar,
   isActive,
   isOperationalView = true,
   onToggle,
@@ -48,13 +52,13 @@ export default function LancamentoActionMenu({
   // Títulos gerados por transferência (saída, entrada e tarifa) pertencem à transferência:
   // não podem ser excluídos nem ter o valor ajustado por aqui, mas levam de volta à tela dela.
   const isTransferencia = Boolean(item.transferencia_id);
-  const podeEstornar = isMaster
+  const mostrarEstornar = podeEstornar
     && (item.status_pagamento === 'pago'
       || item.status_pagamento === 'pago_parcial'
       || item.status_pagamento === 'quitação_pendente'
       || item.status_pagamento === 'bpi');
   const mostrarAVR = !isTransferencia && isOperationalView && item.status_pagamento !== 'pago' && podeUsarAVR(role);
-  const mostrarExcluir = isMaster && !isTransferencia;
+  const mostrarExcluir = podeExcluir && !isTransferencia;
   const temAcoesDeCadastro = mostrarAVR || mostrarExcluir;
 
   return (
@@ -92,7 +96,7 @@ export default function LancamentoActionMenu({
           </a>
         )}
 
-        {podeEstornar && (
+        {mostrarEstornar && (
           <button
             onClick={() => onEstornar(item.id)}
             data-testid="action-estornar"

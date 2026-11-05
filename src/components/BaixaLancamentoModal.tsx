@@ -1183,7 +1183,7 @@ export default function BaixaLancamentoModal() {
                 </div>
                 </div>
 
-              {role === 'master' && !hasAnexo && (
+              {isGerenteOrMaster && !hasAnexo && (
                 <div className="flex items-start gap-3 p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
                   <div
                     data-testid="dispensar-comprovante"

@@ -93,6 +93,10 @@ export default function Lancamentos({
   // Master e Gerente podem marcar títulos na listagem (relatório em PDF do filtro);
   // a aprovação em lote continua exclusiva do Master.
   const podeSelecionarLancamentos = role === 'master' || role === 'gerente';
+  // Em Contas a Pagar/Receber o Gerente tem acesso total: excluir título é
+  // liberado para Master e Gerente. O estorno continua sendo ação do Financeiro,
+  // exclusiva do Master.
+  const podeExcluirTitulo = role === 'master' || role === 'gerente';
   const isFinanceiroView = !typeOverride && !titleOverride;
   const isOperationalView = !!typeOverride;
 
@@ -537,7 +541,7 @@ export default function Lancamentos({
   };
 
   const handleDelete = async (id: string) => {
-    if (!isMaster) return;
+    if (!podeExcluirTitulo) return;
     if (confirm('Excluir este lançamento permanentemente?')) {
       try {
         await deleteLancamento({ id });
@@ -1409,7 +1413,8 @@ export default function Lancamentos({
 
                           <LancamentoActionMenu
                             item={item}
-                            isMaster={isMaster}
+                            podeExcluir={podeExcluirTitulo}
+                            podeEstornar={isMaster && isFinanceiroView}
                             isActive={activeMenuId === item.id}
                             isOperationalView={isOperationalView}
                             onToggle={() => setActiveMenuId(activeMenuId === item.id ? null : item.id)}
