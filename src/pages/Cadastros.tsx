@@ -199,7 +199,7 @@ export default function Cadastros() {
     e.preventDefault();
     if (!podeSalvarNome<(typeof contas)[number]>(bankName, contas, { nomeDe: (conta) => conta.nome_banco || conta.nome, ignorarId: editingAccount?.id, rotulo: 'banco' })) return;
     try {
-      const saldo = parseFloat(bankInitial.replace(/\D/g, '')) / 100 || 0;
+      const saldo = parseFloat(bankInitial.replace(/\./g, '').replace(',', '.')) || 0;
       if (editingAccount) {
         await updateAccount({
           id: editingAccount.id,
@@ -622,6 +622,7 @@ export default function Cadastros() {
                   <MoneyInput
                     value={bankInitial}
                     onChange={setBankInitial}
+                    permitirNegativo={isMaster}
                     disabled={!isMaster && !!editingAccount}
                     className={`w-full h-12 bg-neutral-50 border-2 border-neutral-100 rounded-2xl px-5 text-xs font-black focus:border-primary outline-none ${(!isMaster && !!editingAccount) ? 'opacity-50 cursor-not-allowed' : ''}`}
                     placeholder="0,00"

@@ -3,6 +3,7 @@ import React, { useRef, useEffect } from 'react';
 interface MoneyInputProps {
   value: string;
   onChange: (value: string) => void;
+  permitirNegativo?: boolean;
   className?: string;
   placeholder?: string;
   required?: boolean;
@@ -12,20 +13,26 @@ interface MoneyInputProps {
   'aria-label'?: string;
 }
 
-export default function MoneyInput({ value, onChange, className, placeholder, required, autoFocus, disabled, id, 'aria-label': ariaLabel }: MoneyInputProps) {
+export default function MoneyInput({ value, onChange, permitirNegativo, className, placeholder, required, autoFocus, disabled, id, 'aria-label': ariaLabel }: MoneyInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const formatValue = (val: string) => {
+    // O sinal só é preservado quando o campo permite negativo; sem a opção o
+    // comportamento segue idêntico ao dos outros campos de dinheiro do sistema.
+    const negativo = !!permitirNegativo && val.trim().startsWith('-');
+
     // Remove non-digits
     const digits = val.replace(/\D/g, '');
-    if (!digits) return '';
-    
+    if (!digits) return negativo ? '-' : '';
+
     // Convert to number and format
     const number = parseInt(digits, 10) / 100;
-    return new Intl.NumberFormat('pt-BR', {
+    const formatado = new Intl.NumberFormat('pt-BR', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(number);
+
+    return negativo ? `-${formatado}` : formatado;
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,7 +67,7 @@ export default function MoneyInput({ value, onChange, className, placeholder, re
       required={required}
       autoFocus={autoFocus}
       disabled={disabled}
-      inputMode="numeric"
+      inputMode={permitirNegativo ? 'decimal' : 'numeric'}
     />
   );
 
