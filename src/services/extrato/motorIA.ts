@@ -323,7 +323,23 @@ export async function lerExtratoIA(
         };
       }
 
-      linhas.push(...mapearLinhas(data.linhas, loteAtual));
+      // Salvaguarda determinística: linha de saldo de investimento ("SALDO INVEST FÁCIL",
+      // "Saldos Invest Fácil / Plus") nunca é lançamento. Se a IA a classificar como
+      // lançamento, ela sai da comparação e fica registrada como ignorada, em vez de
+      // virar conciliação. Um crédito real de rendimento ("RENTAB.INVEST FACILCRED") não
+      // casa com este padrão.
+      for (const linha of mapearLinhas(data.linhas, loteAtual)) {
+        if (/saldo\s+invest/i.test(`${linha.descricao} ${linha.textoOriginal}`)) {
+          linhasIgnoradas.push({
+            pagina: linha.pagina,
+            texto: linha.textoOriginal || linha.descricao,
+            motivo: 'investimento',
+            data: linha.data,
+          });
+          continue;
+        }
+        linhas.push(linha);
+      }
       naoInterpretadas.push(...mapearDuvidosas(data.linhasDuvidosas));
       linhasIgnoradas.push(...mapearIgnoradas(data.linhasIgnoradas));
       tokensEntrada += valorNumero(data.uso?.tokensEntrada) ?? 0;

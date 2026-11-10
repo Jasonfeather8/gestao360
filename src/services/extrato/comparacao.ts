@@ -183,7 +183,9 @@ export function compararExtrato(
   const dias: DiaComparacao[] = [];
   const resumo = { ...vazio.resumo };
 
-  for (const data of Array.from(porDia.keys()).sort((a, b) => b.localeCompare(a))) {
+  // Ordem crescente: a conciliação acompanha o extrato de cima para baixo,
+  // começando pelo primeiro dia lido do arquivo.
+  for (const data of Array.from(porDia.keys()).sort((a, b) => a.localeCompare(b))) {
     const grupo = porDia.get(data)!;
     const entradas: ItemComparacao[] = [];
     const saidas: ItemComparacao[] = [];
