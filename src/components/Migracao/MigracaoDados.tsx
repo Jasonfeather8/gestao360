@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
-import { CheckCircle2, Clock3, FileSpreadsheet, LoaderCircle, RotateCcw, Upload } from 'lucide-react';
+import { CheckCircle2, Clock3, FileSpreadsheet, LoaderCircle, RotateCcw, Search, Upload } from 'lucide-react';
 import { useCategorias, useCentrosCusto, useContas, useDesfazerImportacao, useEntidades, useImportacoesDados } from '../../hooks/useData';
 import { useAuth } from '../../hooks/useAuth';
-import { chavesRepetidas, detectarColunas, importarLinhas, lerPlanilha, recalcularLinha, remontarLinhas } from '../../services/migracao';
+import { chavesRepetidas, detectarColunas, importarLinhas, lerPlanilha, LOTES_POR_PAGINA, recalcularLinha, remontarLinhas } from '../../services/migracao';
 import type { MigracaoEscolhasManuais } from '../../services/migracao';
+import type { OrigemDuplicata } from '../../services/migracao/duplicatas';
 import type { MigracaoCadastros, MigracaoCampo, MigracaoColunas, MigracaoLinha, PlanilhaMigracao } from '../../types';
 import { podeSalvarNome } from '../../utils/validacaoNomes';
 
@@ -41,7 +42,10 @@ export default function MigracaoDados() {
   const [colunas, setColunas] = useState<MigracaoColunas>({});
   const [naoReconhecidas, setNaoReconhecidas] = useState<string[]>([]);
   const [linhas, setLinhas] = useState<MigracaoLinha[]>([]);
-  const [duplicadosBanco, setDuplicadosBanco] = useState<number[]>([]);
+  const [duplicadosBanco, setDuplicadosBanco] = useState<Map<number, OrigemDuplicata | null>>(new Map());
+  const [buscaLotes, setBuscaLotes] = useState('');
+  const [buscaLotesAplicada, setBuscaLotesAplicada] = useState('');
+  const [paginaLotes, setPaginaLotes] = useState(0);
   const [lendo, setLendo] = useState(false);
   const [importando, setImportando] = useState(false);
   const [progresso, setProgresso] = useState(0);
@@ -54,10 +58,23 @@ export default function MigracaoDados() {
   const { data: categorias = [], createCategory } = useCategorias();
   const { data: centrosCusto = [], createCC } = useCentrosCusto();
   const { data: entidades = [], createEntity } = useEntidades();
-  const { data: lotes = [], isLoading: carregandoLotes } = useImportacoesDados();
+  const { data: lotesDados, isLoading: carregandoLotes } = useImportacoesDados({ busca: buscaLotesAplicada, pagina: paginaLotes });
+  const lotes = lotesDados?.itens ?? [];
+  const totalLotes = lotesDados?.total ?? 0;
+  const totalPaginasLotes = Math.max(1, Math.ceil(totalLotes / LOTES_POR_PAGINA));
   const desfazer = useDesfazerImportacao();
   const { user, hasRole } = useAuth();
+  const podeDesfazer = hasRole(['master', 'gerente']);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setBuscaLotesAplicada(buscaLotes.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [buscaLotes]);
+
+  useEffect(() => {
+    setPaginaLotes(0);
+  }, [buscaLotesAplicada]);
 
   const cadastros = useMemo<MigracaoCadastros>(() => ({
     contas: contas.filter((item) => !('status' in item) || item.status !== 'excluido').map((item) => ({ id: item.id, nome: item.nome })),
@@ -111,7 +128,6 @@ export default function MigracaoDados() {
       const repetidas = chavesRepetidas(reconstruidas.linhas);
       const linhasComEscolhas = reconstruidas.linhas.map((linha) => {
         const escolhas = escolhasDaLinha(linha);
-        if (Object.keys(escolhas).length === 0) return linha;
         return recalcularLinha(linha, cadastros, reconstruidas.duplicados, repetidas, escolhas);
       });
       setLinhas(linhasComEscolhas);
@@ -338,7 +354,23 @@ export default function MigracaoDados() {
           </div>
         </div>}
       </motion.section>
-      <section className="rounded-xl border border-surface-border bg-white p-5 dark:bg-surface"><header className="mb-4 flex items-center gap-2"><Clock3 className="h-4 w-4 text-secondary" /><h2 className="text-xs font-black uppercase tracking-widest text-secondary">Histórico de lotes</h2></header>{carregandoLotes ? <p className="text-sm text-on-surface-variant">Carregando histórico…</p> : lotes.length === 0 ? <p className="text-sm text-on-surface-variant">Nenhum lote de importação encontrado.</p> : <div className="space-y-2">{lotes.map((lote) => <div key={lote.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-surface-border p-3"><div className="min-w-48 flex-1"><p className="break-all text-sm font-bold text-on-surface">{lote.arquivo_nome ?? 'Arquivo sem nome'}</p><p className="mt-1 text-xs text-on-surface-variant">{new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(lote.created_at))} · {lote.importadas} importadas · {lote.erros} erros · {moeda.format(lote.valor_total)}</p><p className="mt-1 text-xs font-bold text-on-surface-variant">Status: {lote.status}</p></div><button type="button" disabled={lote.status === 'desfeita' || desfazer.isPending} onClick={() => void undo(lote.id)} className="inline-flex items-center gap-2 rounded-lg border border-alert-red/30 px-3 py-2 text-xs font-bold text-alert-red transition hover:bg-alert-red/10 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw className="h-3.5 w-3.5" />Desfazer</button></div>)}</div>}</section>
+      <section className="rounded-xl border border-surface-border bg-white p-5 dark:bg-surface">
+        <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-secondary" /><h2 className="text-xs font-black uppercase tracking-widest text-secondary">Histórico de lotes</h2></div>
+          <div className="relative">
+            <input aria-label="Buscar lote de importação" placeholder="Buscar por arquivo…" value={buscaLotes} onChange={(event) => setBuscaLotes(event.target.value)} className={`${classeCampo} w-56 pr-8`} />
+            <Search aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-secondary" />
+          </div>
+        </header>
+        {carregandoLotes ? <p className="text-sm text-on-surface-variant">Carregando histórico…</p> : lotes.length === 0 ? <p className="text-sm text-on-surface-variant">{buscaLotesAplicada.length >= 3 ? `Nenhum lote encontrado para "${buscaLotesAplicada}".` : 'Nenhum lote de importação encontrado.'}</p> : <div className="space-y-2">{lotes.map((lote) => <div key={lote.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-surface-border p-3"><div className="min-w-48 flex-1"><p className="break-all text-sm font-bold text-on-surface">{lote.arquivo_nome ?? 'Arquivo sem nome'}</p><p className="mt-1 text-xs text-on-surface-variant">{new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(lote.created_at))} · {lote.importadas} importadas · {lote.erros} erros · {moeda.format(lote.valor_total)}</p><p className="mt-1 text-xs font-bold text-on-surface-variant">Status: {lote.status}</p></div>{podeDesfazer && <button type="button" disabled={lote.status === 'desfeita' || desfazer.isPending} onClick={() => void undo(lote.id)} className="inline-flex items-center gap-2 rounded-lg border border-alert-red/30 px-3 py-2 text-xs font-bold text-alert-red transition hover:bg-alert-red/10 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw className="h-3.5 w-3.5" />Desfazer</button>}</div>)}</div>}
+        {totalLotes > 0 && <footer className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-on-surface-variant">
+          <span>Página {paginaLotes + 1} de {totalPaginasLotes} · {totalLotes} lote(s)</span>
+          {totalPaginasLotes > 1 && <div className="flex gap-2">
+            <button type="button" disabled={paginaLotes === 0} onClick={() => setPaginaLotes((pagina) => Math.max(0, pagina - 1))} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40">Anterior</button>
+            <button type="button" disabled={paginaLotes >= totalPaginasLotes - 1} onClick={() => setPaginaLotes((pagina) => Math.min(totalPaginasLotes - 1, pagina + 1))} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40">Próxima</button>
+          </div>}
+        </footer>}
+      </section>
     </div>
   );
 }

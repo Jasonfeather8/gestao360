@@ -3,8 +3,23 @@ import type { MigracaoCadastros, MigracaoColunas, MigracaoLinha } from '../../ty
 import { detectarColunas } from './colunas';
 import type { CelulaPlanilha } from './colunas';
 import { buscarDuplicatas } from './duplicatas';
+import type { ChaveDuplicata, OrigemDuplicata } from './duplicatas';
 import { lerPlanilha } from './leituraPlanilha';
 import { montarLinhas, montarObservacoes } from './montarLinhas';
+
+export const LOTES_POR_PAGINA = 6;
+
+function chavesDasLinhas(linhas: MigracaoLinha[]): ChaveDuplicata[] {
+  return linhas.map(linha => ({
+    indice: linha.linhaOrigem,
+    conta_id: linha.contaId,
+    vencimento: linha.vencimento,
+    valor: linha.valor,
+    observacoes: montarObservacoes(linha.descricao, linha.anotacoes),
+    categoria_id: linha.categoriaId,
+    centro_custo_id: linha.centroCustoId,
+  }));
+}
 
 const COLUNAS_ESSENCIAIS: { campo: keyof MigracaoColunas; rotulo: string }[] = [
   { campo: 'valor', rotulo: 'Valor' },
@@ -46,21 +61,13 @@ export async function prepararMigracao(
     colunas: deteccao.colunas,
     linhaCabecalho: deteccao.linhaCabecalho,
     cadastros,
-    duplicados: [],
+    duplicados: new Map(),
     nomesTipo: [planilha.nome, escolhida.nome],
   });
 
-  let duplicados: number[] = [];
+  let duplicados: Map<number, OrigemDuplicata | null> = new Map();
   try {
-    duplicados = await buscarDuplicatas(
-      preliminares.map(linha => ({
-        indice: linha.linhaOrigem,
-        conta_id: linha.contaId,
-        vencimento: linha.vencimento,
-        valor: linha.valor,
-        observacoes: montarObservacoes(linha.descricao, linha.anotacoes),
-      }))
-    );
+    duplicados = await buscarDuplicatas(chavesDasLinhas(preliminares));
   } catch {
     avisos.push('Não foi possível verificar duplicatas no banco agora. A importação segue disponível.');
   }
@@ -110,26 +117,18 @@ export async function remontarLinhas(entrada: {
   colunas: MigracaoColunas;
   cadastros: MigracaoCadastros;
   nomesTipo?: (string | null | undefined)[];
-}): Promise<{ linhas: MigracaoLinha[]; duplicados: number[]; avisos: string[] }> {
+}): Promise<{ linhas: MigracaoLinha[]; duplicados: Map<number, OrigemDuplicata | null>; avisos: string[] }> {
   const avisos: string[] = [];
   const ausentes = COLUNAS_ESSENCIAIS.filter(item => entrada.colunas[item.campo] === undefined);
   if (ausentes.length > 0) {
     avisos.push(`Colunas essenciais não encontradas na planilha: ${ausentes.map(item => item.rotulo).join(', ')}.`);
   }
 
-  const preliminares = montarLinhas({ ...entrada, duplicados: [] });
+  const preliminares = montarLinhas({ ...entrada, duplicados: new Map() });
 
-  let duplicados: number[] = [];
+  let duplicados: Map<number, OrigemDuplicata | null> = new Map();
   try {
-    duplicados = await buscarDuplicatas(
-      preliminares.map(linha => ({
-        indice: linha.linhaOrigem,
-        conta_id: linha.contaId,
-        vencimento: linha.vencimento,
-        valor: linha.valor,
-        observacoes: montarObservacoes(linha.descricao, linha.anotacoes),
-      }))
-    );
+    duplicados = await buscarDuplicatas(chavesDasLinhas(preliminares));
   } catch {
     avisos.push('Não foi possível verificar duplicatas no banco agora. A importação segue disponível.');
   }

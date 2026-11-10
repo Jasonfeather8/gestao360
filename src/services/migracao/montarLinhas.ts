@@ -1,6 +1,15 @@
 import type { MigracaoCadastros, MigracaoColunas, MigracaoLinha } from '../../types';
 import type { CelulaPlanilha } from './colunas';
+import type { OrigemDuplicata } from './duplicatas';
 import { normalizarChave, normalizarData, normalizarStatusRecebido, normalizarTexto, normalizarValor } from './normalizacao';
+
+const formatarDataDuplicata = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' });
+
+function dataDaOrigem(valor: string | null): string {
+  if (!valor) return '';
+  const data = new Date(valor);
+  return Number.isNaN(data.getTime()) ? '' : formatarDataDuplicata.format(data);
+}
 
 type CadastroSemelhanca = {
   id: string;
@@ -135,26 +144,34 @@ export function montarObservacoes(descricao: string, anotacoes: string): string 
 function chaveLinha(linha: MigracaoLinha): string | null {
   if (!linha.contaId || !linha.vencimento || linha.valor === null) return null;
   const observacoes = normalizarChave(montarObservacoes(linha.descricao, linha.anotacoes));
-  return `${linha.contaId}|${linha.vencimento}|${linha.valor.toFixed(2)}|${observacoes}`;
+  return `${linha.contaId}|${linha.vencimento}|${linha.valor.toFixed(2)}|${observacoes}|${linha.categoriaId ?? ''}|${linha.centroCustoId ?? ''}`;
 }
 
-/** Chaves que aparecem mais de uma vez dentro do próprio arquivo. */
-export function chavesRepetidas(linhas: MigracaoLinha[]): Set<string> {
-  const vistas = new Set<string>();
-  const repetidas = new Set<string>();
+/** Chaves repetidas no arquivo apontam para a primeira linha que as usou. */
+export function chavesRepetidas(linhas: MigracaoLinha[]): Map<string, number> {
+  const primeiras = new Map<string, number>();
+  const repetidas = new Map<string, number>();
   for (const linha of linhas) {
     const chave = chaveLinha(linha);
     if (!chave) continue;
-    if (vistas.has(chave)) repetidas.add(chave);
-    else vistas.add(chave);
+    if (!primeiras.has(chave)) primeiras.set(chave, linha.linhaOrigem);
+    else repetidas.set(chave, primeiras.get(chave)!);
   }
   return repetidas;
 }
 
-function descreverResultado(linha: MigracaoLinha, repetidaNoArquivo: boolean): string {
+function descreverResultado(linha: MigracaoLinha, repetida: number | null, origem: OrigemDuplicata | null): string {
   if (linha.situacao === 'cancelada') return 'Cancelado na planilha — não será importado';
   if (linha.situacao === 'duplicada') {
-    return repetidaNoArquivo ? 'Repetida dentro do arquivo' : 'Possível duplicata de lançamento já existente';
+    if (repetida !== null && repetida !== linha.linhaOrigem) {
+      return `Repetida dentro do arquivo — mesma combinação da linha ${repetida}`;
+    }
+    if (repetida === linha.linhaOrigem) return 'Repetida dentro do arquivo';
+    if (origem?.arquivo_nome) {
+      const data = dataDaOrigem(origem.importado_em);
+      return `Já importada em "${origem.arquivo_nome}"${data ? ` em ${data}` : ''}`;
+    }
+    return 'Lançamento já cadastrado no sistema';
   }
   if (linha.situacao === 'erro') return 'Não foi possível ler esta linha';
   if (linha.situacao === 'pendente') return linha.pendencias[0] ?? 'Pendência a revisar';
@@ -166,8 +183,8 @@ function descreverResultado(linha: MigracaoLinha, repetidaNoArquivo: boolean): s
 function avaliar(
   linha: MigracaoLinha,
   indices: IndicesCadastros,
-  duplicados: Set<number>,
-  repetidas: Set<string>,
+  duplicados: Map<number, OrigemDuplicata | null>,
+  repetidas: Map<string, number>,
   escolhasManuais: MigracaoEscolhasManuais = {}
 ): MigracaoLinha {
   const atualizada: MigracaoLinha = { ...linha };
@@ -204,15 +221,16 @@ function avaliar(
   atualizada.pendencias = pendencias;
 
   const chave = chaveLinha(atualizada);
-  const repetidaNoArquivo = !!chave && repetidas.has(chave);
+  const repetida = chave ? repetidas.get(chave) ?? null : null;
+  const origem = duplicados.get(atualizada.linhaOrigem) ?? null;
   const duplicadaNoBanco = duplicados.has(atualizada.linhaOrigem);
 
   if (atualizada.statusPlanilha === 'cancelado') atualizada.situacao = 'cancelada';
-  else if (repetidaNoArquivo || duplicadaNoBanco) atualizada.situacao = 'duplicada';
+  else if (repetida !== null || duplicadaNoBanco) atualizada.situacao = 'duplicada';
   else if (pendencias.length > 0) atualizada.situacao = 'pendente';
   else atualizada.situacao = 'pronta';
 
-  atualizada.resultadoPrevisto = descreverResultado(atualizada, repetidaNoArquivo);
+  atualizada.resultadoPrevisto = descreverResultado(atualizada, repetida, origem);
   // Só a linha "Pronta" (Resultado Previsto verde) pode ser incluída na importação.
   if (atualizada.situacao !== 'pronta') {
     atualizada.incluir = false;
@@ -229,8 +247,8 @@ function montarLinha(
   numeroLinha: number,
   colunas: MigracaoColunas,
   indices: IndicesCadastros,
-  duplicados: Set<number>,
-  repetidas: Set<string>,
+  duplicados: Map<number, OrigemDuplicata | null>,
+  repetidas: Map<string, number>,
   tipoSugerido: 'entrada' | 'saida' | null
 ): MigracaoLinha {
   const ler = (campo: keyof MigracaoColunas): CelulaPlanilha => {
@@ -279,21 +297,20 @@ export function montarLinhas(entrada: {
   colunas: MigracaoColunas;
   linhaCabecalho: number;
   cadastros: MigracaoCadastros;
-  duplicados: number[];
+  duplicados: Map<number, OrigemDuplicata | null>;
   nomesTipo?: (string | null | undefined)[];
 }): MigracaoLinha[] {
   const { linhas, colunas, linhaCabecalho, cadastros, duplicados } = entrada;
   const tipoSugerido = sugerirTipoPorNomes(entrada.nomesTipo ?? []);
   const indices = indexarCadastros(cadastros);
-  const conjuntoDuplicados = new Set(duplicados);
-  const repetidas = new Set<string>();
+  const repetidas = new Map<string, number>();
   const resultado: MigracaoLinha[] = [];
 
   for (let i = linhaCabecalho + 1; i < linhas.length; i += 1) {
     const celulas = linhas[i] ?? [];
     const vazia = celulas.every(celula => celula === null || normalizarTexto(celula) === '');
     if (vazia) continue;
-    resultado.push(montarLinha(celulas, i + 1, colunas, indices, conjuntoDuplicados, repetidas, tipoSugerido));
+    resultado.push(montarLinha(celulas, i + 1, colunas, indices, duplicados, repetidas, tipoSugerido));
   }
 
   return resultado;
@@ -303,9 +320,9 @@ export function montarLinhas(entrada: {
 export function recalcularLinha(
   linha: MigracaoLinha,
   cadastros: MigracaoCadastros,
-  duplicados: number[],
-  repetidasArquivo: Set<string> = new Set(),
+  duplicados: Map<number, OrigemDuplicata | null>,
+  repetidasArquivo: Map<string, number> = new Map(),
   escolhasManuais: MigracaoEscolhasManuais = {}
 ): MigracaoLinha {
-  return avaliar(linha, indexarCadastros(cadastros), new Set(duplicados), repetidasArquivo, escolhasManuais);
+  return avaliar(linha, indexarCadastros(cadastros), duplicados, repetidasArquivo, escolhasManuais);
 }

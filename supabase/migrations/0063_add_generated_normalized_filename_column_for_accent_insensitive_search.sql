@@ -1,0 +1,1 @@
+ALTER TABLE public.importacoes_dados ADD COLUMN IF NOT EXISTS arquivo_nome_busca text GENERATED ALWAYS AS (public.normalizar_nome(arquivo_nome)) STORED

@@ -6,7 +6,8 @@ import { DashboardIndicadores, DashboardPerformance, DashboardStats, ImportacaoD
 import type { TransferenciaBancaria, TransferenciaCandidataLinha } from '../types';
 import type { CriarTransferenciaParams } from '../services/transferenciasService';
 import { transferenciasService } from '../services/transferenciasService';
-import { desfazerImportacao } from '../services/migracao';
+import { desfazerImportacao, LOTES_POR_PAGINA } from '../services/migracao';
+import { normalizarChave } from '../services/migracao/normalizacao';
 import { entidadesService } from '../services/entidadesService';
 import { centrosCustoService } from '../services/centrosCustoService';
 import { categoriasService } from '../services/categoriasService';
@@ -576,21 +577,26 @@ export function useDashboardPerformance(inicio?: string | null, fim?: string | n
   });
 }
 
-export function useImportacoesDados() {
+export function useImportacoesDados(opcoes: { busca?: string; pagina?: number } = {}) {
   const { user } = useAuth();
+  const pagina = opcoes.pagina ?? 0;
+  const termo = normalizarChave(opcoes.busca ?? '').replace(/[%_\\]/g, '');
 
   return useQuery({
-    queryKey: ['importacoesDados', user?.id],
-    queryFn: async (): Promise<ImportacaoDados[]> => {
-      const { data, error } = await supabase
+    queryKey: ['importacoesDados', user?.id, opcoes.busca, pagina],
+    queryFn: async (): Promise<{ itens: ImportacaoDados[]; total: number }> => {
+      let query = supabase
         .from('importacoes_dados')
-        .select('*')
+        .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
-        .limit(50);
+        .range(pagina * LOTES_POR_PAGINA, pagina * LOTES_POR_PAGINA + LOTES_POR_PAGINA - 1);
+      if (termo.length >= 3) query = query.ilike('arquivo_nome_busca', `%${termo}%`);
+      const { data, count, error } = await query;
       if (error) throw error;
-      return (data ?? []) as ImportacaoDados[];
+      return { itens: (data ?? []) as ImportacaoDados[], total: count ?? 0 };
     },
     enabled: !!user?.id,
+    placeholderData: keepPreviousData,
   });
 }
 
