@@ -163,18 +163,15 @@ export function chavesRepetidas(linhas: MigracaoLinha[]): Map<string, number> {
 function descreverResultado(linha: MigracaoLinha, repetida: number | null, origem: OrigemDuplicata | null): string {
   if (linha.situacao === 'cancelada') return 'Cancelado na planilha — não será importado';
   if (linha.situacao === 'duplicada') {
-    let motivo: string;
     if (repetida !== null && repetida !== linha.linhaOrigem) {
-      motivo = `Repetida dentro do arquivo — mesma combinação da linha ${repetida}`;
-    } else if (repetida === linha.linhaOrigem) {
-      motivo = 'Repetida dentro do arquivo';
-    } else if (origem?.arquivo_nome) {
-      const data = dataDaOrigem(origem.importado_em);
-      motivo = `Já importada em "${origem.arquivo_nome}"${data ? ` em ${data}` : ''}`;
-    } else {
-      motivo = 'Lançamento já cadastrado no sistema';
+      return `Repetida dentro do arquivo — mesma combinação da linha ${repetida}`;
     }
-    return linha.duplicataAutorizada ? `${motivo} · autorizada para lançamento` : motivo;
+    if (repetida === linha.linhaOrigem) return 'Repetida dentro do arquivo';
+    if (origem?.arquivo_nome) {
+      const data = dataDaOrigem(origem.importado_em);
+      return `Já importada em "${origem.arquivo_nome}"${data ? ` em ${data}` : ''}`;
+    }
+    return 'Lançamento já cadastrado no sistema';
   }
   if (linha.situacao === 'erro') return 'Não foi possível ler esta linha';
   if (linha.situacao === 'pendente') return linha.pendencias[0] ?? 'Pendência a revisar';

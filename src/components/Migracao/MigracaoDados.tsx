@@ -301,6 +301,10 @@ export default function MigracaoDados() {
   const linhasVisiveis = somentePendencias ? linhas.filter((linha) => linha.situacao === 'pendente') : linhas;
   const labelSituacao: Record<string, string> = { pronta: 'Pronta', pendente: 'Pendente', duplicada: 'Duplicada', cancelada: 'Cancelada', erro: 'Erro' };
   const corSituacao: Record<string, string> = { pronta: 'text-bank-truth-green', pendente: 'text-pending-amber', duplicada: 'text-alert-red', cancelada: 'text-secondary', erro: 'text-alert-red' };
+  /** Duplicata que o operador autorizou deixa de ser alerta: vira confirmação verde. */
+  const autorizadaPeloOperador = (linha: MigracaoLinha) => linha.situacao === 'duplicada' && linha.duplicataAutorizada === true;
+  const rotuloSituacao = (linha: MigracaoLinha) => autorizadaPeloOperador(linha) ? 'Autorizada' : labelSituacao[linha.situacao];
+  const corSituacaoLinha = (linha: MigracaoLinha) => autorizadaPeloOperador(linha) ? 'text-bank-truth-green' : corSituacao[linha.situacao];
 
   return (
     <div className="space-y-5">
@@ -334,7 +338,7 @@ export default function MigracaoDados() {
                 return <tr key={linha.id} className={`border-t border-surface-border ${pendente ? 'bg-pending-amber/5' : ''}`}>
                   <td className="px-3 py-3"><label className="flex items-center gap-2 text-xs font-semibold text-on-surface"><input aria-label={`Incluir linha ${linha.linhaOrigem}`} type="checkbox" checked={linha.incluir} disabled={!podeIncluir(linha)} onChange={(event) => atualizarLinha(linha.id, { incluir: event.target.checked, incluirManual: true })} className="h-4 w-4 accent-primary focus-visible:ring-2 focus-visible:ring-primary" />Incluir</label></td>
                   <td className="px-3 py-3 text-on-surface">{linha.linhaOrigem}</td>
-                  <td className={`px-3 py-3 font-bold ${corSituacao[linha.situacao]}`}>{labelSituacao[linha.situacao]}</td>
+                  <td className={`px-3 py-3 font-bold ${corSituacaoLinha(linha)}`}>{rotuloSituacao(linha)}</td>
                   <td className="px-3 py-3"><input aria-label={`Valor da linha ${linha.linhaOrigem}`} type="number" min="0" step="0.01" value={linha.valor ?? ''} onChange={(event) => { const valor = event.target.value === '' ? null : Math.abs(Number(event.target.value)); atualizarLinha(linha.id, { valor }); }} className={`${classeCampo} w-28 ${pendente && linha.valor === null ? 'border-pending-amber ring-1 ring-pending-amber' : ''}`} /></td>
                   <td className="px-3 py-3"><select aria-label={`Entrada ou saída da linha ${linha.linhaOrigem}`} value={linha.tipo ?? ''} onChange={(event) => { const tipo = event.target.value as 'entrada' | 'saida' | ''; registrarEscolha(linha, 'tipo', tipo); atualizarLinha(linha.id, { tipo: tipo || null }); }} className={`${classeCampo} w-24 ${pendente && !linha.tipo ? 'border-pending-amber ring-1 ring-pending-amber' : ''}`}><option value="">Definir…</option><option value="entrada">Entrada</option><option value="saida">Saída</option></select></td>
                   <td className="px-3 py-3"><input aria-label={`Data de vencimento da linha ${linha.linhaOrigem}`} type="date" value={linha.vencimento ?? ''} onChange={(event) => atualizarLinha(linha.id, { vencimento: event.target.value || null })} className={`${classeCampo} w-36 ${pendente && !linha.vencimento ? 'border-pending-amber ring-1 ring-pending-amber' : ''}`} /></td>
@@ -363,7 +367,14 @@ export default function MigracaoDados() {
                     </div></td>;
                   })}
                   <td className="max-w-52 px-3 py-3 text-on-surface-variant">{linha.descricao || '—'}</td>
-                  <td className={`max-w-64 px-3 py-3 font-semibold ${corSituacao[linha.situacao]}`}><p>{linha.resultadoPrevisto}</p>{linha.situacao === 'duplicada' && <button type="button" disabled={importando || remapeando} onClick={() => autorizarDuplicata(linha, !linha.duplicataAutorizada)} className="mt-1 text-left text-[10px] font-bold text-primary underline disabled:opacity-40">{linha.duplicataAutorizada ? 'Remover autorização' : 'Lançar mesmo assim'}</button>}</td>
+                  <td className={`max-w-64 px-3 py-3 font-semibold ${corSituacaoLinha(linha)}`}>
+                    {linha.situacao !== 'duplicada' && <p>{linha.resultadoPrevisto}</p>}
+                    {linha.situacao === 'duplicada' && <>
+                      {linha.duplicataAutorizada && <p className="flex items-start gap-1 font-bold text-bank-truth-green"><CheckCircle2 aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>Autorizada para lançamento</span></p>}
+                      <p className={linha.duplicataAutorizada ? 'mt-1 text-[10px] font-medium text-on-surface-variant' : ''}>{linha.resultadoPrevisto}</p>
+                      <button type="button" disabled={importando || remapeando} onClick={() => autorizarDuplicata(linha, !linha.duplicataAutorizada)} className="mt-1 text-left text-[10px] font-bold text-primary underline disabled:opacity-40">{linha.duplicataAutorizada ? 'Remover autorização' : 'Lançar mesmo assim'}</button>
+                    </>}
+                  </td>
                 </tr>;
               })}</tbody>
             </table>
