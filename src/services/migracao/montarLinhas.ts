@@ -163,15 +163,18 @@ export function chavesRepetidas(linhas: MigracaoLinha[]): Map<string, number> {
 function descreverResultado(linha: MigracaoLinha, repetida: number | null, origem: OrigemDuplicata | null): string {
   if (linha.situacao === 'cancelada') return 'Cancelado na planilha — não será importado';
   if (linha.situacao === 'duplicada') {
+    let motivo: string;
     if (repetida !== null && repetida !== linha.linhaOrigem) {
-      return `Repetida dentro do arquivo — mesma combinação da linha ${repetida}`;
-    }
-    if (repetida === linha.linhaOrigem) return 'Repetida dentro do arquivo';
-    if (origem?.arquivo_nome) {
+      motivo = `Repetida dentro do arquivo — mesma combinação da linha ${repetida}`;
+    } else if (repetida === linha.linhaOrigem) {
+      motivo = 'Repetida dentro do arquivo';
+    } else if (origem?.arquivo_nome) {
       const data = dataDaOrigem(origem.importado_em);
-      return `Já importada em "${origem.arquivo_nome}"${data ? ` em ${data}` : ''}`;
+      motivo = `Já importada em "${origem.arquivo_nome}"${data ? ` em ${data}` : ''}`;
+    } else {
+      motivo = 'Lançamento já cadastrado no sistema';
     }
-    return 'Lançamento já cadastrado no sistema';
+    return linha.duplicataAutorizada ? `${motivo} · autorizada para lançamento` : motivo;
   }
   if (linha.situacao === 'erro') return 'Não foi possível ler esta linha';
   if (linha.situacao === 'pendente') return linha.pendencias[0] ?? 'Pendência a revisar';
@@ -224,15 +227,19 @@ function avaliar(
   const repetida = chave ? repetidas.get(chave) ?? null : null;
   const origem = duplicados.get(atualizada.linhaOrigem) ?? null;
   const duplicadaNoBanco = duplicados.has(atualizada.linhaOrigem);
+  const duplicada = repetida !== null || duplicadaNoBanco;
 
   if (atualizada.statusPlanilha === 'cancelado') atualizada.situacao = 'cancelada';
-  else if (repetida !== null || duplicadaNoBanco) atualizada.situacao = 'duplicada';
+  else if (duplicada) atualizada.situacao = 'duplicada';
   else if (pendencias.length > 0) atualizada.situacao = 'pendente';
   else atualizada.situacao = 'pronta';
+  atualizada.duplicataAutorizada = duplicada && atualizada.duplicataAutorizada === true;
 
   atualizada.resultadoPrevisto = descreverResultado(atualizada, repetida, origem);
-  // Só a linha "Pronta" (Resultado Previsto verde) pode ser incluída na importação.
-  if (atualizada.situacao !== 'pronta') {
+  // Só linhas "Pronta" e duplicatas autorizadas pelo operador podem ser incluídas na importação.
+  const podeIncluir = atualizada.situacao === 'pronta'
+    || (atualizada.situacao === 'duplicada' && atualizada.duplicataAutorizada);
+  if (!podeIncluir) {
     atualizada.incluir = false;
     atualizada.incluirManual = false;
   } else if (!atualizada.incluirManual) {

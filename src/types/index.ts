@@ -518,6 +518,7 @@ export interface MigracaoLinha {
   pendencias: string[];
   incluir: boolean;
   incluirManual?: boolean;
+  duplicataAutorizada?: boolean;
   situacao: MigracaoSituacao;
   resultadoPrevisto: string;
 }

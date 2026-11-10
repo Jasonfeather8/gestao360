@@ -25,9 +25,9 @@ const mensagemDoErro = (cause: unknown, reserva: string): string => {
   const mensagem = (cause as { message?: unknown } | null)?.message;
   return typeof mensagem === 'string' && mensagem.trim() ? mensagem : reserva;
 };
-/** Só entra na importação a linha cujo Resultado Previsto está verde ("Pronta").
- * Pendentes, duplicadas, canceladas e com erro ficam de fora — mesma regra do checkbox. */
-const podeIncluir = (linha: MigracaoLinha) => linha.situacao === 'pronta';
+/** Entram na importação as linhas "Pronta" e as duplicatas autorizadas pelo operador. */
+const podeIncluir = (linha: MigracaoLinha) => linha.situacao === 'pronta'
+  || (linha.situacao === 'duplicada' && linha.duplicataAutorizada === true);
 type CampoManual = keyof MigracaoEscolhasManuais;
 type CadastroRapido = { linhaId: string; campo: 'cliente' | 'categoria' | 'centroCusto'; nome: string; tipo: 'entrada' | 'saida' | null; erro: string; carregando: boolean };
 
@@ -35,6 +35,7 @@ export default function MigracaoDados() {
   const inputRef = useRef<HTMLInputElement>(null);
   const nomesOriginais = useRef<Record<string, string>>({});
   const escolhasManuais = useRef(new Map<string, string>());
+  const autorizacoesDuplicata = useRef(new Set<number>());
   const [cadastroRapido, setCadastroRapido] = useState<CadastroRapido | null>(null);
   const [planilha, setPlanilha] = useState<PlanilhaMigracao | null>(null);
   const [aba, setAba] = useState('');
@@ -127,8 +128,11 @@ export default function MigracaoDados() {
       ]));
       const repetidas = chavesRepetidas(reconstruidas.linhas);
       const linhasComEscolhas = reconstruidas.linhas.map((linha) => {
+        const base = autorizacoesDuplicata.current.has(linha.linhaOrigem) ? { ...linha, duplicataAutorizada: true } : linha;
         const escolhas = escolhasDaLinha(linha);
-        return recalcularLinha(linha, cadastros, reconstruidas.duplicados, repetidas, escolhas);
+        const recalculada = recalcularLinha(base, cadastros, reconstruidas.duplicados, repetidas, escolhas);
+        if (recalculada.situacao !== 'duplicada') autorizacoesDuplicata.current.delete(linha.linhaOrigem);
+        return recalculada;
       });
       setLinhas(linhasComEscolhas);
       setDuplicadosBanco(reconstruidas.duplicados);
@@ -155,6 +159,8 @@ export default function MigracaoDados() {
     try {
       const lida = await lerPlanilha(file);
       setProgresso(65);
+      escolhasManuais.current.clear();
+      autorizacoesDuplicata.current.clear();
       setPlanilha(lida);
       const primeiraAba = lida.abas[0]?.nome ?? '';
       setAba(primeiraAba);
@@ -179,8 +185,15 @@ export default function MigracaoDados() {
       const original = atuais.find((linha) => linha.id === id);
       if (!original) return atuais;
       const atualizada = recalcularLinha({ ...original, ...alteracoes }, cadastros, duplicadosBanco, repetidas, escolhasDaLinha(original));
+      if (atualizada.situacao !== 'duplicada') autorizacoesDuplicata.current.delete(original.linhaOrigem);
       return atuais.map((linha) => linha.id === id ? atualizada : linha);
     });
+  };
+
+  const autorizarDuplicata = (linha: MigracaoLinha, autorizar: boolean) => {
+    if (autorizar) autorizacoesDuplicata.current.add(linha.linhaOrigem);
+    else autorizacoesDuplicata.current.delete(linha.linhaOrigem);
+    atualizarLinha(linha.id, { duplicataAutorizada: autorizar, incluir: autorizar, incluirManual: false });
   };
 
   const mapearColuna = async (campo: MigracaoCampo, value: string) => {
@@ -211,7 +224,9 @@ export default function MigracaoDados() {
           : field === 'conta' ? { contaId: id, contaNome: selecionado?.nome ?? '' }
             : field === 'categoria' ? { categoriaId: id, categoriaNome: selecionado?.nome ?? '' }
               : { centroCustoId: id, centroCustoNome: selecionado?.nome ?? '' };
-        return recalcularLinha({ ...item, ...alteracoes }, cadastros, duplicadosBanco, repetidas, escolhasDaLinha(item));
+        const recalculada = recalcularLinha({ ...item, ...alteracoes }, cadastros, duplicadosBanco, repetidas, escolhasDaLinha(item));
+        if (recalculada.situacao !== 'duplicada') autorizacoesDuplicata.current.delete(item.linhaOrigem);
+        return recalculada;
       });
     });
   };
@@ -259,6 +274,8 @@ export default function MigracaoDados() {
   const importar = async () => {
     const selecionadas = linhas.filter((linha) => linha.incluir);
     if (!planilha || selecionadas.length === 0) return;
+    const autorizadas = selecionadas.filter((linha) => linha.duplicataAutorizada).length;
+    if (autorizadas > 0 && !window.confirm(`Você autorizou ${autorizadas} linha(s) duplicada(s). Deseja importar mesmo assim?`)) return;
     setImportando(true);
     setErro('');
     try {
@@ -294,7 +311,7 @@ export default function MigracaoDados() {
         {lendo && <div className="rounded-xl border border-surface-border p-6"><div className="flex items-center gap-3 text-sm font-semibold text-on-surface"><LoaderCircle className="h-5 w-5 animate-spin text-primary" />Lendo e interpretando a planilha… {progresso}%</div><div className="mt-4 h-2 overflow-hidden rounded-full bg-surface-container-low"><div className="h-full bg-primary transition-all" style={{ width: `${progresso}%` }} /></div></div>}
         {erro && <p role="alert" className="mt-4 rounded-lg bg-alert-red/10 p-3 text-sm text-alert-red">{erro}</p>}
         {planilha && <div className="space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-container-low p-3"><div><p className="text-sm font-bold text-on-surface">{planilha.nome}</p><p className="text-xs text-on-surface-variant">{(planilha.tamanho / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} KB · {linhas.length} linhas</p></div><div className="flex gap-2"><button type="button" onClick={() => inputRef.current?.click()} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary">Trocar arquivo</button><button type="button" onClick={() => { setPlanilha(null); setLinhas([]); setResultado(null); setErro(''); }} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary">Limpar</button></div></div>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-container-low p-3"><div><p className="text-sm font-bold text-on-surface">{planilha.nome}</p><p className="text-xs text-on-surface-variant">{(planilha.tamanho / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} KB · {linhas.length} linhas</p></div><div className="flex gap-2"><button type="button" onClick={() => inputRef.current?.click()} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary">Trocar arquivo</button><button type="button" onClick={() => { escolhasManuais.current.clear(); autorizacoesDuplicata.current.clear(); setPlanilha(null); setLinhas([]); setResultado(null); setErro(''); }} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary">Limpar</button></div></div>
           {planilha.abas.length > 1 && <label className="flex flex-col gap-1 text-xs font-black uppercase tracking-widest text-secondary">Aba da planilha<select aria-label="Selecionar aba da planilha" value={aba} onChange={(event) => void selecionarAba(event.target.value)} className={`${classeCampo} max-w-sm text-sm font-normal`}>{planilha.abas.map((item) => <option key={item.nome} value={item.nome}>{item.nome}</option>)}</select></label>}
           <section className="rounded-xl border border-surface-border p-4"><h3 className="text-xs font-black uppercase tracking-widest text-secondary">Mapeamento de colunas</h3><p className="mt-1 text-xs text-on-surface-variant">Confira as colunas reconhecidas ou selecione outro cabeçalho. {naoReconhecidas.length > 0 && `Não reconhecidas: ${naoReconhecidas.join(', ')}`}</p><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{campos.map(({ campo, rotulo }) => { const headers = planilha.abas.find((item) => item.nome === aba)?.linhas[linhaCabecalho] ?? []; return <label key={campo} className="flex flex-col gap-1 text-xs font-bold text-on-surface-variant">{rotulo}<select aria-label={`Mapear coluna ${rotulo}`} value={colunas[campo] === undefined ? '' : String(colunas[campo])} onChange={(event) => void mapearColuna(campo, event.target.value)} className={classeCampo}><option value="">Não usar</option>{headers.map((head, index) => <option key={`${index}-${String(head)}`} value={index}>{String(head ?? '').trim() || `Coluna ${index + 1}`}</option>)}</select></label>; })}</div></section>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">{[['Total', contadores.total], ['Prontas', contadores.prontas], ['Pendentes', contadores.pendentes], ['Duplicadas', contadores.duplicadas], ['Canceladas', contadores.canceladas], ['Selecionadas', contadores.selecionadas], ['Valor selecionado', moeda.format(contadores.valor)]].map(([label, value]) => <div key={String(label)} className="rounded-xl border border-surface-border bg-white p-3 dark:bg-surface"><p className="text-[10px] font-black uppercase tracking-widest text-secondary">{label}</p><p className="mt-1 text-sm font-bold text-on-surface">{value}</p></div>)}</div>
@@ -346,7 +363,7 @@ export default function MigracaoDados() {
                     </div></td>;
                   })}
                   <td className="max-w-52 px-3 py-3 text-on-surface-variant">{linha.descricao || '—'}</td>
-                  <td className={`max-w-64 px-3 py-3 font-semibold ${corSituacao[linha.situacao]}`}>{linha.resultadoPrevisto}</td>
+                  <td className={`max-w-64 px-3 py-3 font-semibold ${corSituacao[linha.situacao]}`}><p>{linha.resultadoPrevisto}</p>{linha.situacao === 'duplicada' && <button type="button" disabled={importando || remapeando} onClick={() => autorizarDuplicata(linha, !linha.duplicataAutorizada)} className="mt-1 text-left text-[10px] font-bold text-primary underline disabled:opacity-40">{linha.duplicataAutorizada ? 'Remover autorização' : 'Lançar mesmo assim'}</button>}</td>
                 </tr>;
               })}</tbody>
             </table>
