@@ -117,6 +117,8 @@ export default function Dashboard() {
  const centrosPerformance = performance?.centros ?? [];
  const centrosComMovimento = centrosPerformance.filter(center => center.entradas > 0 || center.saidas > 0);
  const centrosSemMovimento = centrosPerformance.length - centrosComMovimento.length;
+ // Escala única do gráfico de performance, compartilhada por todas as colunas.
+ const maxValorCentro = Math.max(...centrosComMovimento.map(center => Math.max(center.entradas, center.saidas, 1))) * 1.1;
 
   // Spinner de tela cheia apenas no primeiro carregamento. Depois disso, trocar de filtro atualiza
   // os dados em segundo plano: o painel permanece montado (e a rolagem, preservada).
@@ -435,7 +437,7 @@ export default function Dashboard() {
             </section>
 
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-              <div className="lg:col-span-2 bg-white dark:bg-surface p-6 rounded-xl border border-surface-border shadow-sm">
+              <div className="lg:col-span-2 min-w-0 overflow-hidden bg-white dark:bg-surface p-6 rounded-xl border border-surface-border shadow-sm">
                 <div className="flex items-center justify-between mb-1">
                   <h4 className="text-sm font-bold uppercase tracking-wider text-on-surface">Performance por Centro de Custo</h4>
                   {selectedCCId && (
@@ -443,27 +445,28 @@ export default function Dashboard() {
                   )}
                 </div>
                 <p className="text-[10px] text-secondary mb-3">Valores realizados/confirmados · mesmo critério de 'Saúde por Centro de Custo'</p>
-                <div className="flex items-center gap-4 mb-2 text-[10px] font-semibold text-secondary"><span className="flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-bank-truth-green" />Entradas</span><span className="flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-alert-red" />Saídas</span></div>
+                <div className="flex items-center gap-4 mb-2 text-[10px] font-semibold text-secondary"><span className="flex items-center gap-1"><i className="inline-block h-2.5 w-2.5 rounded-sm bg-bank-truth-green" />Entradas</span><span className="flex items-center gap-1"><i className="inline-block h-2.5 w-2.5 rounded-sm bg-alert-red" />Saídas</span></div>
                 {centrosSemMovimento > 0 && <p className="mb-1 text-[9px] text-secondary">{centrosSemMovimento} centros sem movimento ocultos</p>}
                 {centrosComMovimento.length === 0 && <p className="py-12 text-center text-xs text-secondary">Sem movimento realizado no filtro atual.</p>}
-                <div className="relative h-64 w-full flex items-end justify-around gap-2 px-4 border-b border-surface-border pt-10">
-                  {centrosComMovimento.map(cc => {
-                    const maxVal = Math.max(...centrosComMovimento.map(center => Math.max(center.entradas, center.saidas, 1))) * 1.1;
-                    const isSelected = selectedCCId === cc.id;
-                    return (
-                      <button type="button" key={cc.id} data-testid="dashboard-cc-bar" aria-pressed={isSelected} title={`${cc.nome} · Entradas ${valueFormatter(cc.entradas)} · Saídas ${valueFormatter(cc.saidas)}`} onClick={() => updateFilter('centroCusto', isSelected ? null : cc.id)} className={`flex flex-col items-center gap-1 flex-1 h-full justify-end group cursor-pointer text-left transition-all ${isSelected ? 'opacity-100 scale-105' : selectedCCId ? 'opacity-30 grayscale' : 'opacity-100'}`}>
-                        <div className="w-full flex justify-center items-end gap-1.5 h-44">
-                          <div className="bg-bank-truth-green w-6 rounded-t-sm relative transition-all duration-300" style={{ height: `${(cc.entradas / maxVal) * 100}%` }}>
-                            <span className="absolute -top-4 left-1/2 -translate-x-1/2 font-mono text-[9px] text-secondary whitespace-nowrap">{cc.entradas ? compactFormatter(cc.entradas) : ''}</span>
+                <div className="w-full overflow-x-auto overflow-y-hidden pb-2">
+                  <div className="relative h-64 w-max min-w-full flex items-end justify-around gap-2 px-4 border-b border-surface-border pt-10">
+                    {centrosComMovimento.map(cc => {
+                      const isSelected = selectedCCId === cc.id;
+                      return (
+                        <button type="button" key={cc.id} data-testid="dashboard-cc-bar" aria-pressed={isSelected} title={`${cc.nome} · Entradas ${valueFormatter(cc.entradas)} · Saídas ${valueFormatter(cc.saidas)}`} onClick={() => updateFilter('centroCusto', isSelected ? null : cc.id)} className={`flex flex-col items-center gap-1 w-20 shrink-0 grow h-full justify-end group cursor-pointer text-left transition-all ${isSelected ? 'opacity-100 scale-105' : selectedCCId ? 'opacity-30 grayscale' : 'opacity-100'}`}>
+                          <div className="w-full flex justify-center items-end gap-1.5 h-44">
+                            <div className="bg-bank-truth-green w-6 rounded-t-sm relative transition-all duration-300" style={{ height: `${(cc.entradas / maxValorCentro) * 100}%` }}>
+                              <span className="absolute -top-4 left-1/2 -translate-x-1/2 font-mono text-[9px] text-secondary whitespace-nowrap">{cc.entradas ? compactFormatter(cc.entradas) : ''}</span>
+                            </div>
+                            <div className="bg-alert-red w-6 rounded-t-sm relative transition-all duration-300" style={{ height: `${(cc.saidas / maxValorCentro) * 100}%` }}>
+                              <span className="absolute -top-4 left-1/2 -translate-x-1/2 font-mono text-[9px] text-secondary whitespace-nowrap">{cc.saidas ? compactFormatter(cc.saidas) : ''}</span>
+                            </div>
                           </div>
-                          <div className="bg-alert-red w-6 rounded-t-sm relative transition-all duration-300" style={{ height: `${(cc.saidas / maxVal) * 100}%` }}>
-                            <span className="absolute -top-4 left-1/2 -translate-x-1/2 font-mono text-[9px] text-secondary whitespace-nowrap">{cc.saidas ? compactFormatter(cc.saidas) : ''}</span>
-                          </div>
-                        </div>
-                        <span className={`text-[10px] font-bold mt-2 truncate max-w-full ${isSelected ? 'text-primary' : 'text-secondary'}`}>{cc.nome}</span>
-                      </button>
-                    );
-                  })}
+                          <span className={`text-[10px] font-bold mt-2 truncate max-w-full ${isSelected ? 'text-primary' : 'text-secondary'}`}>{cc.nome}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
