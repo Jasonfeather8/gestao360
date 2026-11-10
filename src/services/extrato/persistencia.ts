@@ -137,7 +137,7 @@ export async function persistirExtrato(params: {
 }): Promise<{
   lote: LoteExtrato;
   transacoesPorHash: Map<string, string>;
-  linhasIgnoradas: { confiancaBaixa: number; semPagina: number };
+  linhasIgnoradas: { confiancaBaixa: number; semPagina: number; foraDoPeriodo: number };
   hashesPorLinha: Map<string, string>;
 }> {
   const { arquivo, contaId, extrato } = params;
@@ -153,14 +153,21 @@ export async function persistirExtrato(params: {
     throw new Error('O arquivo PDF deve ter entre 1 byte e 20 MB para ser persistido.');
   }
 
-  // Linhas de confiança baixa e linhas sem página identificada não podem ser
-  // persistidas: o banco exige proveniência (página e linha de origem) e
-  // confiança mínima. Elas continuam visíveis na comparação em memória.
+  // Linhas de confiança baixa, sem página identificada ou fora do período
+  // declarado no PDF não podem ser persistidas. Elas continuam visíveis na
+  // comparação em memória.
+  const periodoDeclarado = extrato.periodoDeclarado ?? null;
+  const estaForaDoPeriodo = (linha: LinhaExtrato) => Boolean(
+    periodoDeclarado && (linha.data < periodoDeclarado.inicio || linha.data > periodoDeclarado.fim),
+  );
   const linhasConfiancaBaixa = extrato.linhas.filter((linha) => linha.confianca === 'baixa').length;
   const linhasSemPagina = extrato.linhas.filter((linha) => linha.confianca !== 'baixa' && linha.pagina === null).length;
-  const linhasParaPersistir = extrato.linhas.filter((linha) => linha.confianca !== 'baixa' && linha.pagina !== null);
+  const linhasForaDoPeriodo = extrato.linhas.filter(estaForaDoPeriodo).length;
+  const linhasParaPersistir = extrato.linhas.filter((linha) =>
+    linha.confianca !== 'baixa' && !estaForaDoPeriodo(linha) && linha.pagina !== null,
+  );
   if (linhasParaPersistir.length === 0) {
-    throw new Error('Não há linhas persistíveis: linhas de confiança baixa ou sem página identificada não são gravadas.');
+    throw new Error('Não há linhas persistíveis: linhas de confiança baixa, sem página identificada ou fora do período do extrato não são gravadas.');
   }
   const ordemLinhaPorId = calcularOrdemLinhaPorPagina(extrato);
 
@@ -244,6 +251,7 @@ export async function persistirExtrato(params: {
     const motivosExclusao = [
       linhasConfiancaBaixa > 0 ? `${linhasConfiancaBaixa} linha(s) de confiança baixa` : null,
       linhasSemPagina > 0 ? `${linhasSemPagina} linha(s) sem página identificada` : null,
+      linhasForaDoPeriodo > 0 ? `${linhasForaDoPeriodo} linha(s) fora do período do extrato` : null,
     ].filter((motivo): motivo is string => motivo !== null);
     const justificativaSobrescrita = motivosExclusao.length > 0
       ? `${motivosExclusao.join(' e ')} foram excluídas da persistência, conforme a regra de importação.`
@@ -295,7 +303,11 @@ export async function persistirExtrato(params: {
     return {
       lote: loteConfirmado as LoteExtrato,
       transacoesPorHash,
-      linhasIgnoradas: { confiancaBaixa: linhasConfiancaBaixa, semPagina: linhasSemPagina },
+      linhasIgnoradas: {
+        confiancaBaixa: linhasConfiancaBaixa,
+        semPagina: linhasSemPagina,
+        foraDoPeriodo: linhasForaDoPeriodo,
+      },
       hashesPorLinha,
     };
   } catch (error) {

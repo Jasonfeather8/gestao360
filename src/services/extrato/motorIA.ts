@@ -142,7 +142,7 @@ function mapearDuvidosas(duvidosas: unknown): LinhaNaoInterpretada[] {
 }
 
 function motivoIgnorada(valor: unknown): MotivoLinhaIgnorada {
-  const validos: MotivoLinhaIgnorada[] = ['saldo', 'totalizador', 'cabecalho', 'rodape', 'outro'];
+  const validos: MotivoLinhaIgnorada[] = ['saldo', 'totalizador', 'cabecalho', 'rodape', 'investimento', 'outro'];
   return validos.includes(valor as MotivoLinhaIgnorada)
     ? (valor as MotivoLinhaIgnorada)
     : 'outro';
@@ -154,14 +154,25 @@ function mapearIgnoradas(ignoradas: unknown): LinhaIgnorada[] {
     pagina: paginaValida(item?.pagina),
     texto: valorTexto(item?.textoOriginal) ?? '',
     motivo: motivoIgnorada(item?.motivo),
+    ...(dataValida(item?.data) ? { data: item.data } : {}),
   }));
 }
 
-function conferir(linhas: LinhaExtrato[], meta: MetaExtrato): ConferenciaExtrato {
-  const entradas = linhas
+type PeriodoDeclarado = { inicio: string; fim: string } | null;
+
+// O escopo por período usa APENAS o período declarado no próprio PDF. O período
+// informado pela IA não serve para isso: se viesse mais estreito que as linhas
+// lidas, linhas legítimas seriam excluídas da conferência e da persistência.
+function linhaNoPeriodo(linha: LinhaExtrato, periodo: PeriodoDeclarado): boolean {
+  return !periodo || (linha.data >= periodo.inicio && linha.data <= periodo.fim);
+}
+
+function conferir(linhas: LinhaExtrato[], meta: MetaExtrato, periodoDeclarado: PeriodoDeclarado): ConferenciaExtrato {
+  const linhasConferidas = linhas.filter((linha) => linhaNoPeriodo(linha, periodoDeclarado));
+  const entradas = linhasConferidas
     .filter((linha) => linha.direcao === 'entrada')
     .reduce((total, linha) => total + linha.valor, 0);
-  const saidas = linhas
+  const saidas = linhasConferidas
     .filter((linha) => linha.direcao === 'saida')
     .reduce((total, linha) => total + linha.valor, 0);
 
@@ -307,8 +318,8 @@ export async function lerExtratoIA(
         contexto = {
           banco: meta.banco,
           conta: meta.conta,
-          periodoInicio: meta.periodoInicio,
-          periodoFim: meta.periodoFim,
+          periodoInicio: analise.periodoDeclarado?.inicio ?? meta.periodoInicio,
+          periodoFim: analise.periodoDeclarado?.fim ?? meta.periodoFim,
         };
       }
 
@@ -324,7 +335,10 @@ export async function lerExtratoIA(
       }
     }
 
-    const datas = linhas.map((linha) => linha.data).sort();
+    const linhasParaJanela = linhas.filter((linha) => linhaNoPeriodo(linha, analise.periodoDeclarado));
+    const datas = (linhasParaJanela.length > 0 ? linhasParaJanela : linhas)
+      .map((linha) => linha.data)
+      .sort();
     const resultado: ExtratoLido = {
       arquivoNome: arquivo.name,
       paginas: totalPaginas,
@@ -334,7 +348,8 @@ export async function lerExtratoIA(
       naoInterpretadas,
       linhasIgnoradas,
       meta,
-      conferencia: conferir(linhas, meta),
+      conferencia: conferir(linhas, meta, analise.periodoDeclarado),
+      periodoDeclarado: analise.periodoDeclarado,
     };
 
     const custoLog = recebeuEstimativaCusto ? `, custo estimado US$ ${custoEstimadoUsd.toFixed(6)}` : '';

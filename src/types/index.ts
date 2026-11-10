@@ -177,12 +177,13 @@ export interface ConferenciaExtrato {
   diferenca: number | null;
 }
 
-export type MotivoLinhaIgnorada = 'saldo' | 'totalizador' | 'cabecalho' | 'rodape' | 'outro';
+export type MotivoLinhaIgnorada = 'saldo' | 'totalizador' | 'cabecalho' | 'rodape' | 'investimento' | 'outro';
 
 export interface LinhaIgnorada {
   pagina: number | null;
   texto: string;
   motivo: MotivoLinhaIgnorada;
+  data?: string;
 }
 
 export interface ProgressoLeituraExtrato {
@@ -279,6 +280,8 @@ export interface ExtratoLido {
   meta?: MetaExtrato;
   conferencia?: ConferenciaExtrato;
   linhasIgnoradas?: LinhaIgnorada[];
+  /** Período declarado no próprio PDF (ex.: "Entre 01/04/2026 e 11/05/2026"), quando o extrato o informa. */
+  periodoDeclarado?: { inicio: string; fim: string } | null;
 }
 
 export type StatusItemComparacao =

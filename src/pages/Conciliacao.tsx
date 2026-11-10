@@ -154,7 +154,12 @@ export default function Conciliacao() {
     [extrato, lancamentos],
   );
   const linhasNaoPersistiveis = extrato
-    ? extrato.linhas.filter((linha) => linha.confianca === 'baixa' || linha.pagina === null).length
+    ? extrato.linhas.filter((linha) =>
+      linha.confianca === 'baixa' || linha.pagina === null || Boolean(
+        extrato.periodoDeclarado &&
+        (linha.data < extrato.periodoDeclarado.inicio || linha.data > extrato.periodoDeclarado.fim),
+      ),
+    ).length
     : 0;
 
   const handleArquivo = async (file: File) => {
@@ -580,7 +585,7 @@ export default function Conciliacao() {
                     {erroPersistencia && <p role="alert" className="text-sm text-alert-red">{erroPersistencia}</p>}
                     {linhasNaoPersistiveis > 0 && (
                       <p className="rounded-xl border border-pending-amber/30 bg-pending-amber/10 px-3 py-2 text-xs text-pending-amber">
-                        {linhasNaoPersistiveis} {linhasNaoPersistiveis === 1 ? 'linha não será persistida' : 'linhas não serão persistidas'} por confiança baixa ou por falta de página identificada. Elas continuam visíveis na comparação, mas não fazem parte da conciliação persistida.
+                        {linhasNaoPersistiveis} {linhasNaoPersistiveis === 1 ? 'linha não será persistida' : 'linhas não serão persistidas'} por confiança baixa, por falta de página identificada ou por estarem fora do período do extrato. Elas continuam visíveis na comparação, mas não fazem parte da conciliação persistida.
                       </p>
                     )}
                   </div>
@@ -659,7 +664,7 @@ export default function Conciliacao() {
                   {mostrarIgnoradas && <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                     <ul className="space-y-2 border-t border-bpi-blue/20 px-4 py-3">
                       {extrato.linhasIgnoradas.map((linha, index) => {
-                        const motivos = { saldo: 'Saldo', totalizador: 'Totalizador', cabecalho: 'Cabeçalho', rodape: 'Rodapé', outro: 'Outro' };
+                        const motivos = { saldo: 'Saldo', totalizador: 'Totalizador', cabecalho: 'Cabeçalho', rodape: 'Rodapé', investimento: 'Saldo de investimento', outro: 'Outro' };
                         return <li key={`${linha.pagina}-${index}`} className="text-xs text-on-surface"><span className="font-bold">p.{linha.pagina ?? '?'}</span> · {linha.texto} <span className="text-bpi-blue">({motivos[linha.motivo]})</span></li>;
                       })}
                     </ul>

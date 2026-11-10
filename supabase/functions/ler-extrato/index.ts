@@ -65,11 +65,12 @@ const schema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['pagina', 'texto_original', 'motivo'],
+        required: ['pagina', 'texto_original', 'motivo', 'data'],
         properties: {
           pagina: { type: ['integer', 'null'] },
           texto_original: { type: 'string' },
-          motivo: { type: 'string', enum: ['saldo', 'totalizador', 'cabecalho', 'rodape', 'outro'] },
+          motivo: { type: 'string', enum: ['saldo', 'totalizador', 'cabecalho', 'rodape', 'investimento', 'outro'] },
+          data: { type: ['string', 'null'], description: 'Data ISO yyyy-mm-dd quando conhecida' },
         },
       },
     },
@@ -107,6 +108,15 @@ Regras de data pelo mapa de dias (fonte autoritativa para o formato agrupado por
 18. As linhas que aparecem ACIMA do primeiro cabeçalho de dia da página pertencem ao dia informado em "inicia no dia". Um cabeçalho de dia que aparece no meio da página vale apenas para as linhas ABAIXO dele. Nunca atribua a um dia as linhas que estão acima do cabeçalho desse dia.
 19. Se a PRÓPRIA LINHA trouxer a data (ex.: "05/03/2026 Compra ... -50,00"), ela é uma TRANSAÇÃO: use a data da linha, coloque-a em "linhas" e NÃO a trate como cabeçalho. Cabeçalho de dia é a linha que separa seções de dias (ex.: "17/09/2026 Saldo do dia R$ 4.743,20"), não uma transação.
 20. O bloco "Página anterior (contexto)" existe apenas para você entender a continuação do dia entre páginas. NUNCA crie linhas a partir dele; ele não faz parte das páginas deste lote.`
+
+const REGRAS_BRADESCO = `Regras do layout Bradesco (valem quando o documento tiver o cabeçalho "Extrato de: Ag: ... | CC: ... | Entre ..." e/ou as seções "Últimos Lançamentos" e "Saldos Invest Fácil / Plus"; em caso de conflito, têm prioridade sobre as regras 1 a 20):
+21. Neste layout a data é impressa UMA ÚNICA VEZ POR DIA, no primeiro item do dia. Os lançamentos seguintes do mesmo dia NÃO repetem a data: use o dia do último cabeçalho de dia acima deles. Uma linha que contém apenas uma data (ex.: "29/04/2026") é cabeçalho de dia, não é lançamento.
+22. Um lançamento pode ocupar VÁRIAS linhas do PDF: a descrição e o par "Dcto. + Crédito/Débito + Saldo" podem estar em linhas separadas (ex.: "PIX ENVIADO" / "DES: MESQUITA SOLUCOES EMP 07/04" / "1208249 -15.000,00 6.762,24"). Junte o bloco em UM único item de "linhas", com a descrição completa e o valor da linha que traz o número.
+23. Neste layout só é lançamento a linha que traz valor na coluna "Crédito (R$)" ou na coluna "Débito (R$)". A coluna "Saldo (R$)" NUNCA é lançamento: serve apenas para conferência. O débito aparece com sinal negativo (ex.: "-15.000,00"); em "valor" use sempre o número positivo e registre a natureza em "direcao".
+24. A seção "Saldos Invest Fácil / Plus" (e qualquer bloco de saldo de investimento do Bradesco, com as colunas "Data | Histórico | Valor (R$)") NÃO é lançamento: coloque essas linhas em "linhas_ignoradas" com motivo "investimento" e informe a data em "data" quando existir. Nunca gere lançamento a partir dela, nunca some os valores dela e nunca a trate como lançamento ausente.
+25. A seção "Últimos Lançamentos" É uma tabela de lançamentos e deve ser lida normalmente, MESMO que as datas dela estejam fora do período informado do extrato. Ignore apenas o "SALDO ANTERIOR" e a linha de "Total" dessa seção.
+26. "SALDO ANTERIOR", o cabeçalho de colunas, a linha de "Total" e o rodapé "Os dados acima têm como base ..." nunca viram lançamento e nunca fornecem data de lançamento.
+27. Nenhuma linha datada pode ser omitida: se a natureza (entrada/saída) não puder ser determinada, coloque a linha em "linhas_duvidosas" com o texto original, em vez de descartá-la.`
 
 class HttpError extends Error {
   status: number
@@ -180,11 +190,12 @@ function normalizeModelData(model: unknown) {
 
   const linhasIgnoradas = model.linhas_ignoradas.map((item: unknown) => {
     const row = isRecord(item) ? item : {}
-    const motivo = ['saldo', 'totalizador', 'cabecalho', 'rodape', 'outro'].includes(row.motivo) ? row.motivo : 'outro'
+    const motivo = ['saldo', 'totalizador', 'cabecalho', 'rodape', 'investimento', 'outro'].includes(row.motivo) ? row.motivo : 'outro'
     return {
       pagina: normalizePage(row.pagina),
       textoOriginal: cleanString(row.texto_original) ?? '',
       motivo,
+      data: validIsoDate(row.data) ? row.data : null,
     }
   })
 
@@ -386,7 +397,7 @@ serve(async (req) => {
           max_output_tokens: 32000,
           input: [{ role: 'user', content: [
             { type: 'input_file', filename: 'extrato.pdf', file_data: `data:application/pdf;base64,${pdfBase64}` },
-            { type: 'input_text', text: prompt + REGRAS_DE_DATA + REGRAS_DE_MAPA_DE_DIAS },
+            { type: 'input_text', text: prompt + REGRAS_DE_DATA + REGRAS_DE_MAPA_DE_DIAS + '\n' + REGRAS_BRADESCO },
           ] }],
           text: { format: { type: 'json_schema', name: 'extrato_bancario', strict: true, schema } },
         }),

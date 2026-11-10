@@ -29,6 +29,7 @@ export interface PaginaExtratoAnalisada {
 export interface AnaliseExtrato {
   totalPaginas: number;
   paginas: PaginaExtratoAnalisada[];
+  periodoDeclarado: { inicio: string; fim: string } | null;
 }
 
 const CABECALHO_DIA = /^(\d{2})\/(\d{2})(?:\/(\d{2,4}))?\b/;
@@ -42,6 +43,17 @@ function dataIso(dia: number, mes: number, ano: number): string | null {
     data.getUTCDate() !== dia
   ) return null;
   return `${String(ano).padStart(4, '0')}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
+function periodoDoDocumento(linhas: string[]): { inicio: string; fim: string } | null {
+  for (const linha of linhas) {
+    const correspondencia = linha.match(/\bEntre\s+(\d{2})\/(\d{2})\/(\d{4})\s+(?:e|a)\s+(\d{2})\/(\d{2})\/(\d{4})\b/i);
+    if (!correspondencia) continue;
+    const inicio = dataIso(Number(correspondencia[1]), Number(correspondencia[2]), Number(correspondencia[3]));
+    const fim = dataIso(Number(correspondencia[4]), Number(correspondencia[5]), Number(correspondencia[6]));
+    if (inicio && fim) return { inicio, fim };
+  }
+  return null;
 }
 
 function anoDoPeriodo(linhas: string[]): number | null {
@@ -97,7 +109,8 @@ export async function analisarExtrato(arquivo: File): Promise<AnaliseExtrato> {
       linhasPorPagina.push(linhas);
     }
 
-    if (!encontrouTexto) return { totalPaginas, paginas: [] };
+    const periodoDeclarado = periodoDoDocumento(linhasPorPagina.flat());
+    if (!encontrouTexto) return { totalPaginas, paginas: [], periodoDeclarado };
     let anoReferencia = linhasPorPagina.map(anoDoPeriodo).find((ano): ano is number => ano !== null) ?? null;
     if (anoReferencia === null) {
       for (const linhas of linhasPorPagina) {
@@ -132,9 +145,9 @@ export async function analisarExtrato(arquivo: File): Promise<AnaliseExtrato> {
       return { pagina: indicePagina + 1, linhas, cabecalhos, diaInicial };
     });
 
-    return { totalPaginas, paginas };
+    return { totalPaginas, paginas, periodoDeclarado };
   } catch {
-    return { totalPaginas: documento?.numPages ?? 0, paginas: [] };
+    return { totalPaginas: documento?.numPages ?? 0, paginas: [], periodoDeclarado: null };
   } finally {
     if (tarefa) {
       try {
