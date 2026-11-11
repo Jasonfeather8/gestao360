@@ -33,6 +33,7 @@ export interface AnaliseExtrato {
 }
 
 const CABECALHO_DIA = /^(\d{2})\/(\d{2})(?:\/(\d{2,4}))?\b/;
+const LINHA_COM_HORA = /^(\d{2})\/(\d{2})(?:\/(\d{2,4}))?\s*[-–—]?\s*\d{1,2}:\d{2}/;
 
 function dataIso(dia: number, mes: number, ano: number): string | null {
   const data = new Date(Date.UTC(ano, mes - 1, dia));
@@ -115,6 +116,7 @@ export async function analisarExtrato(arquivo: File): Promise<AnaliseExtrato> {
     if (anoReferencia === null) {
       for (const linhas of linhasPorPagina) {
         for (const linha of linhas) {
+          if (LINHA_COM_HORA.test(linha.trimStart())) continue;
           const match = linha.trimStart().match(CABECALHO_DIA);
           if (!match?.[3] || match[3].length !== 4) continue;
           const candidato = dataIso(Number(match[1]), Number(match[2]), Number(match[3]));
@@ -133,6 +135,7 @@ export async function analisarExtrato(arquivo: File): Promise<AnaliseExtrato> {
       const diaInicial = diaVigente;
       const cabecalhos: CabecalhoDiaExtrato[] = [];
       linhas.forEach((linha, indice) => {
+        if (LINHA_COM_HORA.test(linha.trimStart())) return;
         const match = linha.trimStart().match(CABECALHO_DIA);
         if (!match) return;
         const ano = match[3]?.length === 4 ? Number(match[3]) : (anoReferencia ?? anoInicial);

@@ -118,6 +118,16 @@ const REGRAS_BRADESCO = `Regras do layout Bradesco (valem quando o documento tiv
 26. "SALDO ANTERIOR", o cabeçalho de colunas, a linha de "Total" e o rodapé "Os dados acima têm como base ..." nunca viram lançamento e nunca fornecem data de lançamento.
 27. Nenhuma linha datada pode ser omitida: se a natureza (entrada/saída) não puder ser determinada, coloque a linha em "linhas_duvidosas" com o texto original, em vez de descartá-la.`
 
+const REGRAS_CAIXA = `Regras do layout Caixa (valem quando o documento for o extrato "CAIXA / Extrato por período", com cabeçalhos "Cliente", "Conta", "Data", "Mês", "Período dos lançamentos ... até ...", "SALDO ANTERIOR" e a tabela "Lançamentos | Nr. Doc | Histórico/Complemento | Favorecido | CPF/CNPJ | Valor | Saldo"; têm prioridade sobre as regras 1 a 20):
+28. Cada linha de lançamento começa com a própria data e hora ("dd/mm/aaaa - hh:mm:ss"): essa é a data do lançamento. As linhas de histórico "SALDO DIA" (hora "00:00:00") NÃO são lançamentos: vão para "linhas_ignoradas" com motivo "saldo" e a data da própria linha; o valor "0,00 C" e o número da coluna Saldo delas nunca entram em "linhas".
+29. O extrato é impresso em ordem DECRESCENTE (mais recente primeiro); leia todas as linhas e use a data de cada uma.
+30. A tabela tem DUAS colunas de valores ("Valor" e "Saldo", ambas com marcador C/D). Em "valor" use SEMPRE o número da coluna "Valor"; o número da coluna "Saldo" é saldo da conta e NUNCA vira "valor". Se a linha trouxer dois números, o primeiro é o valor e o último é o saldo.
+31. "SALDO ANTERIOR" do cabeçalho é o saldo do início do período: vai em "saldo_inicial" e em "linhas_ignoradas" com motivo "saldo". O saldo de fechamento (linha "SALDO DIA" mais recente, no topo) vai em "saldo_final".
+32. Quando a coluna "Favorecido/CPF-CNPJ" estiver vazia, o valor e o saldo podem ser impressos em uma linha separada logo ABAIXO do bloco de descrições (ex.: "536,14 D 50.892,08 C" após duas descrições): atribua os valores às descrições pendentes na mesma ordem, de cima para baixo.
+33. CONFERÊNCIA OBRIGATÓRIA PELA COLUNA SALDO: para linhas consecutivas na ordem do documento (A acima de B, A mais recente) vale saldo(B) = saldo(A) − movimento(A), com movimento(A) = +valor(A) em entrada e −valor(A) em saída. Exemplo real: "70,00 C 51.497,22 C" seguido de "3.977,20 C 51.427,22 C" fecha (51.497,22 − 70,00 = 51.427,22). Se o valor lido não fechar com a coluna Saldo, RELEIA a linha antes de responder e nunca devolva um número que quebre essa conferência; se mesmo relendo não fechar, use "confianca": "baixa".
+34. "SALDO DIA", "SALDO ANTERIOR", "Cliente", "Conta", "Data", "Mês", "Período dos lançamentos", o cabeçalho de colunas e o rodapé ("Alô CAIXA:", "SAC CAIXA:", "Ouvidoria:", "Pessoas com deficiência:") nunca viram lançamento.
+35. Históricos como "DEPOSITO DINH LOTERICO", "RECEBIMENTO TED", "DEB TARIF MANUTENCAO", "TARIFA MANUTENCAO CONTA A", "DEB GUIA RET PAG NO SISAG", "TAR PIX" e "DEB PIX CHAVE" SÃO lançamentos normais e não podem ser omitidos.`
+
 class HttpError extends Error {
   status: number
 
@@ -394,10 +404,11 @@ serve(async (req) => {
         body: JSON.stringify({
           model: modelo,
           store: false,
+          temperature: 0,
           max_output_tokens: 32000,
           input: [{ role: 'user', content: [
             { type: 'input_file', filename: 'extrato.pdf', file_data: `data:application/pdf;base64,${pdfBase64}` },
-            { type: 'input_text', text: prompt + REGRAS_DE_DATA + REGRAS_DE_MAPA_DE_DIAS + '\n' + REGRAS_BRADESCO },
+            { type: 'input_text', text: prompt + REGRAS_DE_DATA + REGRAS_DE_MAPA_DE_DIAS + '\n' + REGRAS_BRADESCO + '\n' + REGRAS_CAIXA },
           ] }],
           text: { format: { type: 'json_schema', name: 'extrato_bancario', strict: true, schema } },
         }),

@@ -208,6 +208,10 @@ export interface LinhaExtrato {
   textoOriginal: string;
   confianca?: ConfiancaLinha;
   documento?: string;
+  /** Saldo da conta informado pelo extrato após a transação. */
+  saldoApos?: number;
+  /** O valor da linha não fecha com a coluna Saldo do extrato (conferência determinística). */
+  saldoInconsistente?: boolean;
   /** Só existe depois que a linha foi persistida no banco. */
   transacaoBancoId?: string;
 }

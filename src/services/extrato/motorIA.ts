@@ -16,6 +16,7 @@ import { analisarExtrato, type CabecalhoDiaExtrato } from './pdfDocumento';
 const LIMITE_ARQUIVO = 20 * 1024 * 1024;
 const LIMITE_PAGINAS = 60;
 const PREFIXO = '[motorIA]';
+const PADRAO_LINHA_SALDO = /saldo\s+(?:do\s+)?dia\b|saldo\s+anterior/i;
 
 function calcularPaginasPorLote(totalPaginas: number): number {
   if (totalPaginas <= 6) return 1;
@@ -118,6 +119,7 @@ function mapearLinhas(linhas: unknown, indiceLote: number): LinhaExtrato[] {
       textoOriginal: valorTexto(item.textoOriginal) ?? '',
       ...(confianca ? { confianca } : {}),
       ...(valorTexto(item.documento) ? { documento: valorTexto(item.documento)! } : {}),
+      ...(typeof item.saldoApos === 'number' && Number.isFinite(item.saldoApos) ? { saldoApos: item.saldoApos } : {}),
     });
   });
   return resultado;
@@ -189,6 +191,32 @@ function conferir(linhas: LinhaExtrato[], meta: MetaExtrato, periodoDeclarado: P
     saldoFinal: meta.saldoFinal,
     diferenca,
   };
+}
+
+function marcarSaldosInconsistentes(linhas: LinhaExtrato[]): void {
+  const linhasComSaldo = linhas.filter((linha) => typeof linha.saldoApos === 'number' && Number.isFinite(linha.saldoApos));
+  if (linhasComSaldo.length < 2) return;
+  const primeiraData = linhasComSaldo[0].data;
+  const ultimaData = linhasComSaldo[linhasComSaldo.length - 1].data;
+  const decrescente = primeiraData > ultimaData;
+  const ordemIndefinida = primeiraData === ultimaData;
+
+  for (let indice = 0; indice < linhasComSaldo.length - 1; indice++) {
+    const atual = linhasComSaldo[indice];
+    const seguinte = linhasComSaldo[indice + 1];
+    const movimento = atual.direcao === 'entrada' ? atual.valor : -atual.valor;
+    const saldoAtual = atual.saldoApos!;
+    const saldoSeguinte = seguinte.saldoApos!;
+    const fechaDecrescente = Math.abs(saldoAtual - movimento - saldoSeguinte) <= 0.01;
+    const fechaCrescente = Math.abs(saldoAtual + movimento - saldoSeguinte) <= 0.01;
+    const inconsistente = ordemIndefinida
+      ? !fechaDecrescente && !fechaCrescente
+      : !(decrescente ? fechaDecrescente : fechaCrescente);
+    if (inconsistente) {
+      atual.saldoInconsistente = true;
+      seguinte.saldoInconsistente = true;
+    }
+  }
 }
 
 async function limparTemporariosAntigos(uid: string): Promise<void> {
@@ -338,9 +366,24 @@ export async function lerExtratoIA(
           });
           continue;
         }
+        if (PADRAO_LINHA_SALDO.test(`${linha.descricao} ${linha.textoOriginal}`)) {
+          linhasIgnoradas.push({
+            pagina: linha.pagina,
+            texto: linha.textoOriginal || linha.descricao,
+            motivo: 'saldo',
+            data: linha.data,
+          });
+          continue;
+        }
         linhas.push(linha);
       }
-      naoInterpretadas.push(...mapearDuvidosas(data.linhasDuvidosas));
+      for (const duvidosa of mapearDuvidosas(data.linhasDuvidosas)) {
+        if (PADRAO_LINHA_SALDO.test(duvidosa.texto)) {
+          linhasIgnoradas.push({ pagina: duvidosa.pagina, texto: duvidosa.texto, motivo: 'saldo' });
+        } else {
+          naoInterpretadas.push(duvidosa);
+        }
+      }
       linhasIgnoradas.push(...mapearIgnoradas(data.linhasIgnoradas));
       tokensEntrada += valorNumero(data.uso?.tokensEntrada) ?? 0;
       tokensSaida += valorNumero(data.uso?.tokensSaida) ?? 0;
@@ -351,6 +394,7 @@ export async function lerExtratoIA(
       }
     }
 
+    marcarSaldosInconsistentes(linhas);
     const linhasParaJanela = linhas.filter((linha) => linhaNoPeriodo(linha, analise.periodoDeclarado));
     const datas = (linhasParaJanela.length > 0 ? linhasParaJanela : linhas)
       .map((linha) => linha.data)

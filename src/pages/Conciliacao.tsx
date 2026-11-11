@@ -362,6 +362,9 @@ export default function Conciliacao() {
               {item.linhaExtrato?.confianca === 'baixa' && (
                 <span title="A IA teve baixa certeza nesta linha; confira o texto original." className="inline-flex items-center rounded-full bg-pending-amber/10 px-2 py-1 text-[10px] font-bold text-pending-amber">confiança baixa</span>
               )}
+              {item.linhaExtrato?.saldoInconsistente && (
+                <span title="O valor desta linha não fecha com a coluna Saldo do extrato; confira o valor no PDF antes de conciliar." className="inline-flex items-center rounded-full bg-alert-red/10 px-2 py-1 text-[10px] font-bold text-alert-red">não fecha com o saldo</span>
+              )}
             </div>
             {item.status === 'conciliado' && item.lancamento?.observacoes && (
               <p className="mt-1 text-xs text-on-surface-variant">ERP: {item.lancamento.observacoes}</p>
@@ -599,9 +602,13 @@ export default function Conciliacao() {
 
             {extrato.conferencia && (() => {
               const conferencia = extrato.conferencia;
+              const linhasSaldoInconsistente = extrato.linhas.filter((linha) => linha.saldoInconsistente);
+              const textoDivergencia = `A soma das movimentações não fecha com os saldos do extrato: diferença de ${conferencia.diferenca === null ? '—' : moeda.format(conferencia.diferenca)}.${linhasSaldoInconsistente.length > 0
+                ? ` ${linhasSaldoInconsistente.length} ${linhasSaldoInconsistente.length === 1 ? 'linha inconsistente' : 'linhas inconsistentes'} com a coluna Saldo: ${linhasSaldoInconsistente.slice(0, 3).map((linha) => `(${linha.data.slice(8, 10)}/${linha.data.slice(5, 7)}) · ${moeda.format(linha.valor)} · ${linha.descricao}`).join('; ')}. Confira esses valores no PDF antes de conciliar.`
+                : ' Pode haver linha não lida — confira as linhas duvidosas abaixo.'}`;
               const status = {
                 ok: { titulo: 'Saldos conferem', Icon: CheckCircle2, classes: 'border-bank-truth-green/30 bg-bank-truth-green/10 text-bank-truth-green', texto: 'Saldo inicial + entradas − saídas fecha com o saldo final informado no extrato.' },
-                divergente: { titulo: 'Divergência entre saldos e movimentações', Icon: AlertTriangle, classes: 'border-alert-red/30 bg-alert-red/10 text-alert-red', texto: `A soma das movimentações não fecha com os saldos do extrato: diferença de ${conferencia.diferenca === null ? '—' : moeda.format(conferencia.diferenca)}. Pode haver linha não lida — confira as linhas duvidosas abaixo.` },
+                divergente: { titulo: 'Divergência entre saldos e movimentações', Icon: AlertTriangle, classes: 'border-alert-red/30 bg-alert-red/10 text-alert-red', texto: textoDivergencia },
                 nao_verificavel: { titulo: 'Conferência de saldos não disponível', Icon: HelpCircle, classes: 'border-surface-border bg-surface-container-low text-on-surface-variant', texto: 'O extrato não informa saldo inicial e/ou final, então não foi possível conferir a soma das movimentações.' },
               }[conferencia.status];
               const Icon = status.Icon;
