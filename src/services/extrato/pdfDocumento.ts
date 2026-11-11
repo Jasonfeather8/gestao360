@@ -34,6 +34,9 @@ export interface AnaliseExtrato {
 
 const CABECALHO_DIA = /^(\d{2})\/(\d{2})(?:\/(\d{2,4}))?\b/;
 const LINHA_COM_HORA = /^(\d{2})\/(\d{2})(?:\/(\d{2,4}))?\s*[-–—]?\s*\d{1,2}:\d{2}/;
+const PERIODO_ENTRE_DATAS = /\bEntre\s+(\d{2})\/(\d{2})\/(\d{4})\s+(?:e|a)\s+(\d{2})\/(\d{2})\/(\d{4})\b/i;
+// A Caixa imprime "Período dos lançamentos 01/11/2025 até 30/11/2025".
+const PERIODO_LANCAMENTOS_CAIXA = /per[ií]odo\s+dos\s+lan[cç]amentos\s+(\d{2})\/(\d{2})\/(\d{4})\s+(?:at[eé]|a)\s+(\d{2})\/(\d{2})\/(\d{4})/i;
 
 function dataIso(dia: number, mes: number, ano: number): string | null {
   const data = new Date(Date.UTC(ano, mes - 1, dia));
@@ -48,7 +51,7 @@ function dataIso(dia: number, mes: number, ano: number): string | null {
 
 function periodoDoDocumento(linhas: string[]): { inicio: string; fim: string } | null {
   for (const linha of linhas) {
-    const correspondencia = linha.match(/\bEntre\s+(\d{2})\/(\d{2})\/(\d{4})\s+(?:e|a)\s+(\d{2})\/(\d{2})\/(\d{4})\b/i);
+    const correspondencia = linha.match(PERIODO_ENTRE_DATAS) ?? linha.match(PERIODO_LANCAMENTOS_CAIXA);
     if (!correspondencia) continue;
     const inicio = dataIso(Number(correspondencia[1]), Number(correspondencia[2]), Number(correspondencia[3]));
     const fim = dataIso(Number(correspondencia[4]), Number(correspondencia[5]), Number(correspondencia[6]));

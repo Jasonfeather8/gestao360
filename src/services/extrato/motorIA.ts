@@ -16,7 +16,17 @@ import { analisarExtrato, type CabecalhoDiaExtrato } from './pdfDocumento';
 const LIMITE_ARQUIVO = 20 * 1024 * 1024;
 const LIMITE_PAGINAS = 60;
 const PREFIXO = '[motorIA]';
-const PADRAO_LINHA_SALDO = /saldo\s+(?:do\s+)?dia\b|saldo\s+anterior/i;
+const PADRAO_SALDO_INVEST = /saldo\s+invest/i;
+// Linhas de saldo/resumo do extrato nunca são lançamento: "SALDO DIA", "SALDO ANTERIOR",
+// "SALDO ATUAL", "SALDO DISPONÍVEL" e "SALDO BLOQUEADO".
+const PADRAO_LINHA_SALDO = /saldo\s+(?:do\s+)?dia\b|saldo\s+anterior|saldo\s+atual|saldo\s+dispon[ií]vel|saldo\s+bloqueado/i;
+
+/** Motivo de "linha ignorada" quando o texto é de saldo/resumo; null quando é lançamento. */
+function motivoLinhaDeSaldo(texto: string): MotivoLinhaIgnorada | null {
+  if (PADRAO_SALDO_INVEST.test(texto)) return 'investimento';
+  if (PADRAO_LINHA_SALDO.test(texto)) return 'saldo';
+  return null;
+}
 
 function calcularPaginasPorLote(totalPaginas: number): number {
   if (totalPaginas <= 6) return 1;
@@ -351,26 +361,16 @@ export async function lerExtratoIA(
         };
       }
 
-      // Salvaguarda determinística: linha de saldo de investimento ("SALDO INVEST FÁCIL",
-      // "Saldos Invest Fácil / Plus") nunca é lançamento. Se a IA a classificar como
-      // lançamento, ela sai da comparação e fica registrada como ignorada, em vez de
-      // virar conciliação. Um crédito real de rendimento ("RENTAB.INVEST FACILCRED") não
-      // casa com este padrão.
+      // Salvaguarda determinística: linhas de saldo de investimento ("SALDO INVEST FÁCIL",
+      // "Saldos Invest Fácil / Plus") nunca são lançamentos. Um crédito real de rendimento
+      // ("RENTAB.INVEST FACILCRED") não é classificado como saldo.
       for (const linha of mapearLinhas(data.linhas, loteAtual)) {
-        if (/saldo\s+invest/i.test(`${linha.descricao} ${linha.textoOriginal}`)) {
+        const motivoSaldo = motivoLinhaDeSaldo(`${linha.descricao} ${linha.textoOriginal}`);
+        if (motivoSaldo) {
           linhasIgnoradas.push({
             pagina: linha.pagina,
             texto: linha.textoOriginal || linha.descricao,
-            motivo: 'investimento',
-            data: linha.data,
-          });
-          continue;
-        }
-        if (PADRAO_LINHA_SALDO.test(`${linha.descricao} ${linha.textoOriginal}`)) {
-          linhasIgnoradas.push({
-            pagina: linha.pagina,
-            texto: linha.textoOriginal || linha.descricao,
-            motivo: 'saldo',
+            motivo: motivoSaldo,
             data: linha.data,
           });
           continue;
@@ -378,8 +378,9 @@ export async function lerExtratoIA(
         linhas.push(linha);
       }
       for (const duvidosa of mapearDuvidosas(data.linhasDuvidosas)) {
-        if (PADRAO_LINHA_SALDO.test(duvidosa.texto)) {
-          linhasIgnoradas.push({ pagina: duvidosa.pagina, texto: duvidosa.texto, motivo: 'saldo' });
+        const motivoSaldo = motivoLinhaDeSaldo(duvidosa.texto);
+        if (motivoSaldo) {
+          linhasIgnoradas.push({ pagina: duvidosa.pagina, texto: duvidosa.texto, motivo: motivoSaldo });
         } else {
           naoInterpretadas.push(duvidosa);
         }
