@@ -1,0 +1,1 @@
+ALTER TABLE public.contas_bancarias ADD COLUMN IF NOT EXISTS limite_saldo_negativo numeric(12,2)

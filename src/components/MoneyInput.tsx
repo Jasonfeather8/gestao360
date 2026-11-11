@@ -11,9 +11,10 @@ interface MoneyInputProps {
   disabled?: boolean;
   id?: string;
   'aria-label'?: string;
+  'data-testid'?: string;
 }
 
-export default function MoneyInput({ value, onChange, permitirNegativo, className, placeholder, required, autoFocus, disabled, id, 'aria-label': ariaLabel }: MoneyInputProps) {
+export default function MoneyInput({ value, onChange, permitirNegativo, className, placeholder, required, autoFocus, disabled, id, 'aria-label': ariaLabel, 'data-testid': testId }: MoneyInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const formatValue = (val: string) => {
@@ -58,6 +59,7 @@ export default function MoneyInput({ value, onChange, permitirNegativo, classNam
       ref={inputRef}
       id={id}
       aria-label={ariaLabel}
+      data-testid={testId}
       type="text"
       value={value}
       onChange={handleChange}

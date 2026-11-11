@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS trg_proteger_config_saldo_negativo ON public.contas_bancarias

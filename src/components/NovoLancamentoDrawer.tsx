@@ -33,6 +33,7 @@ import type { PrintableDocumentData } from './printing/types';
 import { supabase } from '@/integrations/supabase/client';
 import Button from './Button';
 import { calculateAdjustmentAmount } from '../utils/adjustments';
+import { descricaoLimiteSaldoNegativo, excedeSaldoDaConta } from '../utils/saldoConta';
 import { mensagemErroNomeDuplicado, podeSalvarNome } from '../utils/validacaoNomes';
 
 function formatBRL(value: any): string {
@@ -596,7 +597,7 @@ export default function NovoLancamentoDrawer() {
   const valorRecebido = parseMoney(lancamentoFormDraft.valor_recebido);
   const valorOperacaoSaida = isSaidaImediata && valorRecebido > 0 ? valorRecebido : 0;
   const saldoInsuficiente = role !== 'colaborador' && isSaidaImediata && selectedConta
-    ? valorOperacaoSaida > (selectedConta as any).saldo_real + 0.005
+    ? excedeSaldoDaConta(selectedConta, Number((selectedConta as any).saldo_real) || 0, valorOperacaoSaida)
     : false;
   const recebimentoAcimaSaldo = lancamentoFormDraft.ja_recebido && valorRecebido > saldoRecebimento + 0.005;
   const pagamentoParcial = lancamentoFormDraft.ja_recebido && valorRecebido > 0 && valorRecebido < saldoRecebimento - 0.005;
@@ -1738,7 +1739,7 @@ export default function NovoLancamentoDrawer() {
                   <AlertCircle className="w-5 h-5 text-alert-red shrink-0" />
                   <div>
                     <span className="text-[10px] font-black uppercase text-alert-red tracking-widest block">Saldo Insuficiente</span>
-                    <span className="text-[9px] font-bold text-alert-red/80">Saldo insuficiente na conta selecionada. Saldo disponível: R$ {formatBRL((selectedConta as any)?.saldo_real)}. Valor necessário: R$ {formatBRL(valorOperacaoSaida)}.</span>
+                    <span className="text-[9px] font-bold text-alert-red/80">Saldo insuficiente na conta selecionada. Saldo disponível: R$ {formatBRL((selectedConta as any)?.saldo_real)}. Valor necessário: R$ {formatBRL(valorOperacaoSaida)}.{descricaoLimiteSaldoNegativo(selectedConta)}</span>
                   </div>
                 </div>
               )}

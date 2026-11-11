@@ -33,6 +33,7 @@ import { podeUsarBPI, podeVerSaldos } from '../config/permissions';
 import MoneyInput from './MoneyInput';
 import Button from './Button';
 import { calculateAdjustmentAmount } from '../utils/adjustments';
+import { descricaoLimiteSaldoNegativo, excedeSaldoDaConta } from '../utils/saldoConta';
 import { supabase } from '@/integrations/supabase/client';
 import { mensagemErroNomeDuplicado, podeSalvarNome } from '../utils/validacaoNomes';
 
@@ -324,9 +325,10 @@ export default function BaixaLancamentoModal() {
   const isObsFilled = observacao.trim().length > 0;
 
   // Saldo Insuficiente validation (Item 1)
-  const selectedContaSaldo = contas.find((c: any) => c.id === contaId)?.saldo_real || 0;
+  const selectedConta = contas.find((c: any) => c.id === contaId);
+  const selectedContaSaldo = Number(selectedConta?.saldo_real) || 0;
   const isSaida = lancamento?.tipo === 'saida';
-  const saldoInsuficienteBaixa = podeVerSaldo && !isBpi && !isAVR && isSaida && valorDigitado > 0 && valorDigitado > selectedContaSaldo + 0.005;
+  const saldoInsuficienteBaixa = podeVerSaldo && !isBpi && !isAVR && isSaida && valorDigitado > 0 && excedeSaldoDaConta(selectedConta, selectedContaSaldo, valorDigitado);
 
   const canSave = (!isObsRequired || isObsFilled) &&
                   (!isAVRReasonRequired || isAVRReasonSelected) &&
@@ -802,7 +804,7 @@ export default function BaixaLancamentoModal() {
                   {saldoInsuficienteBaixa && (
                     <div className="p-3 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-2 text-alert-red min-h-12">
                       <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span className="text-[10px] font-black uppercase tracking-tight">Saldo insuficiente na conta selecionada. Saldo disponível: R$ {formatBRL(selectedContaSaldo)}. Valor necessário: R$ {formatBRL(valorDigitado)}.</span>
+                      <span className="text-[10px] font-black uppercase tracking-tight">Saldo insuficiente na conta selecionada. Saldo disponível: R$ {formatBRL(selectedContaSaldo)}. Valor necessário: R$ {formatBRL(valorDigitado)}.{descricaoLimiteSaldoNegativo(selectedConta)}</span>
                     </div>
                   )}
                   {isAVR && (
@@ -1210,7 +1212,7 @@ export default function BaixaLancamentoModal() {
                 <AlertCircle className="w-5 h-5 text-alert-red shrink-0" />
                 <div>
                   <span className="text-[10px] font-black uppercase text-alert-red tracking-widest block">Saldo Insuficiente</span>
-                  <span className="text-[9px] font-bold text-alert-red/80">A conta selecionada possui R$ {formatBRL(selectedContaSaldo)} de saldo real. Não é possível quitar este título.</span>
+                  <span className="text-[9px] font-bold text-alert-red/80">A conta selecionada possui R$ {formatBRL(selectedContaSaldo)} de saldo real. Não é possível quitar este título.{descricaoLimiteSaldoNegativo(selectedConta)}</span>
                 </div>
               </div>
             )}

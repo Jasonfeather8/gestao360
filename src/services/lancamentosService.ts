@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { diagnosticLogger } from './diagnosticLogger';
 import { LancamentoFinanceiro } from '../types';
 import { calculateAdjustmentAmount } from '../utils/adjustments';
+import { descricaoLimiteSaldoNegativo, excedeSaldoDaConta } from '../utils/saldoConta';
 
 export interface LancamentoFilters {
   searchTerm?: string;
@@ -84,6 +85,16 @@ const getOperationalBalance = async (contaId: string): Promise<number> => {
   return saldo ? Number(saldo.saldo_operacional) || 0 : 0;
 };
 
+const getContaConfigSaldoNegativo = async (contaId: string) => {
+  const { data, error } = await supabase
+    .from('contas_bancarias')
+    .select('permite_saldo_negativo, limite_saldo_negativo')
+    .eq('id', contaId)
+    .maybeSingle();
+  if (error) throw error;
+  return data as { permite_saldo_negativo: boolean | null; limite_saldo_negativo: number | null } | null;
+};
+
 const assertOperationalBalance = async ({
   tipo,
   tipoBaixa,
@@ -100,9 +111,13 @@ const assertOperationalBalance = async ({
   if (tipo !== 'saida' || tipoBaixa === 'avr' || tipoBaixa === 'bpi' || amount <= 0) return;
   if (!contaId) throw new Error('Selecione uma conta bancária para realizar a saída.');
 
-  const saldoDisponivel = await getOperationalBalance(contaId) + saldoAdicionado;
-  if (amount > saldoDisponivel + 0.005) {
-    throw new Error(`Saldo insuficiente na conta selecionada. Saldo disponível: R$ ${formatBRL(saldoDisponivel)}. Valor necessário: R$ ${formatBRL(amount)}.`);
+  const [saldoBase, conta] = await Promise.all([
+    getOperationalBalance(contaId),
+    getContaConfigSaldoNegativo(contaId)
+  ]);
+  const saldoDisponivel = saldoBase + saldoAdicionado;
+  if (excedeSaldoDaConta(conta, saldoDisponivel, amount)) {
+    throw new Error(`Saldo insuficiente na conta selecionada. Saldo disponível: R$ ${formatBRL(saldoDisponivel)}. Valor necessário: R$ ${formatBRL(amount)}.${descricaoLimiteSaldoNegativo(conta)}`);
   }
 };
 

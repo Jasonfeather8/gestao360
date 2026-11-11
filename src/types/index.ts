@@ -64,6 +64,8 @@ export interface ContaBancaria {
   data_abertura: string;
   logo_url?: string;
   is_cofre_local?: boolean;
+  permite_saldo_negativo?: boolean;
+  limite_saldo_negativo?: number | null;
   status?: string;
 }
 

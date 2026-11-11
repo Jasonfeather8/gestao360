@@ -1,0 +1,1 @@
+CREATE TRIGGER trg_proteger_config_saldo_negativo BEFORE INSERT OR UPDATE ON public.contas_bancarias FOR EACH ROW EXECUTE FUNCTION public.proteger_config_saldo_negativo()

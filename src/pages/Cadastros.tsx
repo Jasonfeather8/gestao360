@@ -93,6 +93,8 @@ export default function Cadastros() {
   const [bankInitial, setBankInitial] = useState('');
   const [bankDataAbertura, setBankDataAbertura] = useState('');
   const [bankLogoUrl, setBankLogoUrl] = useState('');
+  const [bankPermiteNegativo, setBankPermiteNegativo] = useState(false);
+  const [bankLimiteNegativo, setBankLimiteNegativo] = useState('');
   const [isCofreLocal, setIsCofreLocal] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [ccName, setCCName] = useState('');
@@ -137,6 +139,8 @@ export default function Cadastros() {
     setBankInitial('');
     setBankDataAbertura(dataDeHoje());
     setBankLogoUrl('');
+    setBankPermiteNegativo(false);
+    setBankLimiteNegativo('');
     setIsCofreLocal(false);
     setAcessosConta({});
     setIsNewAccountOpen(true);
@@ -148,6 +152,8 @@ export default function Cadastros() {
     setBankInitial(c.saldo_inicial.toFixed(2).replace('.', ','));
     setBankDataAbertura(c.data_abertura ? String(c.data_abertura).slice(0, 10) : '');
     setBankLogoUrl(c.logo_url || '');
+    setBankPermiteNegativo(!!c.permite_saldo_negativo);
+    setBankLimiteNegativo(c.limite_saldo_negativo != null ? Number(c.limite_saldo_negativo).toFixed(2).replace('.', ',') : '');
     setIsCofreLocal(!!c.is_cofre_local);
     setAcessosConta({});
     setIsNewAccountOpen(true);
@@ -200,6 +206,7 @@ export default function Cadastros() {
     if (!podeSalvarNome<(typeof contas)[number]>(bankName, contas, { nomeDe: (conta) => conta.nome_banco || conta.nome, ignorarId: editingAccount?.id, rotulo: 'banco' })) return;
     try {
       const saldo = parseFloat(bankInitial.replace(/\./g, '').replace(',', '.')) || 0;
+      const limiteNegativo = parseFloat(bankLimiteNegativo.replace(/\./g, '').replace(',', '.')) || 0;
       if (editingAccount) {
         await updateAccount({
           id: editingAccount.id,
@@ -209,7 +216,9 @@ export default function Cadastros() {
             saldo_inicial: saldo,
             data_abertura: bankDataAbertura || undefined,
             logo_url: bankLogoUrl,
-            is_cofre_local: isCofreLocal
+            is_cofre_local: isCofreLocal,
+            permite_saldo_negativo: bankPermiteNegativo,
+            limite_saldo_negativo: limiteNegativo > 0 ? limiteNegativo : null
           }
         });
         await salvarAcessosDaConta(editingAccount.id);
@@ -222,7 +231,9 @@ export default function Cadastros() {
           saldo_inicial: saldo,
           data_abertura: bankDataAbertura || new Date().toISOString(),
           logo_url: bankLogoUrl,
-          is_cofre_local: isCofreLocal
+          is_cofre_local: isCofreLocal,
+          permite_saldo_negativo: bankPermiteNegativo,
+          limite_saldo_negativo: limiteNegativo > 0 ? limiteNegativo : null
         });
         if (novaConta?.id) await salvarAcessosDaConta(novaConta.id);
       }
@@ -233,6 +244,8 @@ export default function Cadastros() {
       setBankInitial('');
       setBankDataAbertura('');
       setBankLogoUrl('');
+      setBankPermiteNegativo(false);
+      setBankLimiteNegativo('');
       setIsCofreLocal(false);
     } catch (err: any) {
       const errorMessages = [err?.message, err?.details, err?.hint, err?.cause?.message]
@@ -639,6 +652,38 @@ export default function Cadastros() {
                       className="w-full h-12 bg-neutral-50 border-2 border-neutral-100 rounded-2xl px-5 text-xs font-black focus:border-primary outline-none"
                     />
                     <p className="text-[10px] font-medium text-neutral-500">Data de referência do saldo inicial. É a data exibida na lista de contas.</p>
+                  </div>
+                )}
+                {isMaster && (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Permite saldo negativo?</span>
+                    <div className="flex gap-2">
+                      {[{ label: 'Sim', value: true }, { label: 'Não', value: false }].map(option => (
+                        <button
+                          key={option.label}
+                          type="button"
+                          data-testid={option.value ? 'permite-saldo-negativo-sim' : 'permite-saldo-negativo-nao'}
+                          aria-pressed={bankPermiteNegativo === option.value}
+                          onClick={() => setBankPermiteNegativo(option.value)}
+                          className={`flex-1 rounded-xl border px-4 py-2 text-xs font-bold transition-colors ${bankPermiteNegativo === option.value ? 'border-primary bg-primary text-white' : 'border-surface-border bg-surface text-on-surface hover:border-primary'}`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    {bankPermiteNegativo && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">Limite de saldo negativo (R$)</label>
+                        <MoneyInput
+                          value={bankLimiteNegativo}
+                          onChange={setBankLimiteNegativo}
+                          data-testid="limite-saldo-negativo"
+                          className="w-full h-12 bg-neutral-50 border-2 border-neutral-100 rounded-2xl px-5 text-xs font-black focus:border-primary outline-none"
+                          placeholder="0,00"
+                        />
+                      </div>
+                    )}
+                    <p className="text-[10px] font-medium text-neutral-500">Sem limite preenchido, a conta pode ficar negativa sem limite; com limite, pode ficar negativa até esse valor.</p>
                   </div>
                 )}
                 <div className="space-y-2">

@@ -1,0 +1,1 @@
+ALTER TABLE public.contas_bancarias ADD COLUMN IF NOT EXISTS permite_saldo_negativo boolean NOT NULL DEFAULT false

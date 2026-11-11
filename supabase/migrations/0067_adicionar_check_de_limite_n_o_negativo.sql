@@ -1,0 +1,1 @@
+ALTER TABLE public.contas_bancarias ADD CONSTRAINT contas_bancarias_limite_saldo_negativo_valido_check CHECK (limite_saldo_negativo IS NULL OR limite_saldo_negativo >= 0)
