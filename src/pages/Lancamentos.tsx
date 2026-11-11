@@ -1164,8 +1164,8 @@ export default function Lancamentos({
                     <th className="py-5 px-4">Entidade</th>
                     <th className="py-5 px-4">Vencimento</th>
                     <th className="py-5 px-4">Pagamento</th>
-                    {isFinanceiroView && <th className="py-5 px-4 text-right">Total dia</th>}
                     <th className="py-5 px-4 text-right">Valor</th>
+                    {isFinanceiroView && <th className="py-5 px-4 text-right">Total dia</th>}
                     <th className="py-5 px-4 text-center">Aprovação</th>
                     <th className="py-5 px-4 text-center">Conciliação</th>
                     <th className="py-5 px-4 text-center">Banco</th>
@@ -1344,14 +1344,7 @@ export default function Lancamentos({
                             )}
                           </td>
 
-                          {isFinanceiroView && (
-                            <td className="py-3 px-4 text-right font-black font-mono text-xs text-neutral-900">
-                              {podeVerSaldos(role) && item.conta_bancaria_id && saldoLancamento != null
-                                ? valueFormatter(saldoLancamento)
-                                : '—'}
-                            </td>
-                          )}
-                          <td className={`py-3 px-4 text-right font-black font-mono text-xs ${item.tipo === 'entrada' ? 'text-bank-truth-green' : 'text-neutral-950'}`}>
+                          <td className={`py-3 px-4 text-right font-black font-mono text-xs ${item.tipo === 'entrada' ? 'text-bank-truth-green' : 'text-alert-red'}`}>
                             <span className="flex flex-col items-end">
                               {valueFormatter(getValorLiquido(item))}
                               {hasAjuste(item) && (
@@ -1361,6 +1354,13 @@ export default function Lancamentos({
                               )}
                             </span>
                           </td>
+                          {isFinanceiroView && (
+                            <td className="py-3 px-4 text-right font-black font-mono text-xs text-neutral-900">
+                              {podeVerSaldos(role) && item.conta_bancaria_id && saldoLancamento != null
+                                ? valueFormatter(saldoLancamento)
+                                : '—'}
+                            </td>
+                          )}
                           <td className="py-3 px-4 text-center whitespace-nowrap">
                             {podeAprovarPeloSelo ? (
                               <button
