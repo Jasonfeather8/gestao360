@@ -21,6 +21,11 @@ export async function openReceivables(page: Page): Promise<void> {
   await expect(page.getByRole("heading", { name: "Contas a Receber" }).first()).toBeVisible({ timeout: 30_000 });
 }
 
+export async function openExtrato(page: Page): Promise<void> {
+  await page.goto("/lancamentos", { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await expect(page.getByRole("heading", { name: "Extrato" }).first()).toBeVisible({ timeout: 30_000 });
+}
+
 export async function openNewLaunch(page: Page): Promise<void> {
   await page.getByRole("button", { name: /novo lançamento/i }).first().click();
   await expect(page.getByRole("heading", { name: "Novo Lançamento" })).toBeVisible({ timeout: 15_000 });

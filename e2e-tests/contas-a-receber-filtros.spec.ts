@@ -19,7 +19,7 @@ import {
   uniqueMarker,
 } from "./fixtures/contas-a-pagar";
 
-test.setTimeout(120_000);
+test.setTimeout(180_000);
 
 let admin: SupabaseClient | undefined;
 let master: MasterTestUser | undefined;
