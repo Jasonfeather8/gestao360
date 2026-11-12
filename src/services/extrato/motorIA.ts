@@ -211,20 +211,38 @@ function marcarSaldosInconsistentes(linhas: LinhaExtrato[]): void {
   const decrescente = primeiraData > ultimaData;
   const ordemIndefinida = primeiraData === ultimaData;
 
-  for (let indice = 0; indice < linhasComSaldo.length - 1; indice++) {
-    const atual = linhasComSaldo[indice];
-    const seguinte = linhasComSaldo[indice + 1];
-    const movimento = atual.direcao === 'entrada' ? atual.valor : -atual.valor;
-    const saldoAtual = atual.saldoApos!;
-    const saldoSeguinte = seguinte.saldoApos!;
+  // Alguns bancos (Stone) imprimem o saldo uma única vez por bloco do dia e o
+  // repetem nas linhas desse bloco (ex.: depósito + tarifa com o mesmo saldo).
+  // Linhas consecutivas com o mesmo saldo formam um bloco: a conferência é feita
+  // entre blocos, somando as movimentações do bloco. Quando cada linha tem saldo
+  // próprio, cada bloco tem uma linha só e a conferência é a de antes.
+  const blocos: LinhaExtrato[][] = [];
+  for (const linha of linhasComSaldo) {
+    const blocoAtual = blocos[blocos.length - 1];
+    if (blocoAtual && blocoAtual[0].saldoApos === linha.saldoApos) {
+      blocoAtual.push(linha);
+      continue;
+    }
+    blocos.push([linha]);
+  }
+
+  for (let indice = 0; indice < blocos.length - 1; indice++) {
+    const atual = blocos[indice];
+    const seguinte = blocos[indice + 1];
+    const movimento = atual.reduce(
+      (total, linha) => total + (linha.direcao === 'entrada' ? linha.valor : -linha.valor),
+      0,
+    );
+    const saldoAtual = atual[0].saldoApos!;
+    const saldoSeguinte = seguinte[0].saldoApos!;
     const fechaDecrescente = Math.abs(saldoAtual - movimento - saldoSeguinte) <= 0.01;
     const fechaCrescente = Math.abs(saldoAtual + movimento - saldoSeguinte) <= 0.01;
     const inconsistente = ordemIndefinida
       ? !fechaDecrescente && !fechaCrescente
       : !(decrescente ? fechaDecrescente : fechaCrescente);
     if (inconsistente) {
-      atual.saldoInconsistente = true;
-      seguinte.saldoInconsistente = true;
+      for (const linha of atual) linha.saldoInconsistente = true;
+      for (const linha of seguinte) linha.saldoInconsistente = true;
     }
   }
 }
