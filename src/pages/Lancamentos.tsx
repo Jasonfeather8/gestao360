@@ -355,11 +355,19 @@ export default function Lancamentos({
 
   const totalPages = pageSize === 'all' ? 1 : Math.max(Math.ceil(totalCount / pageSize), 1);
 
+  // A janela de botões acompanha a página atual: a página ativa fica sempre visível e
+  // alcançável, mesmo quando a lista tem mais páginas do que os 5 botões exibidos.
+  const pageWindowStart = Math.min(Math.max(currentPage - 2, 1), Math.max(totalPages - 4, 1));
+  const visiblePages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageWindowStart + index);
+
   // Se a quantidade de registros diminuir (filtro aplicado, título excluído, baixa
   // registrada), a página corrente não pode continuar além da última página existente.
+  // Durante o carregamento a contagem ainda não corresponde à página pedida, então o
+  // ajuste é ignorado para não devolver a listagem para a primeira página ao navegar.
   useEffect(() => {
+    if (isLoading) return;
     setCurrentPage(previousPage => Math.min(previousPage, totalPages));
-  }, [totalPages]);
+  }, [isLoading, totalPages]);
 
   const { data: entidades = [] } = useEntidades();
   const { data: categorias = [] } = useCategorias();
@@ -1558,23 +1566,21 @@ export default function Lancamentos({
                   Anterior
                 </button>
                 <div className="flex gap-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    const pageNum = i + 1;
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`w-10 h-10 rounded-xl text-[10px] font-black transition-all ${
-                          currentPage === pageNum
-                            ? 'bg-neutral-900 text-white shadow-md'
-                            : 'border-2 border-neutral-100 text-neutral-400 hover:bg-neutral-50'
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-                  {totalPages > 5 && <span className="flex items-end pb-2 text-neutral-400">...</span>}
+                  {pageWindowStart > 1 && <span className="flex items-end pb-2 text-neutral-400">...</span>}
+                  {visiblePages.map(pageNum => (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`w-10 h-10 rounded-xl text-[10px] font-black transition-all ${
+                        currentPage === pageNum
+                          ? 'bg-neutral-900 text-white shadow-md'
+                          : 'border-2 border-neutral-100 text-neutral-400 hover:bg-neutral-50'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  ))}
+                  {pageWindowStart + visiblePages.length - 1 < totalPages && <span className="flex items-end pb-2 text-neutral-400">...</span>}
                 </div>
                 <button
                   disabled={currentPage === totalPages}

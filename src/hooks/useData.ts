@@ -351,7 +351,13 @@ export function useLancamentos(filters?: any) {
   const { role } = useAuth();
   const isMaster = role === 'master';
 
-  const query = useQuery({ queryKey: ['lancamentos', filters], queryFn: ({ signal }) => lancamentosService.getAll(filters, signal) });
+  // Mantém a página anterior na tela enquanto a próxima carrega: trocar de página (ou de
+  // filtro) não pode esvaziar a tabela nem zerar a contagem que alimenta a paginação.
+  const query = useQuery({
+    queryKey: ['lancamentos', filters],
+    queryFn: ({ signal }) => lancamentosService.getAll(filters, signal),
+    placeholderData: keepPreviousData
+  });
   const invalidateDashboard = () => {
     ['dashboardStats', 'dashboardIndicadores', 'dashboardPerformance'].forEach(queryKey => queryClient.invalidateQueries({ queryKey: [queryKey] }));
   };
