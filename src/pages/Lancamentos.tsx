@@ -47,7 +47,7 @@ import AccountFilterCards from '../components/Lancamentos/AccountFilterCards';
 import LancamentoActionMenu from '../components/Lancamentos/LancamentoActionMenu';
 import FinanceiroStatusFilter from '../components/Lancamentos/FinanceiroStatusFilter';
 import ReciboModal from '../components/Lancamentos/ReciboModal';
-import { idsContasDoPerfil, podeVerSaldos } from '../config/permissions';
+import { idsContasDoPerfil, podeVerSaldos, SEM_CONTA_LIBERADA } from '../config/permissions';
 
 type LancamentoExibido = LancamentoFinanceiro & { transferenciaEspelhoIds?: string[] };
 
@@ -202,13 +202,40 @@ export default function Lancamentos({
   const [motivoAcrescimoFilter, setMotivoAcrescimoFilter] = useState('all');
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(true);
 
+  // Qualquer mudança de filtro (inclusive o período personalizado) recomeça a listagem
+  // na primeira página: sem isso a consulta continua pedindo uma página que deixou de
+  // existir e a tabela aparece vazia mesmo havendo títulos que casam com o filtro.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    debouncedSearchTerm,
+    docSearchTerm,
+    dateFilterActive,
+    startDate,
+    endDate,
+    approvalStatus,
+    statusPagamento,
+    typeFilter,
+    authorIdFilter,
+    categoryIdFilter,
+    contaIdFilter,
+    centroCustoIdFilter,
+    condicaoFilter,
+    temDescontoFilter,
+    temAcrescimoFilter,
+    motivoDescontoFilter,
+    motivoAcrescimoFilter,
+    transferenciasOnly,
+    selectedAccountIds
+  ]);
+
   const selectionDiffersFromDefault = (selection: string[], defaultValue: string) => {
     const normalizedSelection = selection.filter(value => value !== 'all' && value !== '');
     const normalizedDefault = defaultValue === 'all' || defaultValue === '' ? [] : [defaultValue];
     return normalizedSelection.length !== normalizedDefault.length || normalizedSelection.some((value, index) => value !== normalizedDefault[index]);
   };
 
-  const hasActiveFilters = debouncedSearchTerm !== '' || docSearchTerm !== '' || approvalStatus !== 'all' || transferenciasOnly || selectionDiffersFromDefault(statusPagamento, defaultStatusPagamento) || selectionDiffersFromDefault(typeFilter, defaultTypeFilter) || authorIdFilter.length > 0 || categoryIdFilter.length > 0 || contaIdFilter.length > 0 || centroCustoIdFilter.length > 0 || condicaoFilter !== 'all' || temDescontoFilter !== 'all' || temAcrescimoFilter !== 'all' || motivoDescontoFilter !== 'all' || motivoAcrescimoFilter !== 'all';
+  const hasActiveFilters = debouncedSearchTerm !== '' || docSearchTerm !== '' || dateFilterActive || approvalStatus !== 'all' || transferenciasOnly || selectionDiffersFromDefault(statusPagamento, defaultStatusPagamento) || selectionDiffersFromDefault(typeFilter, defaultTypeFilter) || authorIdFilter.length > 0 || categoryIdFilter.length > 0 || contaIdFilter.length > 0 || centroCustoIdFilter.length > 0 || condicaoFilter !== 'all' || temDescontoFilter !== 'all' || temAcrescimoFilter !== 'all' || motivoDescontoFilter !== 'all' || motivoAcrescimoFilter !== 'all';
 
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [selectedLogItem, setSelectedLogItem] = useState<LancamentoFinanceiro | null>(null);
@@ -221,6 +248,18 @@ export default function Lancamentos({
     () => idsContasDoPerfil(role, contasLiberadas, contasBloqueadas, rawContas.map((c: any) => c.id)),
     [contasBloqueadas, contasLiberadas, rawContas, role]
   );
+
+  // Contas que a listagem pode exibir: o dropdown de conta e os cards de conta
+  // ("Filtrar por Conta") se combinam e são limitados às contas permitidas ao perfil.
+  // Quando a combinação não sobra nenhuma conta, o sentinela garante lista vazia em vez
+  // de remover o filtro e vazar títulos de outras contas.
+  const contasEfetivas = useMemo(() => {
+    const baseContaIds = contaIdFilter.length > 0 ? contaIdFilter : idsContasPermitidas;
+    if (selectedAccountIds.length === 0) return baseContaIds;
+    if (baseContaIds.length === 0) return selectedAccountIds;
+    const matchingAccountIds = selectedAccountIds.filter(id => baseContaIds.includes(id));
+    return matchingAccountIds.length > 0 ? matchingAccountIds : [SEM_CONTA_LIBERADA];
+  }, [contaIdFilter, idsContasPermitidas, selectedAccountIds]);
 
   const {
     data: allLancamentos = [],
@@ -244,7 +283,7 @@ export default function Lancamentos({
     operationalView: isOperationalView,
     authorId: authorIdFilter,
     categoryId: categoryIdFilter,
-    contaId: contaIdFilter.length > 0 ? contaIdFilter : idsContasPermitidas,
+    contaId: contasEfetivas,
     centroCustoId: centroCustoIdFilter,
     condicao: condicaoFilter,
     temDesconto: temDescontoFilter,
@@ -316,6 +355,12 @@ export default function Lancamentos({
 
   const totalPages = pageSize === 'all' ? 1 : Math.max(Math.ceil(totalCount / pageSize), 1);
 
+  // Se a quantidade de registros diminuir (filtro aplicado, título excluído, baixa
+  // registrada), a página corrente não pode continuar além da última página existente.
+  useEffect(() => {
+    setCurrentPage(previousPage => Math.min(previousPage, totalPages));
+  }, [totalPages]);
+
   const { data: entidades = [] } = useEntidades();
   const { data: categorias = [] } = useCategorias();
   const { data: usuarios = [] } = useUsuarios();
@@ -330,17 +375,13 @@ export default function Lancamentos({
     }
   }, [searchParams, setSelectedLancamentoIdForModal, setModalOpen]);
 
-  const filteredLancamentos = useMemo(() => {
-    return allLancamentos.filter(l => selectedAccountIds.length === 0 || selectedAccountIds.includes(l.conta_bancaria_id));
-  }, [allLancamentos, selectedAccountIds]);
-
   const { data: transferencias = [] } = useTransferencias();
   const transferenciasById = useMemo(() => new Map(transferencias.map(transferencia => [transferencia.id, transferencia])), [transferencias]);
   const displayedLancamentos = useMemo<LancamentoExibido[]>(() => {
     const grupos = new Map<string, LancamentoFinanceiro[]>();
     const ordem: Array<{ item: LancamentoFinanceiro } | { transferenciaId: string }> = [];
 
-    filteredLancamentos.forEach(item => {
+    allLancamentos.forEach(item => {
       const isTransferenciaEspelho = Boolean(item.transferencia_id)
         && (item.transferencia_lado === 'origem' || item.transferencia_lado === 'destino');
       if (!isTransferenciaEspelho || !item.transferencia_id) {
@@ -372,19 +413,11 @@ export default function Lancamentos({
 
       return { ...representante, transferenciaEspelhoIds: grupo.map(titulo => titulo.id) };
     });
-  }, [filteredLancamentos]);
+  }, [allLancamentos]);
   const selectableLancamentos = useMemo(
-    () => filteredLancamentos.filter(item => item.transferencia_lado !== 'origem' && item.transferencia_lado !== 'destino'),
-    [filteredLancamentos]
+    () => allLancamentos.filter(item => item.transferencia_lado !== 'origem' && item.transferencia_lado !== 'destino'),
+    [allLancamentos]
   );
-
-  const resolvedFinanceiroContaIds = useMemo(() => {
-    const baseContaIds = contaIdFilter.length > 0 ? contaIdFilter : idsContasPermitidas;
-    if (selectedAccountIds.length === 0) return baseContaIds;
-    if (baseContaIds.length === 0) return selectedAccountIds;
-    const matchingAccountIds = selectedAccountIds.filter(id => baseContaIds.includes(id));
-    return matchingAccountIds.length > 0 ? matchingAccountIds : ['00000000-0000-0000-0000-000000000000'];
-  }, [contaIdFilter, idsContasPermitidas, selectedAccountIds]);
 
   const financeiroStatusFilters = useMemo(() => ({
     searchTerm: debouncedSearchTerm,
@@ -396,7 +429,7 @@ export default function Lancamentos({
     type: typeFilter,
     authorId: authorIdFilter,
     categoryId: categoryIdFilter,
-    contaId: resolvedFinanceiroContaIds,
+    contaId: contasEfetivas,
     centroCustoId: centroCustoIdFilter,
     condicao: condicaoFilter,
     temDesconto: temDescontoFilter,
@@ -405,7 +438,7 @@ export default function Lancamentos({
     motivoAcrescimoId: motivoAcrescimoFilter,
     isFinanceiroView: true,
     baixaRegistradaOnly: true
-  }), [approvalStatus, authorIdFilter, categoryIdFilter, centroCustoIdFilter, condicaoFilter, dateFilterActive, debouncedSearchTerm, docSearchTerm, endDate, isColaborador, motivoAcrescimoFilter, motivoDescontoFilter, resolvedFinanceiroContaIds, startDate, temAcrescimoFilter, temDescontoFilter, typeFilter]);
+  }), [approvalStatus, authorIdFilter, categoryIdFilter, centroCustoIdFilter, condicaoFilter, contasEfetivas, dateFilterActive, debouncedSearchTerm, docSearchTerm, endDate, isColaborador, motivoAcrescimoFilter, motivoDescontoFilter, startDate, temAcrescimoFilter, temDescontoFilter, typeFilter]);
 
   const valueFormatter = (val: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -507,7 +540,7 @@ export default function Lancamentos({
 
   const handleBatchApprove = () => {
     if (!isMaster) return;
-    const eligibleIds = filteredLancamentos
+    const eligibleIds = allLancamentos
       .filter(item => selectedLancamentoIdsForBatch.includes(item.id))
       .filter(item => item.status_aprovacao !== 'confirmado_master' || item.status_pagamento === 'quitação_pendente')
       .map(item => item.id);
@@ -1084,22 +1117,27 @@ export default function Lancamentos({
             <option value="custom">Personalizado</option>
           </select>
 
-          <div className={`flex bg-neutral-100 p-1 rounded-xl h-12 transition-all ${datePreset === 'custom' ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
-            <input
-              type="date"
-              data-testid="date-start"
-              value={startDate}
-              onChange={(e) => { setStartDate(e.target.value); setDatePreset('custom'); setDateFilterActive(true); }}
-              className="bg-transparent border-none text-[10px] font-black uppercase px-2 outline-none"
-            />
-            <div className="w-px h-4 bg-neutral-200 self-center" />
-            <input
-              type="date"
-              data-testid="date-end"
-              value={endDate}
-              onChange={(e) => { setEndDate(e.target.value); setDatePreset('custom'); setDateFilterActive(true); }}
-              className="bg-transparent border-none text-[10px] font-black uppercase px-2 outline-none"
-            />
+          <div className="flex flex-col gap-1 shrink-0">
+            <span className={`text-[8px] font-black uppercase tracking-widest ${dateFilterActive ? 'text-neutral-400' : 'text-alert-red'}`}>
+              Período por {isFinanceiroView ? 'pagamento' : 'vencimento'}{dateFilterActive ? '' : ' · não aplicado'}
+            </span>
+            <div className={`flex bg-neutral-100 p-1 rounded-xl h-12 transition-all ${datePreset === 'custom' ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+              <input
+                type="date"
+                data-testid="date-start"
+                value={startDate}
+                onChange={(e) => { setStartDate(e.target.value); setDatePreset('custom'); setDateFilterActive(true); }}
+                className="bg-transparent border-none text-[10px] font-black uppercase px-2 outline-none"
+              />
+              <div className="w-px h-4 bg-neutral-200 self-center" />
+              <input
+                type="date"
+                data-testid="date-end"
+                value={endDate}
+                onChange={(e) => { setEndDate(e.target.value); setDatePreset('custom'); setDateFilterActive(true); }}
+                className="bg-transparent border-none text-[10px] font-black uppercase px-2 outline-none"
+              />
+            </div>
           </div>
 
           <select
