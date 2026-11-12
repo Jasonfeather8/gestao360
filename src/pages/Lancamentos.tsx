@@ -1117,27 +1117,22 @@ export default function Lancamentos({
             <option value="custom">Personalizado</option>
           </select>
 
-          <div className="flex flex-col gap-1 shrink-0">
-            <span className={`text-[8px] font-black uppercase tracking-widest ${dateFilterActive ? 'text-neutral-400' : 'text-alert-red'}`}>
-              Período por {isFinanceiroView ? 'pagamento' : 'vencimento'}{dateFilterActive ? '' : ' · não aplicado'}
-            </span>
-            <div className={`flex bg-neutral-100 p-1 rounded-xl h-12 transition-all ${datePreset === 'custom' ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
-              <input
-                type="date"
-                data-testid="date-start"
-                value={startDate}
-                onChange={(e) => { setStartDate(e.target.value); setDatePreset('custom'); setDateFilterActive(true); }}
-                className="bg-transparent border-none text-[10px] font-black uppercase px-2 outline-none"
-              />
-              <div className="w-px h-4 bg-neutral-200 self-center" />
-              <input
-                type="date"
-                data-testid="date-end"
-                value={endDate}
-                onChange={(e) => { setEndDate(e.target.value); setDatePreset('custom'); setDateFilterActive(true); }}
-                className="bg-transparent border-none text-[10px] font-black uppercase px-2 outline-none"
-              />
-            </div>
+          <div className={`flex bg-neutral-100 p-1 rounded-xl h-12 transition-all ${datePreset === 'custom' ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+            <input
+              type="date"
+              data-testid="date-start"
+              value={startDate}
+              onChange={(e) => { setStartDate(e.target.value); setDatePreset('custom'); setDateFilterActive(true); }}
+              className="bg-transparent border-none text-[10px] font-black uppercase px-2 outline-none"
+            />
+            <div className="w-px h-4 bg-neutral-200 self-center" />
+            <input
+              type="date"
+              data-testid="date-end"
+              value={endDate}
+              onChange={(e) => { setEndDate(e.target.value); setDatePreset('custom'); setDateFilterActive(true); }}
+              className="bg-transparent border-none text-[10px] font-black uppercase px-2 outline-none"
+            />
           </div>
 
           <select
