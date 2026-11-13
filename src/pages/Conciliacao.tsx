@@ -155,18 +155,23 @@ export default function Conciliacao() {
     [extrato, lancamentos],
   );
 
-  // Posição de cada linha no extrato lido: define a sequência de liberação dentro do dia.
+  // Ordem cronológica de cada linha (já normalizada pela comparação, que inverte extratos
+  // decrescentes como o do Stone): define a sequência de liberação dentro do dia.
   const ordemPorLinhaId = useMemo(() => {
     const mapa = new Map<string, number>();
-    (extrato?.linhas ?? []).forEach((linha, index) => mapa.set(linha.id, index));
+    resultado?.dias.forEach((dia) => {
+      [...dia.entradas, ...dia.saidas].forEach((item) => {
+        if (item.linhaExtrato && item.ordemExtrato !== null) mapa.set(item.linhaExtrato.id, item.ordemExtrato);
+      });
+    });
     return mapa;
-  }, [extrato]);
+  }, [resultado]);
 
   /**
-   * Regra de ordem: o operador concilia o extrato de cima para baixo.
+   * Regra de ordem: o operador concilia o extrato em ordem cronológica (mais antiga primeiro).
    * - Um dia só abre quando todos os itens do dia anterior estão resolvidos.
-   * - Dentro do dia ativo, cada linha só libera depois que as linhas anteriores (na ordem do
-   *   extrato) estiverem resolvidas.
+   * - Dentro do dia ativo, cada linha só libera depois que as linhas anteriores (na ordem
+   *   cronológica) estiverem resolvidas.
    * Só contam as linhas do extrato com transação persistida (conciliaveis); linhas não
    * persistidas e títulos do ERP sem linha no extrato não bloqueiam nada.
    */
@@ -190,7 +195,7 @@ export default function Conciliacao() {
         dias.add(dia.data);
         conciliaveis.forEach((linha) => linhas.add(linha.id));
       } else if (!diaConcluido) {
-        // Dia ativo: libera linha a linha, na ordem do extrato.
+        // Dia ativo: libera linha a linha, na ordem cronológica.
         let liberar = true;
         for (const linha of conciliaveis) {
           if (!liberar) linhas.add(linha.id);
