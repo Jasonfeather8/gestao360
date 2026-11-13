@@ -15,6 +15,7 @@ import {
   HelpCircle,
   Landmark,
   Loader2,
+  Lock,
   PlusCircle,
   Sparkles,
   Trash2,
@@ -33,7 +34,7 @@ import { compararExtrato, valorPrevistoParaConciliar } from '../services/extrato
 import { lerExtrato } from '../services/extrato/motorLeitura';
 import { reaproveitarExtratoImportado } from '../services/extrato/persistencia';
 import { mensagemDoErro } from '../services/erros';
-import type { ExtratoLido, ItemComparacao, LancamentoFinanceiro, ProgressoLeituraExtrato, TransferenciaCandidataLinha } from '../types';
+import type { ExtratoLido, ItemComparacao, LancamentoFinanceiro, LinhaExtrato, ProgressoLeituraExtrato, TransferenciaCandidataLinha } from '../types';
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const dataFormatada = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
@@ -153,6 +154,55 @@ export default function Conciliacao() {
     () => (extrato ? compararExtrato(extrato, lancamentos) : null),
     [extrato, lancamentos],
   );
+
+  // Posição de cada linha no extrato lido: define a sequência de liberação dentro do dia.
+  const ordemPorLinhaId = useMemo(() => {
+    const mapa = new Map<string, number>();
+    (extrato?.linhas ?? []).forEach((linha, index) => mapa.set(linha.id, index));
+    return mapa;
+  }, [extrato]);
+
+  /**
+   * Regra de ordem: o operador concilia o extrato de cima para baixo.
+   * - Um dia só abre quando todos os itens do dia anterior estão resolvidos.
+   * - Dentro do dia ativo, cada linha só libera depois que as linhas anteriores (na ordem do
+   *   extrato) estiverem resolvidas.
+   * Só contam as linhas do extrato com transação persistida (conciliaveis); linhas não
+   * persistidas e títulos do ERP sem linha no extrato não bloqueiam nada.
+   */
+  const { diasBloqueados, linhasBloqueadas } = useMemo(() => {
+    const dias = new Set<string>();
+    const linhas = new Set<string>();
+    if (!resultado || !extrato) return { diasBloqueados: dias, linhasBloqueadas: linhas };
+
+    const linhaResolvida = (linha: LinhaExtrato) =>
+      Boolean(linha.transacaoBancoId && statusConciliacao[linha.transacaoBancoId]);
+
+    let diaAnteriorConcluido = true;
+    for (const dia of resultado.dias) {
+      const conciliaveis = extrato.linhas
+        .filter((linha) => linha.data === dia.data && Boolean(linha.transacaoBancoId))
+        .sort((a, b) => (ordemPorLinhaId.get(a.id) ?? 0) - (ordemPorLinhaId.get(b.id) ?? 0));
+      const diaConcluido = conciliaveis.every(linhaResolvida);
+
+      if (!diaAnteriorConcluido) {
+        // Dia ainda inacessível: todo o bloco fica travado.
+        dias.add(dia.data);
+        conciliaveis.forEach((linha) => linhas.add(linha.id));
+      } else if (!diaConcluido) {
+        // Dia ativo: libera linha a linha, na ordem do extrato.
+        let liberar = true;
+        for (const linha of conciliaveis) {
+          if (!liberar) linhas.add(linha.id);
+          if (!linhaResolvida(linha)) liberar = false;
+        }
+      }
+
+      diaAnteriorConcluido = diaAnteriorConcluido && diaConcluido;
+    }
+    return { diasBloqueados: dias, linhasBloqueadas: linhas };
+  }, [resultado, extrato, statusConciliacao, ordemPorLinhaId]);
+
   const linhasNaoPersistiveis = extrato
     ? extrato.linhas.filter((linha) =>
       linha.confianca === 'baixa' || linha.pagina === null || Boolean(
@@ -335,7 +385,7 @@ export default function Conciliacao() {
     showToast('Transação conciliada com a transferência.');
   };
 
-  const renderItem = (item: ItemComparacao) => {
+  const renderItem = (item: ItemComparacao, diaBloqueado: boolean) => {
     const status = {
       conciliado: { label: 'Par sugerido', icon: CheckCircle2, className: 'bg-bank-truth-green/10 text-bank-truth-green' },
       divergente: { label: 'Valor divergente', icon: AlertTriangle, className: 'bg-alert-red/10 text-alert-red' },
@@ -346,9 +396,15 @@ export default function Conciliacao() {
     const conciliadaDeVerdade = Boolean(transacaoId && statusConciliacao[transacaoId]);
     const StatusIcon = conciliadaDeVerdade ? CheckCircle2 : status.icon;
     const valorPrincipal = item.valorExtrato ?? item.valorErp ?? 0;
+    const linhaBloqueada = Boolean(
+      item.linhaExtrato && (diaBloqueado || linhasBloqueadas.has(item.linhaExtrato.id)),
+    );
+    const motivoBloqueio = diaBloqueado
+      ? 'Conclua o dia anterior do extrato antes de movimentar esta linha'
+      : 'Conclua as linhas anteriores do extrato para liberar esta linha';
 
     return (
-      <div key={item.id} className="flex items-start justify-between gap-4 border-b border-surface-border/70 py-4 last:border-b-0">
+      <div key={item.id} className={`flex items-start justify-between gap-4 border-b border-surface-border/70 py-4 last:border-b-0 ${linhaBloqueada ? 'opacity-60' : ''}`}>
         <div className="flex min-w-0 flex-1 items-start gap-3">
           {item.direcao === 'entrada'
             ? <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-bank-truth-green" />
@@ -359,6 +415,11 @@ export default function Conciliacao() {
               <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${conciliadaDeVerdade ? 'bg-bank-truth-green/10 text-bank-truth-green' : status.className}`}>
                 <StatusIcon className="h-3 w-3" />{conciliadaDeVerdade ? 'Conciliado' : status.label}
               </span>
+              {linhaBloqueada && !conciliadaDeVerdade && (
+                <span title={motivoBloqueio} className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-2 py-1 text-[10px] font-bold text-secondary">
+                  <Lock className="h-3 w-3" />bloqueado
+                </span>
+              )}
               {item.linhaExtrato?.confianca === 'baixa' && (
                 <span title="A IA teve baixa certeza nesta linha; confira o texto original." className="inline-flex items-center rounded-full bg-pending-amber/10 px-2 py-1 text-[10px] font-bold text-pending-amber">confiança baixa</span>
               )}
@@ -390,8 +451,8 @@ export default function Conciliacao() {
               <button
                 type="button"
                 onClick={() => setConciliarItem(item)}
-                disabled={!item.linhaExtrato.transacaoBancoId}
-                title={!item.linhaExtrato.transacaoBancoId ? 'Importe o extrato para conciliação antes de conciliar' : 'Vincular esta transação bancária a um lançamento do ERP'}
+                disabled={!item.linhaExtrato.transacaoBancoId || linhaBloqueada}
+                title={!item.linhaExtrato.transacaoBancoId ? 'Importe o extrato para conciliação antes de conciliar' : linhaBloqueada ? motivoBloqueio : 'Vincular esta transação bancária a um lançamento do ERP'}
                 className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />Conciliar
@@ -399,8 +460,8 @@ export default function Conciliacao() {
               <button
                 type="button"
                 onClick={() => setTransferenciaItem(item)}
-                disabled={!item.linhaExtrato.transacaoBancoId}
-                title={!item.linhaExtrato.transacaoBancoId ? 'Importe o extrato para conciliação antes de conciliar' : 'Vincular esta transação bancária a uma transferência aprovada'}
+                disabled={!item.linhaExtrato.transacaoBancoId || linhaBloqueada}
+                title={!item.linhaExtrato.transacaoBancoId ? 'Importe o extrato para conciliação antes de conciliar' : linhaBloqueada ? motivoBloqueio : 'Vincular esta transação bancária a uma transferência aprovada'}
                 data-testid="action-transferencia"
                 className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -409,8 +470,9 @@ export default function Conciliacao() {
               {(item.status === 'pendente_banco' || item.status === 'divergente') && <button
                 type="button"
                 onClick={() => abrirLancamentoDoExtrato(item)}
-                title="Criar um novo lançamento no ERP com os dados desta linha do extrato"
-                className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-primary transition hover:bg-primary/20"
+                disabled={linhaBloqueada}
+                title={linhaBloqueada ? motivoBloqueio : 'Criar um novo lançamento no ERP com os dados desta linha do extrato'}
+                className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <PlusCircle className="h-3.5 w-3.5" />Lançar
               </button>}
@@ -691,32 +753,39 @@ export default function Conciliacao() {
               </div>
               {resultado.dias.length === 0 ? (
                 <div className="rounded-[28px] border border-surface-border bg-white p-10 text-center text-sm text-on-surface-variant dark:bg-surface">Nenhuma movimentação encontrada no período do extrato</div>
-              ) : resultado.dias.map((dia) => (
-                <section key={dia.data} className="overflow-hidden rounded-[28px] border border-surface-border bg-white dark:bg-surface">
-                  <header className="flex flex-col justify-between gap-3 border-b border-surface-border bg-surface-container-low px-5 py-4 sm:flex-row sm:items-center">
-                    <h3 className="font-bold capitalize text-on-surface">{dataComDia.format(dataUtc(dia.data))}</h3>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-on-surface-variant">
-                      <span className="text-bank-truth-green">Entradas {moeda.format(dia.totalEntradas)}</span>
-                      <span className="text-alert-red">Saídas {moeda.format(dia.totalSaidas)}</span>
-                      <span>{dia.conciliados} conciliados</span><span>{dia.divergentes} divergentes</span><span>{dia.pendentes} pendentes</span>
+              ) : resultado.dias.map((dia) => {
+                const diaBloqueado = diasBloqueados.has(dia.data);
+                return (
+                  <section key={dia.data} className={`overflow-hidden rounded-[28px] border border-surface-border bg-white transition dark:bg-surface ${diaBloqueado ? 'opacity-60 grayscale' : ''}`}>
+                    <header className="flex flex-col justify-between gap-3 border-b border-surface-border bg-surface-container-low px-5 py-4 sm:flex-row sm:items-center">
+                      <h3 className="flex items-center gap-2 font-bold capitalize text-on-surface">
+                        {diaBloqueado && <Lock aria-hidden="true" className="h-4 w-4 shrink-0 text-secondary" />}
+                        {dataComDia.format(dataUtc(dia.data))}
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-on-surface-variant">
+                        {diaBloqueado && <span className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-secondary">Conclua o dia anterior</span>}
+                        <span className="text-bank-truth-green">Entradas {moeda.format(dia.totalEntradas)}</span>
+                        <span className="text-alert-red">Saídas {moeda.format(dia.totalSaidas)}</span>
+                        <span>{dia.conciliados} conciliados</span><span>{dia.divergentes} divergentes</span><span>{dia.pendentes} pendentes</span>
+                      </div>
+                    </header>
+                    <div className="grid grid-cols-1 divide-y divide-surface-border lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+                      {(['entradas', 'saidas'] as const).map((direcao) => {
+                        const itens = dia[direcao];
+                        return (
+                          <div key={direcao} className="p-5">
+                            <h4 className={`mb-4 flex items-center gap-2 text-xs font-black uppercase tracking-wider ${direcao === 'entradas' ? 'text-bank-truth-green' : 'text-alert-red'}`}>
+                              {direcao === 'entradas' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}
+                              {direcao === 'entradas' ? 'Entradas' : 'Saídas'}
+                            </h4>
+                            {itens.length ? itens.map((item) => renderItem(item, diaBloqueado)) : <p className="py-4 text-sm text-on-surface-variant">Nenhuma movimentação</p>}
+                          </div>
+                        );
+                      })}
                     </div>
-                  </header>
-                  <div className="grid grid-cols-1 divide-y divide-surface-border lg:grid-cols-2 lg:divide-x lg:divide-y-0">
-                    {(['entradas', 'saidas'] as const).map((direcao) => {
-                      const itens = dia[direcao];
-                      return (
-                        <div key={direcao} className="p-5">
-                          <h4 className={`mb-4 flex items-center gap-2 text-xs font-black uppercase tracking-wider ${direcao === 'entradas' ? 'text-bank-truth-green' : 'text-alert-red'}`}>
-                            {direcao === 'entradas' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}
-                            {direcao === 'entradas' ? 'Entradas' : 'Saídas'}
-                          </h4>
-                          {itens.length ? itens.map(renderItem) : <p className="py-4 text-sm text-on-surface-variant">Nenhuma movimentação</p>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
+                  </section>
+                );
+              })}
             </>}
           </motion.div>
         </AnimatePresence>

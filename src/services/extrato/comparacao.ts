@@ -66,7 +66,7 @@ export function direcaoLancamento(lancamento: LancamentoFinanceiro): DirecaoExtr
   return lancamento.tipo === 'entrada' ? 'entrada' : 'saida';
 }
 
-function itemConciliado(linha: LinhaExtrato, lancamento: LancamentoFinanceiro): ItemComparacao {
+function itemConciliado(linha: LinhaExtrato, lancamento: LancamentoFinanceiro, ordemExtrato: number): ItemComparacao {
   return {
     id: `par-${linha.id}-${lancamento.id}`,
     status: 'conciliado',
@@ -77,10 +77,11 @@ function itemConciliado(linha: LinhaExtrato, lancamento: LancamentoFinanceiro): 
     valorErp: valorEfetivoLancamento(lancamento),
     linhaExtrato: linha,
     lancamento,
+    ordemExtrato,
   };
 }
 
-function itemDivergente(linha: LinhaExtrato, lancamento: LancamentoFinanceiro): ItemComparacao {
+function itemDivergente(linha: LinhaExtrato, lancamento: LancamentoFinanceiro, ordemExtrato: number): ItemComparacao {
   return {
     id: `div-${linha.id}-${lancamento.id}`,
     status: 'divergente',
@@ -91,10 +92,11 @@ function itemDivergente(linha: LinhaExtrato, lancamento: LancamentoFinanceiro): 
     valorErp: valorEfetivoLancamento(lancamento),
     linhaExtrato: linha,
     lancamento,
+    ordemExtrato,
   };
 }
 
-function itemPendenteBanco(linha: LinhaExtrato): ItemComparacao {
+function itemPendenteBanco(linha: LinhaExtrato, ordemExtrato: number): ItemComparacao {
   return {
     id: `banco-${linha.id}`,
     status: 'pendente_banco',
@@ -105,6 +107,7 @@ function itemPendenteBanco(linha: LinhaExtrato): ItemComparacao {
     valorErp: null,
     linhaExtrato: linha,
     lancamento: null,
+    ordemExtrato,
   };
 }
 
@@ -119,6 +122,7 @@ function itemPendenteErp(lancamento: LancamentoFinanceiro, data: string): ItemCo
     valorErp: valorEfetivoLancamento(lancamento),
     linhaExtrato: null,
     lancamento,
+    ordemExtrato: null,
   };
 }
 
@@ -131,6 +135,11 @@ const ORDEM_STATUS: Record<ItemComparacao['status'], number> = {
 
 function ordenarItens(itens: ItemComparacao[]): ItemComparacao[] {
   return [...itens].sort((a, b) => {
+    // A leitura acompanha a ordem do extrato (de cima para baixo no PDF).
+    // Itens sem linha do extrato (títulos do ERP) ficam ao final.
+    if (a.ordemExtrato !== null && b.ordemExtrato !== null) return a.ordemExtrato - b.ordemExtrato;
+    if (a.ordemExtrato !== null) return -1;
+    if (b.ordemExtrato !== null) return 1;
     const porStatus = ORDEM_STATUS[a.status] - ORDEM_STATUS[b.status];
     if (porStatus !== 0) return porStatus;
     return (b.valorExtrato ?? b.valorErp ?? 0) - (a.valorExtrato ?? a.valorErp ?? 0);
@@ -160,6 +169,12 @@ export function compararExtrato(
   };
 
   if (extrato.linhas.length === 0 || !extrato.dataInicio || !extrato.dataFim) return vazio;
+
+  // Posição de cada linha no extrato lido: define a ordem de exibição (de cima para baixo no PDF)
+  // e a sequência em que as linhas são liberadas para conciliação.
+  const ordemPorLinhaId = new Map<string, number>();
+  extrato.linhas.forEach((linha, index) => ordemPorLinhaId.set(linha.id, index));
+  const ordemDaLinha = (linha: LinhaExtrato) => ordemPorLinhaId.get(linha.id) ?? 0;
 
   const lancamentosDoPeriodo = lancamentos
     .map((lancamento) => ({ lancamento, data: dataReferenciaLancamento(lancamento) }))
@@ -208,7 +223,7 @@ export function compararExtrato(
           .filter(({ item }) => centavos(valorEfetivoLancamento(item.lancamento)) === valorLinha);
         if (candidatos.length === 0) continue;
         const escolhido = candidatos.find(({ item }) => item.lancamento.status_aprovacao !== 'reprovado') ?? candidatos[0];
-        itens.push(itemConciliado(linha, escolhido.item.lancamento));
+        itens.push(itemConciliado(linha, escolhido.item.lancamento, ordemDaLinha(linha)));
         erpDisponivel.splice(escolhido.index, 1);
         bancoDisponivel.splice(bancoDisponivel.indexOf(linha), 1);
       }
@@ -235,13 +250,14 @@ export function compararExtrato(
         itens.push(itemDivergente(
           bancoDisponivel[candidato.bancoIndex],
           erpDisponivel[candidato.erpIndex].lancamento,
+          ordemDaLinha(bancoDisponivel[candidato.bancoIndex]),
         ));
         bancoPareado.add(candidato.bancoIndex);
         erpPareado.add(candidato.erpIndex);
       }
 
       for (let i = 0; i < bancoDisponivel.length; i++) {
-        if (!bancoPareado.has(i)) itens.push(itemPendenteBanco(bancoDisponivel[i]));
+        if (!bancoPareado.has(i)) itens.push(itemPendenteBanco(bancoDisponivel[i], ordemDaLinha(bancoDisponivel[i])));
       }
       for (let i = 0; i < erpDisponivel.length; i++) {
         if (!erpPareado.has(i)) itens.push(itemPendenteErp(erpDisponivel[i].lancamento, data));

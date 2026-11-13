@@ -306,6 +306,8 @@ export interface ItemComparacao {
   valorErp: number | null;
   linhaExtrato: LinhaExtrato | null;
   lancamento: LancamentoFinanceiro | null;
+  /** Posição da linha no extrato lido (0 = primeira). Nulo para itens sem linha do extrato. */
+  ordemExtrato: number | null;
 }
 
 export interface DiaComparacao {
