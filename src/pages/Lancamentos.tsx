@@ -120,7 +120,6 @@ export default function Lancamentos({
 
   // Preset state
   const [datePreset, setDatePreset] = useState<'15' | '30' | '90' | 'custom'>('15');
-  const [dateDirection, setDateDirection] = useState<'past' | 'future' | 'both'>('past');
   const [dateFilterActive, setDateFilterActive] = useState(!isFinanceiroView && !isOperationalView);
 
   // Search & Period States
@@ -133,7 +132,7 @@ export default function Lancamentos({
     return new Date().toISOString().split('T')[0];
   });
 
-  const handlePresetChange = (preset: '15' | '30' | '90' | 'custom', direction: 'past' | 'future' | 'both' = dateDirection) => {
+  const handlePresetChange = (preset: '15' | '30' | '90' | 'custom') => {
     setDatePreset(preset);
     setDateFilterActive(true);
     if (preset !== 'custom') {
@@ -141,26 +140,11 @@ export default function Lancamentos({
       const start = new Date();
       const end = new Date();
 
-      if (direction === 'future') {
-        start.setDate(today.getDate() + 1);
-        end.setDate(today.getDate() + parseInt(preset));
-      } else if (direction === 'both') {
-        start.setDate(today.getDate() - parseInt(preset));
-        end.setDate(today.getDate() + parseInt(preset));
-      } else {
-        start.setDate(today.getDate() - parseInt(preset));
-        end.setDate(today.getDate());
-      }
+      start.setDate(today.getDate() - parseInt(preset));
+      end.setDate(today.getDate());
 
       setStartDate(start.toISOString().split('T')[0]);
       setEndDate(end.toISOString().split('T')[0]);
-    }
-  };
-
-  const handleDateDirectionChange = (direction: 'past' | 'future' | 'both') => {
-    setDateDirection(direction);
-    if (datePreset !== 'custom') {
-      handlePresetChange(datePreset, direction);
     }
   };
 
@@ -521,9 +505,8 @@ export default function Lancamentos({
     setMotivoAcrescimoFilter('all');
     setSelectedLancamentoIdsForBatch([]);
     setSelectedAccountIds([]);
-    setDateDirection('past');
 
-    handlePresetChange('15', 'past');
+    handlePresetChange('15');
     if (isFinanceiroView || isOperationalView) setDateFilterActive(false);
     setCurrentPage(1);
   };
@@ -1080,39 +1063,6 @@ export default function Lancamentos({
         )}
 
         <div className="flex items-center gap-3 w-full lg:w-auto">
-          <div className="flex flex-col bg-neutral-100 p-1 rounded-xl h-16 w-16 shrink-0" aria-label="Tempo" title="Tempo">
-            <button
-              type="button"
-              disabled={datePreset === 'custom'}
-              onClick={() => handleDateDirectionChange('past')}
-              className={`flex-1 px-1 rounded-lg text-[8px] font-black uppercase leading-none tracking-tighter transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                dateDirection === 'past' ? 'bg-white text-primary shadow-sm' : 'text-neutral-400 hover:text-neutral-600'
-              }`}
-            >
-              Passado
-            </button>
-            <button
-              type="button"
-              disabled={datePreset === 'custom'}
-              onClick={() => handleDateDirectionChange('future')}
-              className={`flex-1 px-1 rounded-lg text-[8px] font-black uppercase leading-none tracking-tighter transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                dateDirection === 'future' ? 'bg-white text-primary shadow-sm' : 'text-neutral-400 hover:text-neutral-600'
-              }`}
-            >
-              Futuro
-            </button>
-            <button
-              type="button"
-              disabled={datePreset === 'custom'}
-              onClick={() => handleDateDirectionChange('both')}
-              className={`flex-1 px-1 rounded-lg text-[8px] font-black uppercase leading-none tracking-tighter transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                dateDirection === 'both' ? 'bg-white text-primary shadow-sm' : 'text-neutral-400 hover:text-neutral-600'
-              }`}
-            >
-              Ambos
-            </button>
-          </div>
-
           <select
             data-testid="date-preset"
             value={datePreset}
