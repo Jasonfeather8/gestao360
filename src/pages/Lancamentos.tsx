@@ -286,6 +286,7 @@ export default function Lancamentos({
     totalCount = 0,
     batchApprove,
     estornarLancamento,
+    estornarLancamentoDoExtrato,
     deleteLancamento,
     isBatchApproving,
     isLoading,
@@ -600,6 +601,16 @@ export default function Lancamentos({
     }
   };
 
+  const handleEstornarExtrato = async (id: string) => {
+    if (!isMaster) return;
+    if (confirm('Deseja estornar este lançamento? Ele volta para o Financeiro sem a confirmação e sem a conciliação, aguardando nova confirmação do Master.')) {
+      try {
+        await estornarLancamentoDoExtrato(id);
+        setActiveMenuId(null);
+      } catch (err) { alert(err instanceof Error ? err.message : 'Erro ao estornar'); }
+    }
+  };
+
   const handleEdit = (l: LancamentoFinanceiro) => {
     setSelectedLancamentoIdForModal(l.id);
     setModalOpen('isNovoLancamentoOpen', true);
@@ -869,7 +880,7 @@ export default function Lancamentos({
   // Aplica à lista do Extrato a mesma normalização cronológica usada pela Conciliação.
   if (isExtratoView) {
     return (
-      <div className="lancamentos-page space-y-6 animate-fade-in">
+      <div className="lancamentos-page space-y-6 animate-fade-in" onClick={() => setActiveMenuId(null)}>
         {abasFinanceiroExtrato}
 
         <div>
@@ -956,6 +967,7 @@ export default function Lancamentos({
                   <th className="py-4 px-5 text-right text-[9px] font-black uppercase tracking-widest text-neutral-400">Valor</th>
                   <th className="py-4 px-5 text-right text-[9px] font-black uppercase tracking-widest text-neutral-400">Total dia</th>
                   <th className="py-4 px-5 text-center text-[9px] font-black uppercase tracking-widest text-neutral-400">Conciliação</th>
+                  {isMaster && (<th className="py-4 px-5 text-center text-[9px] font-black uppercase tracking-widest text-neutral-400">Ações</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -998,6 +1010,25 @@ export default function Lancamentos({
                           : '—'}
                       </td>
                       <td className="py-3 px-5 text-center">{renderConciliadoBadge(item)}</td>
+                      {isMaster && (
+                        <td className="py-3 px-5 text-center" onClick={(event) => event.stopPropagation()}>
+                          <div className="flex items-center justify-center">
+                            <LancamentoActionMenu
+                              item={item}
+                              podeExcluir={false}
+                              podeEstornar={!item.transferencia_id}
+                              isActive={activeMenuId === item.id}
+                              isOperationalView={false}
+                              onToggle={() => setActiveMenuId(activeMenuId === item.id ? null : item.id)}
+                              onBaixa={() => {}}
+                              onEstornar={handleEstornarExtrato}
+                              onEdit={() => {}}
+                              onDelete={() => {}}
+                              onVerTransferencia={() => navigate('/conciliacao?aba=transferencias')}
+                            />
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

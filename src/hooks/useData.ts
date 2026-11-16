@@ -374,7 +374,9 @@ export function useLancamentos(filters?: any) {
   // da transação do extrato e permitir conciliar o título novamente.
   // O estorno também desfaz a conciliação bancária do título no banco e, quando o título
   // vem de uma transferência, devolve a transferência para "Aguardando Confirmação".
-  const estornoMutation = useMutation({ mutationFn: (id: string) => lancamentosService.estornarLancamento(id), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['auditoriaLogs'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); queryClient.invalidateQueries({ queryKey: ['conciliacoes'] }); queryClient.invalidateQueries({ queryKey: ['transacoesBanco'] }); queryClient.invalidateQueries({ queryKey: ['transferencias'] }); invalidateDashboard(); } });
+  const invalidarAposEstorno = () => { queryClient.invalidateQueries({ queryKey: ['lancamentos'] }); queryClient.invalidateQueries({ queryKey: ['auditoriaLogs'] }); queryClient.invalidateQueries({ queryKey: ['contasSaldos'] }); queryClient.invalidateQueries({ queryKey: ['conciliacoes'] }); queryClient.invalidateQueries({ queryKey: ['transacoesBanco'] }); queryClient.invalidateQueries({ queryKey: ['transferencias'] }); invalidateDashboard(); };
+  const estornoMutation = useMutation({ mutationFn: (id: string) => lancamentosService.estornarLancamento(id), onSuccess: invalidarAposEstorno });
+  const estornoExtratoMutation = useMutation({ mutationFn: (id: string) => lancamentosService.estornarLancamentoDoExtrato(id), onSuccess: invalidarAposEstorno });
 
   return {
     ...query,
@@ -385,6 +387,7 @@ export function useLancamentos(filters?: any) {
     deleteLancamento: deleteMutation.mutateAsync,
     baixaLancamento: baixaMutation.mutateAsync,
     estornarLancamento: estornoMutation.mutateAsync,
+    estornarLancamentoDoExtrato: estornoExtratoMutation.mutateAsync,
     batchApprove: batchApproveMutation.mutateAsync,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,

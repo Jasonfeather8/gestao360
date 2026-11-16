@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.estornar_lancamento_atomico(uuid, boolean) FROM PUBLIC

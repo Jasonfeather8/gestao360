@@ -939,6 +939,13 @@ export const lancamentosService = {
     if (error) throw error;
   },
 
+  // Estorno feito na aba Extrato (regra 6): devolve o título ao Financeiro mantendo a
+  // baixa registrada, sem a confirmação do Master e sem a conciliação bancária.
+  estornarLancamentoDoExtrato: async (id: string): Promise<void> => {
+    const { error } = await supabase.rpc('estornar_lancamento_atomico', { p_lancamento_id: id, p_manter_baixa: true });
+    if (error) throw error;
+  },
+
   approveInBatch: async (ids: string[], targetStatus: 'digital' | 'confirmado_master' | 'reprovado'): Promise<void> => {
     const { data: { user } } = await supabase.auth.getUser();
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user?.id).single();

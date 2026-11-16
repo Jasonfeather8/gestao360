@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.estornar_lancamento_atomico(uuid)

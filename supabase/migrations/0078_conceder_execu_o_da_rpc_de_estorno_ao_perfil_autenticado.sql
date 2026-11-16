@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.estornar_lancamento_atomico(uuid, boolean) TO authenticated
