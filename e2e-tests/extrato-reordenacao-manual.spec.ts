@@ -49,7 +49,7 @@ async function posicaoDaLinha(page: Page, valor: string): Promise<number> {
 
 /** Célula "Total dia" (saldo do ERP depois da movimentação) da linha do valor informado. */
 async function totalDiaDaLinha(page: Page, valor: string): Promise<string> {
-  return (await rowWithAmount(page, valor).first().locator("td").nth(4).innerText()).trim();
+  return (await rowWithAmount(page, valor).first().locator("td").nth(6).innerText()).trim();
 }
 
 test("Master reordena manualmente dois títulos do mesmo dia no Extrato", async ({ page }) => {

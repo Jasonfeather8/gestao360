@@ -765,6 +765,18 @@ export default function Lancamentos({
     { valorPrevisto: 0, desconto: 0, acrescimo: 0, valorPago: 0, liquido: 0, aPagar: 0, entradas: 0, saidas: 0 }
   );
 
+  // Cálculo do Extrato: acompanha a seleção feita nas caixinhas da listagem. A regra é a
+  // mesma do Financeiro — entradas somam e saídas subtraem.
+  const selectedExtratoLancamentos = lancamentosExtrato.filter(item => selectedLancamentoIdsForBatch.includes(item.id));
+  const extratoTotais = selectedExtratoLancamentos.reduce(
+    (totals, item) => {
+      const liquido = getValorLiquido(item);
+      totals.liquido += item.tipo === 'entrada' ? liquido : -liquido;
+      return totals;
+    },
+    { liquido: 0 }
+  );
+
   const mirrorColumnCount = isOperationalView ? 15 : 13;
   const hasMeasuredMirrorColumns = columnWidths.length === mirrorColumnCount;
   const mirrorGridWidth = hasMeasuredMirrorColumns
@@ -1267,7 +1279,18 @@ export default function Lancamentos({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-neutral-100 bg-neutral-50/60">
+                  <th className="py-4 px-5 w-10 text-center">
+                    {podeSelecionarLancamentos && selectableLancamentos.length > 0 && (
+                      <input
+                        type="checkbox"
+                        checked={selectedLancamentoIdsForBatch.length === selectableLancamentos.length}
+                        onChange={toggleSelectAll}
+                        className="rounded-md border-neutral-300 text-primary focus:ring-primary w-4 h-4 transition-all"
+                      />
+                    )}
+                  </th>
                   <th className="py-4 px-5 text-[9px] font-black uppercase tracking-widest text-neutral-400">Data</th>
+                  <th className="py-4 px-5 text-[9px] font-black uppercase tracking-widest text-neutral-400">Fluxo</th>
                   <th className="py-4 px-5 text-[9px] font-black uppercase tracking-widest text-neutral-400">Documento</th>
                   <th className="py-4 px-5 text-[9px] font-black uppercase tracking-widest text-neutral-400">Entidade</th>
                   <th className="py-4 px-5 text-right text-[9px] font-black uppercase tracking-widest text-neutral-400">Valor</th>
@@ -1287,6 +1310,8 @@ export default function Lancamentos({
                   const podeSubir = podeMoverNoDia && indiceNoDia > 0;
                   const podeDescer = podeMoverNoDia && indiceNoDia >= 0 && indiceNoDia < (bloco?.ids.length ?? 0) - 1;
                   const isTransferenciaEspelho = item.transferencia_lado === 'origem' || item.transferencia_lado === 'destino';
+                  const isSelected = selectedLancamentoIdsForBatch.includes(item.id);
+                  const fluxoLabel = isTransferenciaEspelho ? 'Transferência entre contas' : item.tipo === 'entrada' ? 'Entrada' : 'Saída';
                   return (
                     <tr
                       key={item.id}
@@ -1294,11 +1319,31 @@ export default function Lancamentos({
                         setSelectedLancamentoIdForModal(item.id);
                         setModalOpen('isComprovanteOpen', true);
                       }}
-                      className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-all cursor-pointer"
+                      className={`border-b border-neutral-50 hover:bg-neutral-50/50 transition-all cursor-pointer ${isSelected ? 'bg-primary/5' : ''}`}
                     >
+                      <td className="py-3 px-5 text-center" onClick={(event) => event.stopPropagation()}>
+                        {podeSelecionarLancamentos && !isTransferenciaEspelho && (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectOne(item.id)}
+                            className="rounded-md border-neutral-300 text-primary focus:ring-primary w-4 h-4 transition-all"
+                          />
+                        )}
+                      </td>
                       <td className="py-3 px-5 font-mono text-xs text-neutral-900 whitespace-nowrap">
                         <div>{formatPrintDate(item.data_pagamento)}</div>
                         {item.hora_pagamento && <div className="mt-1 text-[9px] text-neutral-400">{item.hora_pagamento}</div>}
+                      </td>
+                      <td className="py-3 px-5">
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center ${isTransferenciaEspelho ? 'bg-primary/5 text-primary' : item.tipo === 'entrada' ? 'bg-emerald-50 text-bank-truth-green' : 'bg-red-50 text-alert-red'}`}
+                          role="img"
+                          aria-label={fluxoLabel}
+                          title={fluxoLabel}
+                        >
+                          {isTransferenciaEspelho ? <ArrowLeftRight className="w-4 h-4" aria-hidden="true" /> : item.tipo === 'entrada' ? <ArrowUpRight className="w-4 h-4" aria-hidden="true" /> : <ArrowDownLeft className="w-4 h-4" aria-hidden="true" />}
+                        </div>
                       </td>
                       <td className="py-3 px-5 whitespace-nowrap text-neutral-900 font-black text-xs">
                         {item.codigo_sequencial != null ? `${item.codigo_sequencial}${item.numero_parcela ? `-${item.numero_parcela}` : ''}` : '-'}
@@ -1315,7 +1360,7 @@ export default function Lancamentos({
                           <span className="font-black uppercase tracking-tighter">{entidades.find(entidade => entidade.id === item.entidade_id)?.nome_razao_social || 'N/A'}</span>
                         )}
                       </td>
-                      <td className={`py-3 px-5 text-right font-black font-mono text-xs ${item.tipo === 'entrada' ? 'text-bank-truth-green' : 'text-neutral-950'}`}>
+                      <td className={`py-3 px-5 text-right font-black font-mono text-xs ${item.tipo === 'entrada' ? 'text-bank-truth-green' : 'text-alert-red'}`}>
                         {valueFormatter(getValorLiquido(item))}
                       </td>
                       <td className="py-3 px-5 text-right font-black font-mono text-xs text-neutral-900">
@@ -1375,6 +1420,26 @@ export default function Lancamentos({
                   );
                 })}
               </tbody>
+              {selectedExtratoLancamentos.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-neutral-100 bg-neutral-50/70">
+                    <td className="py-4 px-5" />
+                    <td className="py-4 px-5" />
+                    <td className="py-4 px-5" />
+                    <td className="py-4 px-5 text-[10px] font-black uppercase tracking-widest text-neutral-900">
+                      Total ({selectedExtratoLancamentos.length} selecionado{selectedExtratoLancamentos.length === 1 ? '' : 's'})
+                    </td>
+                    <td className="py-4 px-5" />
+                    <td className="py-4 px-5 text-right font-black font-mono text-xs text-neutral-900">
+                      {valueFormatter(extratoTotais.liquido)}
+                    </td>
+                    <td className="py-4 px-5" />
+                    <td className="py-4 px-5" />
+                    {podeReordenarExtrato && <td className="py-4 px-5" />}
+                    {isMaster && <td className="py-4 px-5" />}
+                  </tr>
+                </tfoot>
+              )}
             </table>
           )}
 

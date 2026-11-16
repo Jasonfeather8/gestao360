@@ -94,8 +94,8 @@ test("Saldo por linha do Extrato acumula na ordem cronológica", async ({ page }
 
   // A coluna "Total dia" é o saldo do ERP depois de cada movimentação: a linha de B parte
   // do saldo acumulado em A e desconta a saída de B.
-  const saldoA = lerValor(await linhaExtratoA.locator("td").nth(4).innerText());
-  const saldoB = lerValor(await linhaExtratoB.locator("td").nth(4).innerText());
+  const saldoA = lerValor(await linhaExtratoA.locator("td").nth(6).innerText());
+  const saldoB = lerValor(await linhaExtratoB.locator("td").nth(6).innerText());
 
   expect(saldoB).toBeCloseTo(saldoA - 3322, 2);
 });
