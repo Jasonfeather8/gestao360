@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.reordenar_extrato_dia(date, uuid[]) FROM PUBLIC;

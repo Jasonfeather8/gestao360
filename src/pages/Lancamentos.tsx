@@ -1351,6 +1351,16 @@ export default function Lancamentos({
     <div className="lancamentos-page space-y-6 animate-fade-in" onClick={() => setActiveMenuId(null)}>
       {isFinanceiroView && abasFinanceiroExtrato}
 
+      <AccountFilterCards
+        accounts={accountCardsData}
+        selectedIds={selectedAccountIds}
+        onSelect={setSelectedAccountIds}
+        dragScrollProps={dragScrollTabs.props}
+        dragScrollRef={dragScrollTabs.ref}
+        valueFormatter={valueFormatter}
+        showBalances={podeVerSaldos(role)}
+      />
+
       {/* Header section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -1391,16 +1401,6 @@ export default function Lancamentos({
       </div>
 
       {painelEFiltros}
-
-      <AccountFilterCards
-        accounts={accountCardsData}
-        selectedIds={selectedAccountIds}
-        onSelect={setSelectedAccountIds}
-        dragScrollProps={dragScrollTabs.props}
-        dragScrollRef={dragScrollTabs.ref}
-        valueFormatter={valueFormatter}
-        showBalances={podeVerSaldos(role)}
-      />
 
       <div className="bg-white border-2 border-neutral-100 rounded-[32px] shadow-sm relative">
         <div

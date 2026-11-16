@@ -1,0 +1,1 @@
+COMMENT ON COLUMN public.lancamentos_financeiros.ordem_dia IS 'Ordem manual de exibição dentro do mesmo dia de pagamento no Extrato. Nulo usa a ordem cronológica padrão.';

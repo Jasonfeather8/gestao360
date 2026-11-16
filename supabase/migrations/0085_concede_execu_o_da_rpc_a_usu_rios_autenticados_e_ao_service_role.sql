@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.reordenar_extrato_dia(date, uuid[]) TO authenticated, service_role;
