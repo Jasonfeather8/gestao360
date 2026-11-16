@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS trg_manter_ordem_dia_do_extrato ON public.lancamentos_financeiros;
