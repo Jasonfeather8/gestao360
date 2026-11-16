@@ -55,17 +55,20 @@ export default function FinanceiroStatusFilter({ value, onChange, filters }: Fin
   const confirmedQuery = useLancamentos({
     ...filters,
     financialStatus: ['confirmado_master'],
-    statusPagamento: []
+    statusPagamento: [],
+    view: 'financeiro'
   });
   const pendingQuery = useLancamentos({
     ...filters,
     financialStatus: ['quitação_pendente'],
-    statusPagamento: []
+    statusPagamento: [],
+    view: 'financeiro'
   });
   const bpiQuery = useLancamentos({
     ...filters,
     financialStatus: ['bpi'],
-    statusPagamento: []
+    statusPagamento: [],
+    view: 'financeiro'
   });
 
   const totals = useMemo(() => ({

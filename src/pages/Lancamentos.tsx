@@ -1125,7 +1125,7 @@ export default function Lancamentos({
         <div>
           <h1 className="text-2xl font-black uppercase tracking-tighter text-neutral-900 flex items-center gap-3">
             <Receipt className="w-8 h-8 text-primary" />
-            {titleOverride || 'Financeiro / Extrato'}
+            {titleOverride || 'Financeiro'}
           </h1>
           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mt-1">Gestão centralizada de movimentações e conciliação</p>
         </div>
@@ -1859,7 +1859,7 @@ export default function Lancamentos({
         <div className="lancamentos-print-report__sheet">
           <header className="lancamentos-print-report__header">
             <div>
-              <h1>{titleOverride || 'Financeiro / Extrato'}</h1>
+              <h1>{titleOverride || 'Financeiro'}</h1>
               <p>Relatório dos lançamentos selecionados</p>
             </div>
             <div className="lancamentos-print-report__meta">
