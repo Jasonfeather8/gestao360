@@ -48,6 +48,7 @@ import LancamentoActionMenu from '../components/Lancamentos/LancamentoActionMenu
 import FinanceiroStatusFilter from '../components/Lancamentos/FinanceiroStatusFilter';
 import ReciboModal from '../components/Lancamentos/ReciboModal';
 import { idsContasDoPerfil, podeVerSaldos, SEM_CONTA_LIBERADA } from '../config/permissions';
+import { ordenarCronologicamente } from '../services/extrato/ordemCronologica';
 
 type LancamentoExibido = LancamentoFinanceiro & { transferenciaEspelhoIds?: string[] };
 
@@ -404,6 +405,10 @@ export default function Lancamentos({
 
   const { data: transferencias = [] } = useTransferencias();
   const transferenciasById = useMemo(() => new Map(transferencias.map(transferencia => [transferencia.id, transferencia])), [transferencias]);
+  const lancamentosExtrato = useMemo(
+    () => ordenarCronologicamente(allLancamentos, item => item.data_pagamento),
+    [allLancamentos]
+  );
   const displayedLancamentos = useMemo<LancamentoExibido[]>(() => {
     const grupos = new Map<string, LancamentoFinanceiro[]>();
     const ordem: Array<{ item: LancamentoFinanceiro } | { transferenciaId: string }> = [];
@@ -610,7 +615,10 @@ export default function Lancamentos({
   };
 
   const { data: contasSaldos = [] } = useContasSaldos();
-  const idsExibidos = useMemo(() => displayedLancamentos.map(item => item.id), [displayedLancamentos]);
+  const idsExibidos = useMemo(
+    () => (isExtratoView ? allLancamentos : displayedLancamentos).map(item => item.id),
+    [allLancamentos, displayedLancamentos, isExtratoView]
+  );
   const { data: saldosLancamentos = [] } = useSaldosLancamentos(idsExibidos);
   const { data: anexosDosLancamentos = [] } = useLancamentoAnexosByIds(idsExibidos);
   const anexosPorLancamento = useMemo(() => {
@@ -856,7 +864,7 @@ export default function Lancamentos({
     );
   };
 
-  // A consulta já devolve os títulos do extrato na ordem cronológica por conta.
+  // Aplica à lista do Extrato a mesma normalização cronológica usada pela Conciliação.
   if (isExtratoView) {
     return (
       <div className="lancamentos-page space-y-6 animate-fade-in">
@@ -927,11 +935,12 @@ export default function Lancamentos({
                   <th className="py-4 px-5 text-[9px] font-black uppercase tracking-widest text-neutral-400">Documento</th>
                   <th className="py-4 px-5 text-[9px] font-black uppercase tracking-widest text-neutral-400">Entidade</th>
                   <th className="py-4 px-5 text-right text-[9px] font-black uppercase tracking-widest text-neutral-400">Valor</th>
+                  <th className="py-4 px-5 text-right text-[9px] font-black uppercase tracking-widest text-neutral-400">Total dia</th>
                   <th className="py-4 px-5 text-center text-[9px] font-black uppercase tracking-widest text-neutral-400">Conciliação</th>
                 </tr>
               </thead>
               <tbody>
-                {allLancamentos.map(item => {
+                {lancamentosExtrato.map(item => {
                   const isTransferenciaEspelho = item.transferencia_lado === 'origem' || item.transferencia_lado === 'destino';
                   return (
                     <tr
@@ -964,12 +973,23 @@ export default function Lancamentos({
                       <td className={`py-3 px-5 text-right font-black font-mono text-xs ${item.tipo === 'entrada' ? 'text-bank-truth-green' : 'text-neutral-950'}`}>
                         {valueFormatter(getValorLiquido(item))}
                       </td>
+                      <td className="py-3 px-5 text-right font-black font-mono text-xs text-neutral-900">
+                        {podeVerSaldos(role) && item.conta_bancaria_id && saldosLancamentosPorId.get(item.id) != null
+                          ? valueFormatter(saldosLancamentosPorId.get(item.id)!)
+                          : '—'}
+                      </td>
                       <td className="py-3 px-5 text-center">{renderConciliadoBadge(item)}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+          )}
+
+          {!isLoading && allLancamentos.length > 0 && (
+            <p className="px-5 md:px-8 py-3 text-[9px] font-bold uppercase tracking-wider text-neutral-400">
+              Total dia é o saldo do ERP após cada movimentação e só coincide com o extrato do banco quando todas as movimentações da conta estiverem conciliadas.
+            </p>
           )}
 
           <div className="bg-neutral-50/50 px-5 md:px-8 py-4 border-t border-neutral-100 flex flex-col gap-4 md:flex-row md:items-center md:justify-between rounded-b-[32px]">
