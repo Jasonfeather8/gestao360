@@ -282,6 +282,18 @@ export const lancamentosService = {
         orGroups.push(['valor_recebido.gt.0', 'status_pagamento.eq.bpi']);
       }
 
+      if (filters.view === 'financeiro') {
+        // Financeiro: a fila de trabalho. Sai da fila apenas o que já chegou ao
+        // Extrato, isto é, o título confirmado E conciliado; basta uma das duas
+        // condições falhar para ele continuar aqui. Entra como mais um grupo
+        // porque os grupos são combinados com AND por `combineOrGroups`, e
+        // `conciliacoes.is.null` referencia o embed de conciliações: precisa
+        // ficar dentro do mesmo `or` dos demais filtros. Duas chamadas a `.or()`
+        // gerariam dois parâmetros `or` na URL, e o PostgREST não define qual
+        // deles vale.
+        orGroups.push(['conciliacoes.is.null', 'status_aprovacao.neq.confirmado_master', 'status_aprovacao.is.null']);
+      }
+
       if (filters.view === 'extrato') {
         // Extrato: somente títulos já confirmados pelo Master. A conciliação é
         // exigida pelo embed `!inner` montado no select.
@@ -394,15 +406,6 @@ export const lancamentosService = {
 
       if (orGroups.length > 0) {
         query = query.or(combineOrGroups(orGroups));
-      }
-
-      // Financeiro: a fila de trabalho. Sai da fila apenas o que já chegou ao
-      // Extrato, isto é, o título confirmado E conciliado. Basta uma das duas
-      // condições falhar para ele continuar aqui. Este filtro vai num `or` plano
-      // à parte porque referencia o embed de conciliações (conciliacoes.is.null),
-      // que não se combina com os grupos acima sem aninhamento.
-      if (filters.view === 'financeiro') {
-        query = query.or('conciliacoes.is.null,status_aprovacao.neq.confirmado_master,status_aprovacao.is.null');
       }
 
       if (searchLancamentoIds) {

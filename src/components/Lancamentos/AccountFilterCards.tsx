@@ -13,6 +13,7 @@ interface AccountFilterCardsProps {
   dragScrollRef: any;
   valueFormatter: (val: number) => string;
   showBalances?: boolean;
+  singleSelect?: boolean;
 }
 
 export default function AccountFilterCards({
@@ -22,7 +23,8 @@ export default function AccountFilterCards({
   dragScrollProps,
   dragScrollRef,
   valueFormatter,
-  showBalances = true
+  showBalances = true,
+  singleSelect = false
 }: AccountFilterCardsProps) {
   const { role } = useAuth();
   const isMaster = role === 'master';
@@ -33,7 +35,7 @@ export default function AccountFilterCards({
         <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-secondary flex items-center gap-2">
           <Building2 className="w-4 h-4" /> Filtrar por Conta
         </h4>
-        {selectedIds.length > 0 && (
+        {!singleSelect && selectedIds.length > 0 && (
           <button
             onClick={() => onSelect([])}
             className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline"
@@ -53,7 +55,7 @@ export default function AccountFilterCards({
             <div
               key={acc.id}
               data-testid="account-card"
-              onClick={() => onSelect(isSelected ? selectedIds.filter(id => id !== acc.id) : [...selectedIds, acc.id])}
+              onClick={() => onSelect(singleSelect ? [acc.id] : isSelected ? selectedIds.filter(id => id !== acc.id) : [...selectedIds, acc.id])}
               className={`flex-shrink-0 w-64 bg-white p-4 border-2 rounded-2xl flex flex-col group cursor-pointer transition-all shadow-sm ${
                 isSelected ? 'border-primary bg-primary/5 ring-4 ring-primary/10' : 'border-neutral-100 hover:border-neutral-200'
               }`}

@@ -184,6 +184,7 @@ export default function Lancamentos({
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<50 | 100 | 'all'>(50);
+  const [contaExtratoId, setContaExtratoId] = useState('');
 
   // Advanced Filters
   const defaultStatusPagamento = initialStatusPagamento || statusPagamentoOverride || 'all';
@@ -300,7 +301,7 @@ export default function Lancamentos({
     operationalView: isOperationalView,
     authorId: authorIdFilter,
     categoryId: categoryIdFilter,
-    contaId: contasEfetivas,
+    contaId: isExtratoView ? (contaExtratoId ? [contaExtratoId] : [SEM_CONTA_LIBERADA]) : contasEfetivas,
     centroCustoId: centroCustoIdFilter,
     condicao: condicaoFilter,
     temDesconto: temDescontoFilter,
@@ -637,6 +638,15 @@ export default function Lancamentos({
     });
   }, [activeContas, contasSaldos]);
 
+  useEffect(() => {
+    if (!isExtratoView || accountCardsData.some(account => account.id === contaExtratoId)) return;
+    if (accountCardsData.length > 0) setContaExtratoId(accountCardsData[0].id);
+  }, [accountCardsData, contaExtratoId, isExtratoView]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [isExtratoView, contaExtratoId]);
+
   const selectedPrintLancamentos = displayedLancamentos.filter(item => selectedLancamentoIdsForBatch.includes(item.id));
   const selectedOperationalLancamentos = isOperationalView ? selectedPrintLancamentos : [];
   const operationalDocumentCodes = new Set<number>();
@@ -846,9 +856,7 @@ export default function Lancamentos({
     );
   };
 
-  // Aba Extrato: títulos já confirmados e conciliados, na ordem cronológica devolvida
-  // pela consulta. A conta única, os cards de saldo e a coluna de saldo por linha
-  // entram nas etapas seguintes.
+  // A consulta já devolve os títulos do extrato na ordem cronológica por conta.
   if (isExtratoView) {
     return (
       <div className="lancamentos-page space-y-6 animate-fade-in">
@@ -864,12 +872,44 @@ export default function Lancamentos({
           </p>
         </div>
 
+        <label className="flex flex-col gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-secondary">
+          Conta do extrato
+          <select
+            data-testid="extrato-conta"
+            value={contaExtratoId}
+            onChange={(event) => setContaExtratoId(event.target.value)}
+            className="h-12 w-full rounded-xl border-2 border-neutral-100 bg-white px-4 text-xs font-bold normal-case tracking-normal text-neutral-700 outline-none transition-all hover:bg-neutral-50"
+          >
+            <option value="">Selecione a conta</option>
+            {accountCardsData.map(acc => (
+              <option key={acc.id} value={acc.id}>{acc.nome} · {acc.nome_banco}</option>
+            ))}
+          </select>
+        </label>
+
+        <AccountFilterCards
+          accounts={accountCardsData}
+          selectedIds={contaExtratoId ? [contaExtratoId] : []}
+          onSelect={(ids) => ids[0] && setContaExtratoId(ids[0])}
+          singleSelect
+          dragScrollProps={dragScrollTabs.props}
+          dragScrollRef={dragScrollTabs.ref}
+          valueFormatter={valueFormatter}
+          showBalances={podeVerSaldos(role)}
+        />
+
         <div className="bg-white border-2 border-neutral-100 rounded-[32px] shadow-sm overflow-hidden">
           {isLoading ? (
             <div className="py-24 text-center">
               <div className="flex flex-col items-center gap-3 opacity-40">
                 <Clock className="w-10 h-10 animate-spin text-primary" />
                 <p className="font-black uppercase text-[10px] tracking-widest">Carregando extrato...</p>
+              </div>
+            </div>
+          ) : accountCardsData.length === 0 && role !== 'master' ? (
+            <div className="py-12 text-center">
+              <div data-testid="sem-bancos-liberados" className="font-bold text-sm text-secondary">
+                Nenhuma conta bancária liberada para o seu usuário. Solicite ao Master a liberação.
               </div>
             </div>
           ) : allLancamentos.length === 0 ? (
@@ -884,15 +924,15 @@ export default function Lancamentos({
               <thead>
                 <tr className="border-b border-neutral-100 bg-neutral-50/60">
                   <th className="py-4 px-5 text-[9px] font-black uppercase tracking-widest text-neutral-400">Data</th>
+                  <th className="py-4 px-5 text-[9px] font-black uppercase tracking-widest text-neutral-400">Documento</th>
                   <th className="py-4 px-5 text-[9px] font-black uppercase tracking-widest text-neutral-400">Entidade</th>
-                  <th className="py-4 px-5 text-[9px] font-black uppercase tracking-widest text-neutral-400">Banco</th>
                   <th className="py-4 px-5 text-right text-[9px] font-black uppercase tracking-widest text-neutral-400">Valor</th>
                   <th className="py-4 px-5 text-center text-[9px] font-black uppercase tracking-widest text-neutral-400">Conciliação</th>
                 </tr>
               </thead>
               <tbody>
-                {allLancamentos.map((item) => {
-                  const conta = rawContas.find((c: any) => c.id === item.conta_bancaria_id);
+                {allLancamentos.map(item => {
+                  const isTransferenciaEspelho = item.transferencia_lado === 'origem' || item.transferencia_lado === 'destino';
                   return (
                     <tr
                       key={item.id}
@@ -902,14 +942,24 @@ export default function Lancamentos({
                       }}
                       className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-all cursor-pointer"
                     >
-                      <td className="py-3 px-5 font-mono text-xs text-neutral-900">
-                        {item.data_pagamento?.split('-').reverse().join('/') ?? '—'}
+                      <td className="py-3 px-5 font-mono text-xs text-neutral-900 whitespace-nowrap">
+                        <div>{formatPrintDate(item.data_pagamento)}</div>
+                        {item.hora_pagamento && <div className="mt-1 text-[9px] text-neutral-400">{item.hora_pagamento}</div>}
                       </td>
-                      <td className="py-3 px-5 text-neutral-900 font-black uppercase tracking-tighter truncate max-w-[260px]">
-                        {entidades.find((e) => e.id === item.entidade_id)?.nome_razao_social || 'N/A'}
+                      <td className="py-3 px-5 whitespace-nowrap text-neutral-900 font-black text-xs">
+                        {item.codigo_sequencial != null ? `${item.codigo_sequencial}${item.numero_parcela ? `-${item.numero_parcela}` : ''}` : '-'}
                       </td>
-                      <td className="py-3 px-5 text-[10px] font-black uppercase text-secondary">
-                        {conta?.nome_banco || conta?.nome || '—'}
+                      <td className="py-3 px-5 text-neutral-900">
+                        {isTransferenciaEspelho ? (
+                          <div className="flex flex-col">
+                            <span className="w-fit rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-primary">Transferência entre contas</span>
+                            {getTransferenciaContasLabel(item) && (
+                              <span className="mt-1 max-w-[260px] truncate text-[10px] font-bold uppercase text-neutral-600">{getTransferenciaContasLabel(item)}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="font-black uppercase tracking-tighter">{entidades.find(entidade => entidade.id === item.entidade_id)?.nome_razao_social || 'N/A'}</span>
+                        )}
                       </td>
                       <td className={`py-3 px-5 text-right font-black font-mono text-xs ${item.tipo === 'entrada' ? 'text-bank-truth-green' : 'text-neutral-950'}`}>
                         {valueFormatter(getValorLiquido(item))}
@@ -921,13 +971,65 @@ export default function Lancamentos({
               </tbody>
             </table>
           )}
-        </div>
 
-        {totalCount > 0 && (
-          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 text-center">
-            Exibindo {allLancamentos.length} de {totalCount} registros
-          </p>
-        )}
+          <div className="bg-neutral-50/50 px-5 md:px-8 py-4 border-t border-neutral-100 flex flex-col gap-4 md:flex-row md:items-center md:justify-between rounded-b-[32px]">
+            <span className="text-neutral-400 font-bold text-[9px] uppercase tracking-widest">
+              Exibindo {allLancamentos.length} de {totalCount} registros
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                data-testid="extrato-page-size"
+                value={pageSize}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  const nextPageSize: 50 | 100 | 'all' = value === 'all' ? 'all' : value === '100' ? 100 : 50;
+                  setPageSize(nextPageSize);
+                  setCurrentPage(1);
+                }}
+                className="h-10 rounded-xl border-2 border-neutral-100 bg-white px-3 text-[10px] font-bold uppercase tracking-widest text-neutral-500 outline-none transition-all hover:bg-neutral-50"
+              >
+                <option value="50">50 títulos</option>
+                <option value="100">100 títulos</option>
+                <option value="all">Todos</option>
+              </select>
+              {pageSize !== 'all' && (
+                <>
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(prev => prev - 1)}
+                    className="h-10 px-4 rounded-xl border-2 border-neutral-100 text-neutral-500 font-bold hover:bg-neutral-50 disabled:opacity-50 text-[10px] uppercase tracking-widest transition-all"
+                  >
+                    Anterior
+                  </button>
+                  <div className="flex gap-1">
+                    {pageWindowStart > 1 && <span className="flex items-end pb-2 text-neutral-400">...</span>}
+                    {visiblePages.map(pageNum => (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`w-10 h-10 rounded-xl text-[10px] font-black transition-all ${
+                          currentPage === pageNum
+                            ? 'bg-neutral-900 text-white shadow-md'
+                            : 'border-2 border-neutral-100 text-neutral-400 hover:bg-neutral-50'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    ))}
+                    {pageWindowStart + visiblePages.length - 1 < totalPages && <span className="flex items-end pb-2 text-neutral-400">...</span>}
+                  </div>
+                  <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(prev => prev + 1)}
+                    className="h-10 px-4 rounded-xl border-2 border-neutral-100 text-neutral-500 font-bold hover:bg-neutral-50 disabled:opacity-50 text-[10px] uppercase tracking-widest transition-all"
+                  >
+                    Próximo
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
