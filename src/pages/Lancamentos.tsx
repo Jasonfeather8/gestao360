@@ -85,7 +85,7 @@ export default function Lancamentos({
   const mirrorScrollRef = useRef<HTMLDivElement>(null);
   const [tableWidth, setTableWidth] = useState(0);
   const [columnWidths, setColumnWidths] = useState<number[]>([]);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const isMaster = role === 'master';
@@ -99,6 +99,39 @@ export default function Lancamentos({
   const podeExcluirTitulo = role === 'master' || role === 'gerente';
   const isFinanceiroView = !typeOverride && !titleOverride;
   const isOperationalView = !!typeOverride;
+
+  // Abas de /lancamentos (Financeiro | Extrato). Pagar/Receber usam typeOverride e
+  // continuam sem abas. A aba vive na URL (?aba=extrato) para o link direto cair no
+  // lugar certo e para sobreviver a recarregamentos.
+  const isExtratoView = isFinanceiroView && searchParams.get('aba') === 'extrato';
+  const selecionarAba = (aba: 'financeiro' | 'extrato') => {
+    const proximosParametros = new URLSearchParams(searchParams);
+    if (aba === 'extrato') proximosParametros.set('aba', 'extrato');
+    else proximosParametros.delete('aba');
+    setSearchParams(proximosParametros, { replace: true });
+  };
+  const abasFinanceiroExtrato = (
+    <nav aria-label="Abas do Financeiro e do Extrato" className="flex gap-2 border-b border-neutral-100">
+      <button
+        type="button"
+        data-testid="aba-financeiro"
+        aria-current={!isExtratoView ? 'page' : undefined}
+        onClick={() => selecionarAba('financeiro')}
+        className={`border-b-2 px-4 py-3 text-[11px] font-black uppercase tracking-widest transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${!isExtratoView ? 'border-primary text-primary' : 'border-transparent text-neutral-400 hover:text-neutral-700'}`}
+      >
+        Financeiro
+      </button>
+      <button
+        type="button"
+        data-testid="aba-extrato"
+        aria-current={isExtratoView ? 'page' : undefined}
+        onClick={() => selecionarAba('extrato')}
+        className={`border-b-2 px-4 py-3 text-[11px] font-black uppercase tracking-widest transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${isExtratoView ? 'border-primary text-primary' : 'border-transparent text-neutral-400 hover:text-neutral-700'}`}
+      >
+        Extrato
+      </button>
+    </nav>
+  );
 
   // Search State
   const [searchTerm, setSearchTerm] = useState('');
@@ -812,8 +845,29 @@ export default function Lancamentos({
     );
   };
 
+  // Aba Extrato: nesta etapa entregamos só a navegação. O conteúdo (títulos
+  // confirmados e conciliados, conta única, ordem cronológica e saldo por linha)
+  // entra nas etapas seguintes.
+  if (isExtratoView) {
+    return (
+      <div className="lancamentos-page space-y-6 animate-fade-in">
+        {abasFinanceiroExtrato}
+        <div className="bg-white border-2 border-neutral-100 rounded-[32px] shadow-sm p-16 text-center">
+          <div className="flex flex-col items-center gap-3 opacity-30">
+            <Receipt className="w-12 h-12" />
+            <p className="font-black uppercase text-[10px] tracking-widest text-neutral-900">Extrato</p>
+          </div>
+          <p className="mt-3 max-w-md mx-auto text-sm text-neutral-500">
+            Os títulos confirmados e conciliados aparecerão aqui, na ordem cronológica do extrato.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="lancamentos-page space-y-6 animate-fade-in" onClick={() => setActiveMenuId(null)}>
+      {isFinanceiroView && abasFinanceiroExtrato}
       
       <AccountFilterCards
         accounts={accountCardsData}
@@ -830,7 +884,7 @@ export default function Lancamentos({
         <div>
           <h1 className="text-2xl font-black uppercase tracking-tighter text-neutral-900 flex items-center gap-3">
             <Receipt className="w-8 h-8 text-primary" />
-            {titleOverride || 'Extrato'}
+            {titleOverride || 'Financeiro / Extrato'}
           </h1>
           <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mt-1">Gestão centralizada de movimentações e conciliação</p>
         </div>
