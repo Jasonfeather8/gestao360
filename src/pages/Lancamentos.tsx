@@ -186,6 +186,7 @@ export default function Lancamentos({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<50 | 100 | 'all'>(50);
   const [contaExtratoId, setContaExtratoId] = useState('');
+  const [extratoBpiAtivo, setExtratoBpiAtivo] = useState(false);
 
   // Advanced Filters
   const defaultStatusPagamento = initialStatusPagamento || statusPagamentoOverride || 'all';
@@ -312,6 +313,7 @@ export default function Lancamentos({
     isFinanceiroView,
     view: isFinanceiroView ? (isExtratoView ? 'extrato' : 'financeiro') : undefined,
     baixaRegistradaOnly: isFinanceiroView && !isExtratoView,
+    extratoBpiOnly: isExtratoView && extratoBpiAtivo,
     transferenciasOnly: isFinanceiroView && transferenciasOnly,
     page: currentPage,
     pageSize: pageSize === 'all' ? undefined : pageSize
@@ -895,6 +897,23 @@ export default function Lancamentos({
           </select>
         </label>
 
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-secondary">Situação</span>
+          <button
+            type="button"
+            data-testid="extrato-filtro-bpi"
+            aria-pressed={extratoBpiAtivo}
+            onClick={() => {
+              setExtratoBpiAtivo(active => !active);
+              setCurrentPage(1);
+            }}
+            className={`flex min-h-[39px] items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-[9px] font-black uppercase tracking-widest transition ${extratoBpiAtivo ? 'border-primary bg-primary/5 text-primary' : 'border-neutral-100 bg-white text-neutral-400 hover:bg-neutral-50'}`}
+          >
+            {extratoBpiAtivo && <span className="w-2 h-2 rounded-full bg-primary" />}
+            BPI (Inatividade)
+          </button>
+        </div>
+
         <AccountFilterCards
           accounts={accountCardsData}
           selectedIds={contaExtratoId ? [contaExtratoId] : []}
@@ -924,7 +943,7 @@ export default function Lancamentos({
             <div className="py-24 text-center">
               <div className="flex flex-col items-center gap-3 opacity-20">
                 <Receipt className="w-12 h-12" />
-                <p className="font-black uppercase text-[10px] tracking-widest">Nenhum título confirmado e conciliado</p>
+                <p className="font-black uppercase text-[10px] tracking-widest">{extratoBpiAtivo ? 'Nenhum BPI confirmado nesta conta' : 'Nenhum título confirmado e conciliado'}</p>
               </div>
             </div>
           ) : (
@@ -988,7 +1007,9 @@ export default function Lancamentos({
 
           {!isLoading && allLancamentos.length > 0 && (
             <p className="px-5 md:px-8 py-3 text-[9px] font-bold uppercase tracking-wider text-neutral-400">
-              Total dia é o saldo do ERP após cada movimentação e só coincide com o extrato do banco quando todas as movimentações da conta estiverem conciliadas.
+              {extratoBpiAtivo
+                ? 'A baixa por inatividade (BPI) não entra no saldo do banco.'
+                : 'Total dia é o saldo do ERP após cada movimentação e só coincide com o extrato do banco quando todas as movimentações da conta estiverem conciliadas.'}
             </p>
           )}
 

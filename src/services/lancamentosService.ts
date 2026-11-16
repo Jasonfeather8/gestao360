@@ -29,6 +29,8 @@ export interface LancamentoFilters {
   transferenciasOnly?: boolean;
   // Usado apenas pela tela Financeiro: lista somente títulos com baixa registrada.
   baixaRegistradaOnly?: boolean;
+  /** Extrato: quando true, mostra só BPI (baixa por inatividade) confirmado, em vez dos confirmados e conciliados. */
+  extratoBpiOnly?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -192,11 +194,9 @@ export const lancamentosService = {
       return { data: [], count: 0 };
     }
 
-    // No Extrato só entram títulos conciliados: o `!inner` transforma o embed de
-    // conciliações em join obrigatório, então um título sem conciliação não volta.
-    const embedConciliacoes = filters?.view === 'extrato'
-      ? 'conciliacoes!inner(id, data_conciliacao)'
-      : 'conciliacoes(id, data_conciliacao)';
+    // No Extrato padrão só entram títulos conciliados: o `!inner` transforma o
+    // embed em join obrigatório. A visão BPI é a exceção, porque nunca é conciliada.
+    const embedConciliacoes = filters?.view === 'extrato' && !filters?.extratoBpiOnly ? 'conciliacoes!inner(id, data_conciliacao)' : 'conciliacoes(id, data_conciliacao)';
 
     let query = supabase
       .from('lancamentos_financeiros')
@@ -283,26 +283,32 @@ export const lancamentosService = {
       }
 
       if (filters.view === 'financeiro') {
-        // Financeiro: a fila de trabalho. Sai da fila apenas o que já chegou ao
-        // Extrato, isto é, o título confirmado E conciliado; basta uma das duas
-        // condições falhar para ele continuar aqui. Entra como mais um grupo
-        // porque os grupos são combinados com AND por `combineOrGroups`, e
-        // `conciliacoes.is.null` referencia o embed de conciliações: precisa
-        // ficar dentro do mesmo `or` dos demais filtros. Duas chamadas a `.or()`
-        // gerariam dois parâmetros `or` na URL, e o PostgREST não define qual
-        // deles vale.
-        orGroups.push(['conciliacoes.is.null', 'status_aprovacao.neq.confirmado_master', 'status_aprovacao.is.null']);
+        // Financeiro: permanecem os não confirmados e os confirmados sem conciliação,
+        // exceto BPI confirmado, que também deixa a fila e entra na visão própria
+        // do Extrato sem depender de conciliação. O grupo precisa ficar na única
+        // chamada a `.or()`, pois o PostgREST não define qual parâmetro `or` vale
+        // quando a URL contém mais de um.
+        orGroups.push([
+          'status_aprovacao.neq.confirmado_master',
+          'status_aprovacao.is.null',
+          'and(conciliacoes.is.null,status_pagamento.neq.bpi)',
+        ]);
       }
 
       if (filters.view === 'extrato') {
         // Extrato: somente títulos já confirmados pelo Master. A conciliação é
-        // exigida pelo embed `!inner` montado no select.
+        // exigida pelo embed `!inner` apenas na visão padrão.
         query = query.eq('status_aprovacao', 'confirmado_master');
+        if (filters.extratoBpiOnly) query = query.eq('status_pagamento', 'bpi');
       }
 
       if (filters.isFinanceiroView) {
         const financialStatusValues = normalizeFilterValues(filters.financialStatus);
         if (financialStatusValues.length > 0) {
+          // BPI é um estado próprio: não se mistura com "Confirmado" nem com "Pend. Gestor".
+          if (!financialStatusValues.includes('bpi')) {
+            query = query.neq('status_pagamento', 'bpi');
+          }
           const financialStatusClauses = financialStatusValues.flatMap(status => {
             if (status === 'confirmado_master') return ['status_aprovacao.eq.confirmado_master'];
             if (status === 'quitação_pendente') return ['status_aprovacao.neq.confirmado_master', 'status_aprovacao.is.null'];
