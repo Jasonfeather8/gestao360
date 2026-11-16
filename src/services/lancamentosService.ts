@@ -24,6 +24,7 @@ export interface LancamentoFilters {
   motivoDescontoId?: string;
   motivoAcrescimoId?: string;
   isFinanceiroView?: boolean;
+  view?: 'financeiro' | 'extrato';
   operationalView?: boolean;
   transferenciasOnly?: boolean;
   // Usado apenas pela tela Financeiro: lista somente títulos com baixa registrada.
@@ -191,15 +192,28 @@ export const lancamentosService = {
       return { data: [], count: 0 };
     }
 
+    // No Extrato só entram títulos conciliados: o `!inner` transforma o embed de
+    // conciliações em join obrigatório, então um título sem conciliação não volta.
+    const embedConciliacoes = filters?.view === 'extrato'
+      ? 'conciliacoes!inner(id, data_conciliacao)'
+      : 'conciliacoes(id, data_conciliacao)';
+
     let query = supabase
       .from('lancamentos_financeiros')
-      .select('*, entidades_negocio(nome_razao_social), conciliacoes(id, data_conciliacao)', { count: 'exact' });
+      .select(`*, entidades_negocio(nome_razao_social), ${embedConciliacoes}`, { count: 'exact' });
 
     if (filters?.docCode !== undefined) {
       query = query
         .order('codigo_sequencial', { ascending: true })
         .order('numero_parcela', { ascending: true })
         .order('created_at', { ascending: false })
+        .order('id', { ascending: true });
+    } else if (filters?.view === 'extrato') {
+      // Extrato: ordem cronológica (mais antigo primeiro), espelhando o extrato real.
+      query = query
+        .order('data_pagamento', { ascending: true, nullsFirst: false })
+        .order('hora_pagamento', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true })
         .order('id', { ascending: true });
     } else if (filters?.isFinanceiroView) {
       query = query
@@ -261,11 +275,17 @@ export const lancamentosService = {
         // (baixa normal, baixa parcial, baixa por conciliação ou baixa por
         // inatividade - BPI). A evidência da baixa é o valor recebido ou o BPI.
         // Um ajuste AVR, sozinho, nunca esconde o título: se depois houver baixa,
-        // ele volta a aparecer normalmente. Títulos novos, ainda sem baixa, e os
-        // cadastrados como "já pago" (marca 'cadastro') ficam fora. Após estorno a
-        // baixa é desfeita e o título sai daqui.
-        orGroups.push(['tipo_baixa.is.null', 'tipo_baixa.neq.cadastro']);
+        // ele volta a aparecer normalmente. Títulos novos, ainda sem baixa ficam
+        // fora. Já os cadastrados como "já pago" (marca 'cadastro') ENTRAM: eles
+        // aguardam confirmação e conciliação como qualquer outro título. Após
+        // estorno a baixa é desfeita e o título sai daqui.
         orGroups.push(['valor_recebido.gt.0', 'status_pagamento.eq.bpi']);
+      }
+
+      if (filters.view === 'extrato') {
+        // Extrato: somente títulos já confirmados pelo Master. A conciliação é
+        // exigida pelo embed `!inner` montado no select.
+        query = query.eq('status_aprovacao', 'confirmado_master');
       }
 
       if (filters.isFinanceiroView) {
@@ -374,6 +394,15 @@ export const lancamentosService = {
 
       if (orGroups.length > 0) {
         query = query.or(combineOrGroups(orGroups));
+      }
+
+      // Financeiro: a fila de trabalho. Sai da fila apenas o que já chegou ao
+      // Extrato, isto é, o título confirmado E conciliado. Basta uma das duas
+      // condições falhar para ele continuar aqui. Este filtro vai num `or` plano
+      // à parte porque referencia o embed de conciliações (conciliacoes.is.null),
+      // que não se combina com os grupos acima sem aninhamento.
+      if (filters.view === 'financeiro') {
+        query = query.or('conciliacoes.is.null,status_aprovacao.neq.confirmado_master,status_aprovacao.is.null');
       }
 
       if (searchLancamentoIds) {

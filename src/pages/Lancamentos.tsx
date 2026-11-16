@@ -294,7 +294,7 @@ export default function Lancamentos({
     startDate: dateFilterActive ? startDate : undefined,
     endDate: dateFilterActive ? endDate : undefined,
     approvalStatus: isOperationalView ? statusAprovacaoOverride : approvalStatus,
-    financialStatus: isFinanceiroView ? statusPagamento : undefined,
+    financialStatus: isFinanceiroView && !isExtratoView ? statusPagamento : undefined,
     statusPagamento: statusPagamento.length === 0 && !isFinanceiroView && !isOperationalView && isColaborador ? ['quitação_pendente'] : isFinanceiroView ? [] : statusPagamento,
     type: typeFilter,
     operationalView: isOperationalView,
@@ -308,7 +308,8 @@ export default function Lancamentos({
     motivoDescontoId: motivoDescontoFilter,
     motivoAcrescimoId: motivoAcrescimoFilter,
     isFinanceiroView,
-    baixaRegistradaOnly: isFinanceiroView,
+    view: isFinanceiroView ? (isExtratoView ? 'extrato' : 'financeiro') : undefined,
+    baixaRegistradaOnly: isFinanceiroView && !isExtratoView,
     transferenciasOnly: isFinanceiroView && transferenciasOnly,
     page: currentPage,
     pageSize: pageSize === 'all' ? undefined : pageSize
@@ -845,22 +846,88 @@ export default function Lancamentos({
     );
   };
 
-  // Aba Extrato: nesta etapa entregamos só a navegação. O conteúdo (títulos
-  // confirmados e conciliados, conta única, ordem cronológica e saldo por linha)
-  // entra nas etapas seguintes.
+  // Aba Extrato: títulos já confirmados e conciliados, na ordem cronológica devolvida
+  // pela consulta. A conta única, os cards de saldo e a coluna de saldo por linha
+  // entram nas etapas seguintes.
   if (isExtratoView) {
     return (
       <div className="lancamentos-page space-y-6 animate-fade-in">
         {abasFinanceiroExtrato}
-        <div className="bg-white border-2 border-neutral-100 rounded-[32px] shadow-sm p-16 text-center">
-          <div className="flex flex-col items-center gap-3 opacity-30">
-            <Receipt className="w-12 h-12" />
-            <p className="font-black uppercase text-[10px] tracking-widest text-neutral-900">Extrato</p>
-          </div>
-          <p className="mt-3 max-w-md mx-auto text-sm text-neutral-500">
-            Os títulos confirmados e conciliados aparecerão aqui, na ordem cronológica do extrato.
+
+        <div>
+          <h1 className="text-2xl font-black uppercase tracking-tighter text-neutral-900 flex items-center gap-3">
+            <Receipt className="w-8 h-8 text-primary" />
+            Extrato
+          </h1>
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mt-1">
+            Títulos confirmados e conciliados, na ordem cronológica do extrato
           </p>
         </div>
+
+        <div className="bg-white border-2 border-neutral-100 rounded-[32px] shadow-sm overflow-hidden">
+          {isLoading ? (
+            <div className="py-24 text-center">
+              <div className="flex flex-col items-center gap-3 opacity-40">
+                <Clock className="w-10 h-10 animate-spin text-primary" />
+                <p className="font-black uppercase text-[10px] tracking-widest">Carregando extrato...</p>
+              </div>
+            </div>
+          ) : allLancamentos.length === 0 ? (
+            <div className="py-24 text-center">
+              <div className="flex flex-col items-center gap-3 opacity-20">
+                <Receipt className="w-12 h-12" />
+                <p className="font-black uppercase text-[10px] tracking-widest">Nenhum título confirmado e conciliado</p>
+              </div>
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-neutral-100 bg-neutral-50/60">
+                  <th className="py-4 px-5 text-[9px] font-black uppercase tracking-widest text-neutral-400">Data</th>
+                  <th className="py-4 px-5 text-[9px] font-black uppercase tracking-widest text-neutral-400">Entidade</th>
+                  <th className="py-4 px-5 text-[9px] font-black uppercase tracking-widest text-neutral-400">Banco</th>
+                  <th className="py-4 px-5 text-right text-[9px] font-black uppercase tracking-widest text-neutral-400">Valor</th>
+                  <th className="py-4 px-5 text-center text-[9px] font-black uppercase tracking-widest text-neutral-400">Conciliação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allLancamentos.map((item) => {
+                  const conta = rawContas.find((c: any) => c.id === item.conta_bancaria_id);
+                  return (
+                    <tr
+                      key={item.id}
+                      onClick={() => {
+                        setSelectedLancamentoIdForModal(item.id);
+                        setModalOpen('isComprovanteOpen', true);
+                      }}
+                      className="border-b border-neutral-50 hover:bg-neutral-50/50 transition-all cursor-pointer"
+                    >
+                      <td className="py-3 px-5 font-mono text-xs text-neutral-900">
+                        {item.data_pagamento?.split('-').reverse().join('/') ?? '—'}
+                      </td>
+                      <td className="py-3 px-5 text-neutral-900 font-black uppercase tracking-tighter truncate max-w-[260px]">
+                        {entidades.find((e) => e.id === item.entidade_id)?.nome_razao_social || 'N/A'}
+                      </td>
+                      <td className="py-3 px-5 text-[10px] font-black uppercase text-secondary">
+                        {conta?.nome_banco || conta?.nome || '—'}
+                      </td>
+                      <td className={`py-3 px-5 text-right font-black font-mono text-xs ${item.tipo === 'entrada' ? 'text-bank-truth-green' : 'text-neutral-950'}`}>
+                        {valueFormatter(getValorLiquido(item))}
+                      </td>
+                      <td className="py-3 px-5 text-center">{renderConciliadoBadge(item)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {totalCount > 0 && (
+          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 text-center">
+            Exibindo {allLancamentos.length} de {totalCount} registros
+          </p>
+        )}
       </div>
     );
   }
