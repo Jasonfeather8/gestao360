@@ -8,14 +8,15 @@ import {
   type MasterTestUser,
 } from "./fixtures/master-user";
 import {
+  aprovarPeloFinanceiro,
+  baixarPorInatividade,
   createPayable,
-  futureDate,
-  openExtrato,
+  openExtratoBpi,
+  openFinanceiro,
   openPayables,
-  payInFull,
   rowWithAmount,
   searchField,
-  shownCounter,
+  selecionarContaDoExtrato,
   uniqueMarker,
 } from "./fixtures/contas-a-pagar";
 
@@ -36,39 +37,40 @@ test.afterEach(async () => {
   master = undefined;
 });
 
-test("Extrato filtra por período e por status de pagamento", async ({ page }) => {
+/**
+ * A visão padrão do Extrato exige título confirmado E conciliado. O único caminho para
+ * conciliar pela interface é importar o PDF do extrato (leitura por IA), então este spec
+ * cobre o que a tela oferece sem conciliação: o filtro de BPI da aba Extrato, que mostra os
+ * títulos confirmados por inatividade, e a conta do extrato.
+ */
+test("Extrato filtra por conta e separa os títulos confirmados por inatividade (BPI)", async ({ page }) => {
   await openPayables(page);
-  const marker = uniqueMarker("extrato");
-  await createPayable(page, { amountDigits: "97979", dueDate: futureDate(3), observacoes: marker });
+  const marcador = uniqueMarker("extrato");
+  const { bankName } = await createPayable(page, { amountDigits: "97979", observacoes: marcador });
 
-  const row = rowWithAmount(page, "979,79").first();
-  await expect(row).toBeVisible({ timeout: 30_000 });
+  const linhaPagar = rowWithAmount(page, "979,79").first();
+  await expect(linhaPagar).toBeVisible({ timeout: 30_000 });
 
-  // Com a baixa registrada o título sai de Contas a Pagar e passa a aparecer no Extrato.
-  await payInFull(page, row);
+  // A baixa por inatividade tira o título de Contas a Pagar.
+  await baixarPorInatividade(page, linhaPagar);
+  await expect(linhaPagar).toHaveCount(0, { timeout: 30_000 });
 
-  await openExtrato(page);
-  await searchField(page).fill(marker);
-  await expect(row).toBeVisible({ timeout: 30_000 });
-  await expect(shownCounter(page)).toHaveText("Exibindo 1 de 1 registros", { timeout: 30_000 });
+  // O Master confirma o BPI na fila do Financeiro.
+  await openFinanceiro(page);
+  await searchField(page).fill(marcador);
+  const linhaFinanceiro = rowWithAmount(page, "979,79").first();
+  await expect(linhaFinanceiro.getByText("BPI", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await aprovarPeloFinanceiro(page, linhaFinanceiro);
+  await expect(linhaFinanceiro).toHaveCount(0, { timeout: 30_000 });
 
-  // No Extrato o período é comparado com a data de pagamento (hoje).
-  await page.getByTestId("date-preset").selectOption("custom");
-  await expect(row).toBeVisible({ timeout: 30_000 });
+  // No Extrato o título aparece na conta dele, com o filtro de BPI ligado.
+  await openExtratoBpi(page);
+  await selecionarContaDoExtrato(page, bankName);
+  const linha = rowWithAmount(page, "979,79").first();
+  await expect(linha).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("A baixa por inatividade (BPI) não entra no saldo do banco.")).toBeVisible();
 
-  // Janela começando amanhã deixa o título pago hoje de fora...
-  await page.getByTestId("date-start").fill(futureDate(1));
-  await expect(row).toHaveCount(0, { timeout: 30_000 });
-
-  // ...e a janela que volta a incluir hoje o traz de volta.
-  await page.getByTestId("date-start").fill(futureDate(-30));
-  await expect(row).toBeVisible({ timeout: 30_000 });
-
-  // Filtro de status do Extrato: BPI não inclui um título liquidado normalmente.
-  const filtroBpi = page.getByRole("button", { name: "BPI (Inatividade)", exact: true });
-  await filtroBpi.click();
-  await expect(row).toHaveCount(0, { timeout: 30_000 });
-
-  await filtroBpi.click();
-  await expect(row).toBeVisible({ timeout: 30_000 });
+  // Sem o filtro de BPI o título não aparece: a visão padrão do Extrato exige conciliação.
+  await page.getByTestId("extrato-filtro-bpi").click();
+  await expect(linha).toHaveCount(0, { timeout: 30_000 });
 });

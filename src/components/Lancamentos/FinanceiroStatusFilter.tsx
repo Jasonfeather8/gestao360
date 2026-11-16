@@ -84,6 +84,15 @@ export default function FinanceiroStatusFilter({ value, onChange, filters }: Fin
     { id: 'bpi', label: 'BPI (Inatividade)', total: totals.bpi, isLoading: bpiQuery.isLoading }
   ];
 
+  // Identificadores estáveis para os testes: o selo de cada linha também é um botão com o
+  // mesmo texto do chip, então o chip precisa de um alvo próprio.
+  const testIds: Record<string, string> = {
+    all: 'financeiro-status-todos',
+    confirmado_master: 'financeiro-status-confirmado',
+    'quitação_pendente': 'financeiro-status-pendente',
+    bpi: 'financeiro-status-bpi',
+  };
+
   const toggleStatus = (id: string) => {
     if (id === 'all') {
       onChange([]);
@@ -100,6 +109,7 @@ export default function FinanceiroStatusFilter({ value, onChange, filters }: Fin
       <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(120px,auto)_minmax(0,1fr)_minmax(106px,auto)] md:items-start md:gap-x-3">
         <button
           type="button"
+          data-testid={testIds.all}
           onClick={() => toggleStatus(options[0].id)}
           className={`w-full md:w-fit md:min-w-[120px] min-h-[39px] px-3 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 transition-all text-left flex items-center justify-between gap-3 md:col-start-1 md:self-start ${
             value.length === 0
@@ -116,6 +126,7 @@ export default function FinanceiroStatusFilter({ value, onChange, filters }: Fin
               <button
                 key={option.id}
                 type="button"
+                data-testid={testIds[option.id]}
                 onClick={() => toggleStatus(option.id)}
                 className={`min-h-[39px] px-3 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 transition-all text-left flex items-center justify-between gap-3 ${
                   value.includes(option.id)

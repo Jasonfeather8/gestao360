@@ -21,9 +21,34 @@ export async function openReceivables(page: Page): Promise<void> {
   await expect(page.getByRole("heading", { name: "Contas a Receber" }).first()).toBeVisible({ timeout: 30_000 });
 }
 
-export async function openExtrato(page: Page): Promise<void> {
+/** Abre a aba Financeiro de /lancamentos (a fila de trabalho do Master). */
+export async function openFinanceiro(page: Page): Promise<void> {
   await page.goto("/lancamentos", { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await expect(page.getByRole("heading", { name: "Financeiro" }).first()).toBeVisible({ timeout: 30_000 });
+}
+
+/** Abre a aba Extrato de /lancamentos. */
+export async function openExtrato(page: Page): Promise<void> {
+  await page.goto("/lancamentos?aba=extrato", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await expect(page.getByRole("heading", { name: "Extrato" }).first()).toBeVisible({ timeout: 30_000 });
+}
+
+/** Abre a aba Extrato já com o filtro de BPI (baixa por inatividade) ligado. */
+export async function openExtratoBpi(page: Page): Promise<void> {
+  await openExtrato(page);
+  await page.getByTestId("extrato-filtro-bpi").click();
+  await expect(page.getByTestId("extrato-filtro-bpi")).toHaveAttribute("aria-pressed", "true");
+}
+
+/** Seleciona no Extrato a conta bancária informada (pelo nome mostrado nos cards). */
+export async function selecionarContaDoExtrato(page: Page, nomeConta: string): Promise<void> {
+  const select = page.getByTestId("extrato-conta");
+  await expect(select).toBeVisible({ timeout: 30_000 });
+  const option = select.locator("option").filter({ hasText: nomeConta }).first();
+  const valor = await option.getAttribute("value");
+  if (!valor) throw new Error(`Conta "${nomeConta}" não encontrada no seletor do Extrato.`);
+  await select.selectOption(valor);
+  await expect(select).toHaveValue(valor);
 }
 
 export async function openNewLaunch(page: Page): Promise<void> {
@@ -234,4 +259,33 @@ export async function readFilterOptions(page: Page, filterTestId: string): Promi
   const labels = (await page.getByRole("option").allInnerTexts()).map(text => text.trim());
   await page.keyboard.press("Escape");
   return labels;
+}
+
+/** Dá baixa por inatividade (BPI) pelo modal de baixa, sem anexo. */
+export async function baixarPorInatividade(page: Page, row: Locator): Promise<void> {
+  await openBaixa(page, row);
+  await page.getByRole("button", { name: /^BPI/ }).click();
+  await page.getByPlaceholder(/Explique o motivo/).fill("Título cancelado por inatividade, sem movimentação bancária.");
+  await allowBaixaWithoutReceipt(page);
+
+  await page.getByRole("button", { name: "Baixar Título" }).click();
+  await expect(page.getByRole("heading", { name: "Confirmar Baixa por Inatividade?" })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Confirmar e Baixar" }).click();
+  await expect(page.getByRole("heading", { name: "Operações de Baixa de Título" })).toBeHidden({ timeout: 30_000 });
+}
+
+/** Marca a linha e confirma a aprovação do Master pela barra de ações do Financeiro. */
+export async function aprovarPeloFinanceiro(page: Page, row: Locator): Promise<void> {
+  await row.getByRole("checkbox").check();
+  await page.getByRole("button", { name: /^Aprovar \(/ }).click();
+  await expect(page.getByRole("heading", { name: "Aprovar Título" })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Confirmar Aprovação" }).click();
+  await expect(page.getByRole("heading", { name: "Aprovar Título" })).toBeHidden({ timeout: 30_000 });
+}
+
+/** Estorna pela ação da linha (o app pede confirmação no diálogo do navegador). */
+export async function estornarPelaLinha(page: Page, row: Locator): Promise<void> {
+  page.once("dialog", dialog => dialog.accept());
+  await row.getByTestId("lancamento-action-menu").click();
+  await page.getByTestId("action-estornar").click();
 }
