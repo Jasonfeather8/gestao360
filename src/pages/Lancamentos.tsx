@@ -727,17 +727,17 @@ export default function Lancamentos({
   const renderStatusBadge = (item: LancamentoFinanceiro) => {
    const isTransferenciaEspelho = Boolean(item.transferencia_id)
      && (item.transferencia_lado === 'origem' || item.transferencia_lado === 'destino');
-   if (isFinanceiroView && item.status_aprovacao !== 'confirmado_master') {
-     return (
-       <span className="inline-flex items-center px-2.5 py-0.5 rounded bg-orange-50 text-orange-600 font-black border border-orange-200 text-[9px] uppercase tracking-tighter animate-pulse">
-         Pend. Gestor
-       </span>
-     );
-   }
    if (item.status_pagamento === 'bpi') {
      return (
        <span className="inline-flex items-center px-2.5 py-0.5 rounded bg-neutral-900 text-white font-black border border-neutral-950 text-[9px] uppercase tracking-tighter">
          BPI
+       </span>
+     );
+   }
+   if (isFinanceiroView && item.status_aprovacao !== 'confirmado_master') {
+     return (
+       <span className="inline-flex items-center px-2.5 py-0.5 rounded bg-orange-50 text-orange-600 font-black border border-orange-200 text-[9px] uppercase tracking-tighter animate-pulse">
+         Pend. Gestor
        </span>
      );
    }
@@ -1492,7 +1492,22 @@ export default function Lancamentos({
                               </button>
                             ) : renderStatusBadge(item)}
                           </td>
-                          <td className="py-3 px-4 text-center">{renderConciliadoBadge(item)}</td>
+                          <td className="py-3 px-4 text-center">
+                            {isFinanceiroView && !isExtratoView && !item.conciliacoes?.length && item.status_pagamento !== 'bpi' && item.conta_bancaria_id ? (
+                              <button
+                                type="button"
+                                data-testid="conciliar-lancamento"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  navigate('/conciliacao?conta=' + item.conta_bancaria_id);
+                                }}
+                                className="inline-flex items-center gap-1 rounded border border-primary/20 bg-primary/5 px-2 py-1 text-[9px] font-black uppercase tracking-tighter text-primary"
+                              >
+                                <Link2 className="w-3 h-3" aria-hidden="true" />
+                                Conciliar
+                              </button>
+                            ) : renderConciliadoBadge(item)}
+                          </td>
                           {renderBancoCell(item)}
                           <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                             <button

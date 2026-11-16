@@ -118,8 +118,10 @@ export default function Conciliacao() {
   }, [abaDaUrl, podeAgirNaConciliacao]);
 
   useEffect(() => {
-    if (contas.length > 0 && !contaId) setContaId(contas[0].id);
-  }, [contas, contaId]);
+    if (contas.length === 0 || contas.some((conta) => conta.id === contaId)) return;
+    const contaDaUrl = contas.find((conta) => conta.id === searchParams.get('conta'));
+    setContaId(contaDaUrl?.id ?? contas[0].id);
+  }, [contas, contaId, searchParams]);
 
   const {
     data: lancamentos = [],
