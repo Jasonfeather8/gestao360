@@ -210,8 +210,12 @@ export const lancamentosService = {
         .order('id', { ascending: true });
     } else if (filters?.view === 'extrato') {
       // Extrato: ordem cronológica (mais antigo primeiro), espelhando o extrato real.
+      // Dentro do mesmo dia vale a ordem manual (`ordem_dia`) definida na tela; os
+      // títulos sem posição definida — e os dias nunca reordenados — continuam na
+      // ordem cronológica padrão (hora e criação).
       query = query
         .order('data_pagamento', { ascending: true, nullsFirst: false })
+        .order('ordem_dia', { ascending: true, nullsFirst: false })
         .order('hora_pagamento', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: true })
         .order('id', { ascending: true });

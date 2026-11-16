@@ -89,6 +89,9 @@ export interface LancamentoFinanceiro {
   data_competencia?: string;
   data_pagamento?: string;
   hora_pagamento?: string;
+  // Posição manual do título dentro do próprio dia no Extrato. Nulo mantém a
+  // ordem cronológica padrão (hora e criação).
+  ordem_dia?: number | null;
   condicao?: 'a_vista' | 'a_prazo';
   entidade_id: string;
   centro_custo_id: string;
