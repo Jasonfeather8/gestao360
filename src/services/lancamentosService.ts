@@ -950,6 +950,17 @@ export const lancamentosService = {
     if (error) throw error;
   },
 
+  // Reordenação manual do Extrato: grava a nova sequência do bloco do dia.
+  // A RPC valida no banco que todos os títulos pertencem à mesma data e que o
+  // solicitante é Master ou Gerente.
+  reordenarExtratoDia: async (data: string, lancamentoIds: string[]): Promise<void> => {
+    const { error } = await supabase.rpc('reordenar_extrato_dia', {
+      p_data: data,
+      p_lancamento_ids: lancamentoIds
+    });
+    if (error) throw error;
+  },
+
   approveInBatch: async (ids: string[], targetStatus: 'digital' | 'confirmado_master' | 'reprovado'): Promise<void> => {
     const { data: { user } } = await supabase.auth.getUser();
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user?.id).single();

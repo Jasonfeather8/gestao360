@@ -14,6 +14,8 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   ArrowLeftRight,
+  ArrowUp,
+  ArrowDown,
   ChevronDown,
   ChevronRight,
   ShieldCheck,
@@ -34,7 +36,7 @@ import {
   Link2
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useLancamentos, useContas, useEntidades, useCategorias, useUsuarios, useCentrosCusto, useCategoriasAjuste, useContasSaldos, useSaldosLancamentos, useLancamentoAnexosByIds, useTransferencias } from '../hooks/useData';
+import { useLancamentos, useContas, useEntidades, useCategorias, useUsuarios, useCentrosCusto, useCategoriasAjuste, useContasSaldos, useSaldosLancamentos, useReordenarExtratoDia, useLancamentoAnexosByIds, useTransferencias } from '../hooks/useData';
 import { useAuth } from '../hooks/useAuth';
 import { useUIStore } from '../store/uiStore';
 import { useDragScroll } from '../hooks/useDragScroll';
@@ -105,6 +107,8 @@ export default function Lancamentos({
   // continuam sem abas. A aba vive na URL (?aba=extrato) para o link direto cair no
   // lugar certo e para sobreviver a recarregamentos.
   const isExtratoView = isFinanceiroView && searchParams.get('aba') === 'extrato';
+  // A reordenação manual é exclusiva do Extrato e de Master/Gerente (o banco reforça a regra).
+  const podeReordenarExtrato = isExtratoView && (role === 'master' || role === 'gerente');
   const selecionarAba = (aba: 'financeiro' | 'extrato') => {
     const proximosParametros = new URLSearchParams(searchParams);
     if (aba === 'extrato') proximosParametros.set('aba', 'extrato');
@@ -319,6 +323,7 @@ export default function Lancamentos({
     page: currentPage,
     pageSize: pageSize === 'all' ? undefined : pageSize
   });
+  const { reordenarExtratoDia, isReordenando } = useReordenarExtratoDia();
 
   // Sync scroll between mirror and table
   useEffect(() => {
@@ -412,6 +417,21 @@ export default function Lancamentos({
     () => ordenarCronologicamente(allLancamentos, item => item.data_pagamento),
     [allLancamentos]
   );
+  // Bloco do dia na ordem exibida: a reordenação manual nunca cruza a data, então o
+  // que se move é sempre a sequência de títulos de um mesmo dia.
+  const blocosDoDia = useMemo(() => {
+    const blocos = new Map<string, { ids: string[]; inicio: number }>();
+    lancamentosExtrato.forEach((item, index) => {
+      if (!item.data_pagamento) return;
+      const bloco = blocos.get(item.data_pagamento);
+      if (bloco) {
+        bloco.ids.push(item.id);
+        return;
+      }
+      blocos.set(item.data_pagamento, { ids: [item.id], inicio: index });
+    });
+    return blocos;
+  }, [lancamentosExtrato]);
   const displayedLancamentos = useMemo<LancamentoExibido[]>(() => {
     const grupos = new Map<string, LancamentoFinanceiro[]>();
     const ordem: Array<{ item: LancamentoFinanceiro } | { transferenciaId: string }> = [];
@@ -608,6 +628,36 @@ export default function Lancamentos({
         await estornarLancamentoDoExtrato(id);
         setActiveMenuId(null);
       } catch (err) { alert(err instanceof Error ? err.message : 'Erro ao estornar'); }
+    }
+  };
+
+  // Com paginação, um dia pode ser cortado entre páginas. A primeira linha da página pode
+  // ser a continuação de um dia que começou na anterior: reordenar esse pedaço gravaria
+  // posições a partir de zero e jogaria o bloco para o topo do dia. Por isso o dia só é
+  // reordenável quando começa na própria página. Quando o dia apenas continua na página
+  // seguinte, o pedaço visível já é o início do bloco e ocupa as menores posições, então
+  // reordená-lo não desloca o restante do dia.
+  const blocoDoDiaReordenavel = (bloco: { inicio: number }) => !(bloco.inicio === 0 && currentPage > 1);
+
+  const algumDiaBloqueadoParaReordenar = useMemo(
+    () => Array.from(blocosDoDia.values()).some((bloco: { inicio: number }) => !blocoDoDiaReordenavel(bloco)),
+    [blocosDoDia, currentPage]
+  );
+
+  const handleMoverTituloNoDia = async (item: LancamentoFinanceiro, direcao: 'cima' | 'baixo') => {
+    const data = item.data_pagamento;
+    if (!podeReordenarExtrato || !data) return;
+    const bloco = blocosDoDia.get(data);
+    if (!bloco || !blocoDoDiaReordenavel(bloco)) return;
+    const indiceAtual = bloco.ids.indexOf(item.id);
+    const indiceDestino = direcao === 'cima' ? indiceAtual - 1 : indiceAtual + 1;
+    if (indiceAtual < 0 || indiceDestino < 0 || indiceDestino >= bloco.ids.length) return;
+    const novaOrdem = [...bloco.ids];
+    [novaOrdem[indiceAtual], novaOrdem[indiceDestino]] = [novaOrdem[indiceDestino], novaOrdem[indiceAtual]];
+    try {
+      await reordenarExtratoDia({ data, ids: novaOrdem });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao reordenar o extrato');
     }
   };
 
@@ -1223,11 +1273,19 @@ export default function Lancamentos({
                   <th className="py-4 px-5 text-right text-[9px] font-black uppercase tracking-widest text-neutral-400">Valor</th>
                   <th className="py-4 px-5 text-right text-[9px] font-black uppercase tracking-widest text-neutral-400">Total dia</th>
                   <th className="py-4 px-5 text-center text-[9px] font-black uppercase tracking-widest text-neutral-400">Conciliação</th>
+                  {podeReordenarExtrato && (
+                    <th className="py-4 px-5 text-center text-[9px] font-black uppercase tracking-widest text-neutral-400">Ordem</th>
+                  )}
                   {isMaster && (<th className="py-4 px-5 text-center text-[9px] font-black uppercase tracking-widest text-neutral-400">Ações</th>)}
                 </tr>
               </thead>
               <tbody>
                 {lancamentosExtrato.map(item => {
+                  const bloco = item.data_pagamento ? blocosDoDia.get(item.data_pagamento) : undefined;
+                  const indiceNoDia = bloco ? bloco.ids.indexOf(item.id) : -1;
+                  const podeMoverNoDia = Boolean(bloco) && !isReordenando && blocoDoDiaReordenavel(bloco!);
+                  const podeSubir = podeMoverNoDia && indiceNoDia > 0;
+                  const podeDescer = podeMoverNoDia && indiceNoDia >= 0 && indiceNoDia < (bloco?.ids.length ?? 0) - 1;
                   const isTransferenciaEspelho = item.transferencia_lado === 'origem' || item.transferencia_lado === 'destino';
                   return (
                     <tr
@@ -1266,6 +1324,34 @@ export default function Lancamentos({
                           : '—'}
                       </td>
                       <td className="py-3 px-5 text-center">{renderConciliadoBadge(item)}</td>
+                      {podeReordenarExtrato && (
+                        <td className="py-3 px-5 text-center" onClick={(event) => event.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              data-testid={`extrato-mover-cima-${item.id}`}
+                              aria-label="Mover para cima dentro do dia"
+                              title="Mover para cima dentro do dia"
+                              disabled={!podeSubir}
+                              onClick={() => handleMoverTituloNoDia(item, 'cima')}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border-2 border-neutral-100 text-neutral-500 transition-all hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-30"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              data-testid={`extrato-mover-baixo-${item.id}`}
+                              aria-label="Mover para baixo dentro do dia"
+                              title="Mover para baixo dentro do dia"
+                              disabled={!podeDescer}
+                              onClick={() => handleMoverTituloNoDia(item, 'baixo')}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border-2 border-neutral-100 text-neutral-500 transition-all hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-30"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
                       {isMaster && (
                         <td className="py-3 px-5 text-center" onClick={(event) => event.stopPropagation()}>
                           <div className="flex items-center justify-center">
@@ -1297,6 +1383,11 @@ export default function Lancamentos({
               {extratoBpiAtivo
                 ? 'A baixa por inatividade (BPI) não entra no saldo do banco.'
                 : 'Total dia é o saldo do ERP após cada movimentação e só coincide com o extrato do banco quando todas as movimentações da conta estiverem conciliadas.'}
+            </p>
+          )}
+          {podeReordenarExtrato && !isLoading && allLancamentos.length > 0 && algumDiaBloqueadoParaReordenar && (
+            <p data-testid="extrato-reordenacao-bloqueada" className="px-5 md:px-8 pb-3 text-[9px] font-black uppercase tracking-wider text-orange-600">
+              Este dia começou na página anterior: escolha "Todos" na quantidade de títulos para reordenar o dia inteiro.
             </p>
           )}
 

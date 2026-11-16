@@ -210,6 +210,18 @@ export function useSaldosLancamentos(lancamentoIds: string[]) {
   });
 }
 
+export function useReordenarExtratoDia() {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: ({ data, ids }: { data: string; ids: string[] }) => lancamentosService.reordenarExtratoDia(data, ids),
+    onSuccess: () => {
+      // A ordem do Extrato vem do banco: recarregar a lista é o que aplica a nova sequência.
+      queryClient.invalidateQueries({ queryKey: ['lancamentos'] });
+    },
+  });
+  return { reordenarExtratoDia: mutation.mutateAsync, isReordenando: mutation.isPending };
+}
+
 export function useContas() {
   const queryClient = useQueryClient();
   const { role, contasLiberadas, contasBloqueadas } = useAuth();
