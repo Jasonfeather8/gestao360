@@ -91,20 +91,26 @@ test("Extrato seleciona títulos pelas caixinhas e mostra o cálculo do fluxo", 
   await expect(linhaSaida.locator("td").nth(5)).toHaveClass(/text-alert-red/);
 
   // Sem caixinha marcada não existe cálculo na tela.
-  await expect(page.getByRole("row").filter({ hasText: "Total (" })).toHaveCount(0);
+  await expect(page.getByTestId("extrato-total-selecao")).toHaveCount(0);
 
   // As caixinhas alimentam o cálculo: entradas somam e saídas subtraem.
   await linhaEntrada.getByRole("checkbox").check();
   await linhaSaida.getByRole("checkbox").check();
 
-  const totalDois = page.getByRole("row").filter({ hasText: "Total (2 selecionados)" });
-  await expect(totalDois).toBeVisible();
-  await expect(totalDois).toContainText("977,00");
+  const barraCalculo = page.getByTestId("extrato-total-selecao");
+  await expect(barraCalculo).toBeVisible();
+  await expect(barraCalculo).toContainText("Total (2 selecionados)");
+  await expect(barraCalculo).toContainText("977,00");
 
   // Desmarcar um título recalcula o total da seleção.
   await linhaSaida.getByRole("checkbox").uncheck();
+  await expect(barraCalculo).toContainText("Total (1 selecionado)");
+  await expect(barraCalculo).toContainText("1.234,00");
 
-  const totalUm = page.getByRole("row").filter({ hasText: "Total (1 selecionado)" });
-  await expect(totalUm).toBeVisible();
-  await expect(totalUm).toContainText("1.234,00");
+  // O link de logs da coluna Entidade, que existe no Financeiro, também abre no Extrato.
+  await linhaEntrada.getByRole("button", { name: "Ver logs completo" }).click();
+  await expect(page.getByRole("heading", { name: "Logs completos" })).toBeVisible();
+  await expect(page.getByText(marcadorEntrada)).toBeVisible();
+  await page.getByRole("button", { name: "Fechar logs" }).click();
+  await expect(page.getByRole("heading", { name: "Logs completos" })).toBeHidden();
 });
