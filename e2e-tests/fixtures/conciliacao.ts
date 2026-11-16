@@ -133,9 +133,12 @@ export async function conciliarTitulo(page: Page, admin: SupabaseClient, titulo:
   const transacaoId = await semearTransacaoBancaria(admin, titulo);
   const client = await clienteDoUsuario(page);
 
+  // Mesma chamada da tela de Conciliação (src/services/conciliacaoService.ts).
   const { error } = await client.rpc("conciliar_transacao_atomica", {
     p_transacao_id: transacaoId,
     p_lancamento_ids: [titulo.id],
+    p_tipo_diferenca: null,
+    p_justificativa: null,
   });
   if (error) throw new Error(`Não foi possível conciliar o título: ${error.message}`);
 }
