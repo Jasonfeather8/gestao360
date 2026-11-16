@@ -98,6 +98,8 @@ test("Master reordena manualmente dois títulos do mesmo dia no Extrato", async 
 
   // A coluna Ordem é do Extrato e aparece para o Master.
   await expect(page.getByRole("columnheader", { name: "Ordem" })).toBeVisible();
+  // A Conciliação é coluna só do Extrato: o Financeiro não a exibe.
+  await expect(page.getByRole("columnheader", { name: "Conciliação" })).toBeVisible();
 
   const saldoA = await totalDiaDaLinha(page, valorA);
   const saldoB = await totalDiaDaLinha(page, valorB);
@@ -130,7 +132,9 @@ test("Master reordena manualmente dois títulos do mesmo dia no Extrato", async 
     .poll(async () => (await posicaoDaLinha(page, valorDeCima)) > (await posicaoDaLinha(page, valorDeBaixo)), { timeout: 30_000 })
     .toBe(true);
 
-  // A reordenação existe só no Extrato: a listagem do Financeiro não tem a coluna Ordem.
+  // A reordenação existe só no Extrato: a listagem do Financeiro não tem a coluna Ordem,
+  // nem a coluna de Conciliação, que ficou restrita ao Extrato.
   await openFinanceiro(page);
   await expect(page.getByRole("columnheader", { name: "Ordem" })).toHaveCount(0);
+  await expect(page.getByRole("columnheader", { name: "Conciliação" })).toHaveCount(0);
 });

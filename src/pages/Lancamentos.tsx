@@ -818,7 +818,7 @@ export default function Lancamentos({
     { liquido: 0, entradas: 0, saidas: 0 }
   );
 
-  const mirrorColumnCount = isOperationalView ? 15 : 13;
+  const mirrorColumnCount = isOperationalView ? 15 : 12;
   const hasMeasuredMirrorColumns = columnWidths.length === mirrorColumnCount;
   const mirrorGridWidth = hasMeasuredMirrorColumns
     ? `${columnWidths.reduce((total, width) => total + width, 0)}px`
@@ -1647,7 +1647,6 @@ export default function Lancamentos({
                     <th className="py-5 px-4 text-right">Valor</th>
                     {isFinanceiroView && <th className="py-5 px-4 text-right">Total dia</th>}
                     <th className="py-5 px-4 text-center">Aprovação</th>
-                    <th className="py-5 px-4 text-center">Conciliação</th>
                     <th className="py-5 px-4 text-center">Banco</th>
                     <th className="py-5 px-3 text-center">Recibo</th>
                   </>
@@ -1657,13 +1656,13 @@ export default function Lancamentos({
             </thead>
             <tbody className="text-[11px] font-bold">
               {isLoading ? (
-                <tr><td colSpan={isOperationalView ? 15 : 13} className="py-24 text-center"><div className="flex flex-col items-center gap-3 opacity-40"><Clock className="w-10 h-10 animate-spin text-primary" /><p className="font-black uppercase text-[10px] tracking-widest">Sincronizando registros...</p></div></td></tr>
+                <tr><td colSpan={isOperationalView ? 15 : 12} className="py-24 text-center"><div className="flex flex-col items-center gap-3 opacity-40"><Clock className="w-10 h-10 animate-spin text-primary" /><p className="font-black uppercase text-[10px] tracking-widest">Sincronizando registros...</p></div></td></tr>
               ) : isError ? (
-                <tr><td colSpan={isOperationalView ? 15 : 13} className="py-24 text-center"><div className="flex flex-col items-center gap-3 text-alert-red"><AlertTriangle className="w-10 h-10" /><p className="font-black uppercase text-[10px] tracking-widest">Erro ao carregar dados. Tente simplificar a busca.</p></div></td></tr>
+                <tr><td colSpan={isOperationalView ? 15 : 12} className="py-24 text-center"><div className="flex flex-col items-center gap-3 text-alert-red"><AlertTriangle className="w-10 h-10" /><p className="font-black uppercase text-[10px] tracking-widest">Erro ao carregar dados. Tente simplificar a busca.</p></div></td></tr>
               ) : role !== 'master' && activeContas.length === 0 ? (
-                <tr><td colSpan={isOperationalView ? 15 : 13} className="py-12 text-center"><div data-testid="sem-bancos-liberados" className="font-bold text-sm text-secondary">Nenhuma conta bancária liberada para o seu usuário. Solicite ao Master a liberação.</div></td></tr>
+                <tr><td colSpan={isOperationalView ? 15 : 12} className="py-12 text-center"><div data-testid="sem-bancos-liberados" className="font-bold text-sm text-secondary">Nenhuma conta bancária liberada para o seu usuário. Solicite ao Master a liberação.</div></td></tr>
               ) : displayedLancamentos.length === 0 ? (
-                <tr><td colSpan={isOperationalView ? 15 : 13} className="py-24 text-center"><div className="flex flex-col items-center gap-3 opacity-20"><Receipt className="w-12 h-12" /><p className="font-black uppercase text-[10px] tracking-widest">Nenhum lançamento localizado</p></div></td></tr>
+                <tr><td colSpan={isOperationalView ? 15 : 12} className="py-24 text-center"><div className="flex flex-col items-center gap-3 opacity-20"><Receipt className="w-12 h-12" /><p className="font-black uppercase text-[10px] tracking-widest">Nenhum lançamento localizado</p></div></td></tr>
               ) : (
                 <>
                   {displayedLancamentos.map((item, idx) => {
@@ -1860,22 +1859,6 @@ export default function Lancamentos({
                               </button>
                             ) : renderStatusBadge(item)}
                           </td>
-                          <td className="py-3 px-4 text-center">
-                            {isFinanceiroView && !isExtratoView && !item.conciliacoes?.length && item.status_pagamento !== 'bpi' && item.conta_bancaria_id ? (
-                              <button
-                                type="button"
-                                data-testid="conciliar-lancamento"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  navigate('/conciliacao?conta=' + item.conta_bancaria_id);
-                                }}
-                                className="inline-flex items-center gap-1 rounded border border-primary/20 bg-primary/5 px-2 py-1 text-[9px] font-black uppercase tracking-tighter text-primary"
-                              >
-                                <Link2 className="w-3 h-3" aria-hidden="true" />
-                                Conciliar
-                              </button>
-                            ) : renderConciliadoBadge(item)}
-                          </td>
                           {renderBancoCell(item)}
                           <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                             <button
@@ -1990,7 +1973,6 @@ export default function Lancamentos({
                   <div className="py-3 px-4 text-right font-black font-mono text-xs text-neutral-900">
                     {valueFormatter(printTotals.liquido)}
                   </div>
-                  <div className="py-3 px-4" />
                   <div className="py-3 px-4" />
                   <div className="py-3 px-4" />
                   <div className="py-3 px-3" />
