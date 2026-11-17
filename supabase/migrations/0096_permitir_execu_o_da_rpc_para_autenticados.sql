@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.get_movimentacao_operadores(date, date, uuid) TO authenticated;

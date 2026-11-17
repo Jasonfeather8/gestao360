@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.get_movimentacao_operadores(date, date, uuid) FROM PUBLIC;

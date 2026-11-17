@@ -23,15 +23,57 @@ import {
   Wallet,
   PieChart as PieChartIcon,
   Users,
-  Activity
+  Activity,
+  UserCog,
+  ArrowUpRight,
+  ArrowDownLeft
 } from 'lucide-react';
-import { useLancamentos, useContas, useCentrosCusto, useAuditoriaLogs, useEntidades, useContasSaldos, useDashboardIndicadores, useDashboardStats, useDashboardPerformance } from '../hooks/useData';
+import { useLancamentos, useContas, useCentrosCusto, useAuditoriaLogs, useEntidades, useContasSaldos, useDashboardIndicadores, useDashboardStats, useDashboardPerformance, useDashboardMovimentacaoOperadores } from '../hooks/useData';
 import { useAuth } from '../hooks/useAuth';
 import { useUIStore } from '../store/uiStore';
 
 import { useDragScroll } from '../hooks/useDragScroll';
-import type { DashboardIndicadores } from '../types';
+import type { DashboardIndicadores, MovimentacaoCategoria } from '../types';
 import { CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+
+// Rótulos e cores das ações exibidas na aba de movimentação por operador.
+const ROTULO_MOVIMENTACAO: Record<MovimentacaoCategoria, string> = {
+  criacao: 'Lançamento criado',
+  baixa: 'Baixa registrada',
+  conciliacao: 'Conciliação',
+  aprovacao: 'Aprovação Master',
+  reprovacao: 'Reprovação',
+  ajuste: 'Ajuste',
+  estorno: 'Estorno',
+  exclusao: 'Exclusão',
+  outro: 'Alteração',
+};
+
+const COR_MOVIMENTACAO: Record<MovimentacaoCategoria, string> = {
+  criacao: 'bg-blue-50 text-blue-600',
+  baixa: 'bg-amber-50 text-amber-700',
+  conciliacao: 'bg-primary/10 text-primary',
+  aprovacao: 'bg-bank-truth-green/10 text-bank-truth-green',
+  reprovacao: 'bg-alert-red/10 text-alert-red',
+  ajuste: 'bg-amber-50 text-amber-700',
+  estorno: 'bg-alert-red/10 text-alert-red',
+  exclusao: 'bg-alert-red/10 text-alert-red',
+  outro: 'bg-neutral-100 text-neutral-600',
+};
+
+const ROTULO_STATUS_PAGAMENTO: Record<string, string> = {
+  aberto: 'Aberto',
+  pago: 'Pago',
+  pago_parcial: 'Pago parcial',
+  bpi: 'BPI',
+  'quitação_pendente': 'Quitação pendente',
+};
+
+const ROTULO_PERFIL: Record<string, string> = {
+  master: 'Master',
+  gerente: 'Gerente',
+  colaborador: 'Colaborador',
+};
 
 export default function Dashboard() {
   const { role } = useAuth();
@@ -41,8 +83,11 @@ export default function Dashboard() {
 
   const dragScrollTabs = useDragScroll();
 
-  const [currentTab, setCurrentTab] = useState<'general' | 'cashflow' | 'audit'>('general');
+  const [currentTab, setCurrentTab] = useState<'general' | 'cashflow' | 'audit' | 'operators'>('general');
   const [showAdvancedFilters, setShowAdvancedFiltersAdvancedFilters] = useState(false);
+  // Filtro de período próprio da aba de movimentação ('' = todo o período).
+  const [operadorMes, setOperadorMes] = useState('');
+  const [operadorSelecionadoId, setOperadorSelecionadoId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const periodFilter = searchParams.get('mes') || 'all';
   const selectedAccountId = searchParams.get('conta') || null;
@@ -73,6 +118,24 @@ export default function Dashboard() {
     contaId: selectedAccountId ?? undefined, startDate: monthStart ?? undefined, endDate: monthEnd ?? undefined,
     page: 1, pageSize: 50,
   });
+
+  // Aba Movimentação (exclusiva do Master): período próprio, independente do filtro da visão geral.
+  const operadorInicio = operadorMes ? `${operadorMes}-01` : null;
+  const operadorFim = operadorMes
+    ? `${operadorMes}-${String(new Date(Number(operadorMes.slice(0, 4)), Number(operadorMes.slice(5, 7)), 0).getDate()).padStart(2, '0')}`
+    : null;
+  const { data: movimentacao, isLoading: loadingMovimentacao, isFetching: fetchingMovimentacao } = useDashboardMovimentacaoOperadores(operadorInicio, operadorFim, operadorSelecionadoId, currentTab === 'operators');
+  const operadoresMovimentacao = movimentacao?.operadores ?? [];
+  const resumoOperador = movimentacao?.resumo ?? null;
+  const itensOperador = movimentacao?.itens ?? [];
+  // Seleção derivada: a escolha do usuário prevalece enquanto existir na lista; senão vale o
+  // primeiro operador — o mesmo que a RPC assume quando nenhum é informado. Assim a tela abre
+  // já preenchida e nenhum estado é atualizado dentro de um efeito.
+  const operadorAtivoId = operadoresMovimentacao.some(operador => operador.id === operadorSelecionadoId)
+    ? operadorSelecionadoId
+    : (operadoresMovimentacao[0]?.id ?? null);
+  const operadorSelecionado = operadoresMovimentacao.find(operador => operador.id === operadorAtivoId) ?? null;
+  const resultadoOperador = resumoOperador ? resumoOperador.entradas_valor - resumoOperador.saidas_valor : 0;
 
   const contas = useMemo(() => {
     return rawContas
@@ -153,6 +216,9 @@ export default function Dashboard() {
               <button type="button" onClick={() => setCurrentTab('cashflow')} className={`text-xs font-bold pb-2 transition-colors border-b-2 ${currentTab === 'cashflow' ? 'text-primary border-primary' : 'text-secondary hover:text-primary border-transparent'}`}>Fluxo de Caixa</button>
               {isMaster && (
                 <button type="button" onClick={() => setCurrentTab('audit')} className={`text-xs font-bold pb-2 transition-colors border-b-2 ${currentTab === 'audit' ? 'text-primary border-primary' : 'text-secondary hover:text-primary border-transparent'}`}>Auditoria</button>
+              )}
+              {isMaster && (
+                <button type="button" data-testid="dashboard-tab-operators" onClick={() => setCurrentTab('operators')} className={`text-xs font-bold pb-2 transition-colors border-b-2 ${currentTab === 'operators' ? 'text-primary border-primary' : 'text-secondary hover:text-primary border-transparent'}`}>Movimentação</button>
               )}
             </nav>
 
@@ -734,6 +800,182 @@ export default function Dashboard() {
               </div>
             )}
           </section>
+        )}
+
+        {currentTab === 'operators' && isMaster && (
+          <div className="space-y-6 animate-fade-in">
+            <section className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-surface p-4 rounded-lg border border-surface-border shadow-sm">
+              <div className="flex flex-col">
+                <span className="text-xs font-medium text-secondary mb-1">Período da movimentação</span>
+                <div className="flex items-center gap-2 border border-surface-border rounded-lg px-3 py-2 bg-surface">
+                  <Calendar className="w-5 h-5 text-secondary" />
+                  <input
+                    type="month"
+                    aria-label="Período da movimentação"
+                    value={operadorMes}
+                    onChange={(e) => setOperadorMes(e.target.value)}
+                    className="bg-transparent border-none p-0 text-sm font-semibold focus:ring-0 text-on-surface outline-none cursor-pointer"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {fetchingMovimentacao && (
+                  <span aria-live="polite" className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-secondary">
+                    <RefreshCw className="w-3 h-3 animate-spin" /> Atualizando
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setOperadorMes('')}
+                  disabled={!operadorMes}
+                  className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Limpar período
+                </button>
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-2"><Users className="w-5 h-5 text-secondary" /> OPERADORES</h4>
+                <span className="text-[10px] font-bold text-secondary">
+                  {operadorMes
+                    ? new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${operadorMes}-01T12:00:00Z`)).replace(/^./, letter => letter.toUpperCase())
+                    : 'Todo o período'}
+                </span>
+              </div>
+              {loadingMovimentacao && operadoresMovimentacao.length === 0 ? (
+                <div className="flex items-center gap-2 text-xs text-secondary"><RefreshCw className="w-4 h-4 animate-spin" /> Carregando operadores...</div>
+              ) : operadoresMovimentacao.length === 0 ? (
+                <p className="rounded-lg border border-surface-border bg-surface p-6 text-center text-xs text-secondary">Nenhum gerente ou colaborador cadastrado.</p>
+              ) : (
+                <div className="flex gap-4 overflow-x-auto pb-2 scroll-smooth select-none px-0.5">
+                  {operadoresMovimentacao.map(operador => {
+                    const ativo = operador.id === operadorAtivoId;
+                    return (
+                      <button
+                        type="button"
+                        key={operador.id}
+                        data-testid="dashboard-operator-card"
+                        aria-pressed={ativo}
+                        onClick={() => setOperadorSelecionadoId(operador.id)}
+                        className={`flex-shrink-0 w-64 bg-white dark:bg-surface p-4 border rounded-lg flex flex-col text-left transition-all ${
+                          ativo ? 'border-primary ring-2 ring-primary/20 shadow-md scale-[1.02]' : 'border-surface-border hover:border-primary shadow-sm'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${ativo ? 'bg-primary text-white' : 'bg-primary/10 text-primary'}`}>
+                            <UserCog className="w-5 h-5" />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="block truncate text-[11px] font-black uppercase tracking-widest text-on-surface">{operador.nome}</span>
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-secondary">{ROTULO_PERFIL[operador.role] ?? operador.role}</span>
+                          </div>
+                        </div>
+                        <div className="space-y-1 text-[10px] font-semibold text-secondary">
+                          <p className="flex items-center justify-between gap-2"><span className="flex items-center gap-1"><ArrowUpRight className="w-3 h-3 text-bank-truth-green" /> Entradas</span><span className="font-mono text-on-surface">{valueFormatter(operador.entradas_valor)}</span></p>
+                          <p className="flex items-center justify-between gap-2"><span className="flex items-center gap-1"><ArrowDownLeft className="w-3 h-3 text-alert-red" /> Saídas</span><span className="font-mono text-on-surface">{valueFormatter(operador.saidas_valor)}</span></p>
+                          <p className="flex items-center justify-between gap-2 border-t border-surface-border/60 pt-1"><span>{operador.criados} criado(s)</span><span>{operador.acoes} ação(ões)</span></p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {operadorSelecionado && (
+              <>
+                <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                  <div className="bg-white dark:bg-surface p-4 rounded-xl border border-surface-border shadow-sm">
+                    <div className="flex items-center justify-between mb-2"><span className="text-[10px] font-bold uppercase tracking-wider text-secondary">Entradas criadas</span><ArrowUpRight className="w-4 h-4 text-bank-truth-green" /></div>
+                    <p className="text-lg font-bold font-mono text-on-surface">{valueFormatter(resumoOperador?.entradas_valor ?? 0)}</p>
+                    <p className="text-[10px] text-secondary mt-1">{resumoOperador?.entradas_qtd ?? 0} título(s)</p>
+                  </div>
+                  <div className="bg-white dark:bg-surface p-4 rounded-xl border border-surface-border shadow-sm">
+                    <div className="flex items-center justify-between mb-2"><span className="text-[10px] font-bold uppercase tracking-wider text-secondary">Saídas criadas</span><ArrowDownLeft className="w-4 h-4 text-alert-red" /></div>
+                    <p className="text-lg font-bold font-mono text-on-surface">{valueFormatter(resumoOperador?.saidas_valor ?? 0)}</p>
+                    <p className="text-[10px] text-secondary mt-1">{resumoOperador?.saidas_qtd ?? 0} título(s)</p>
+                  </div>
+                  <div className="bg-white dark:bg-surface p-4 rounded-xl border border-surface-border shadow-sm">
+                    <div className="flex items-center justify-between mb-2"><span className="text-[10px] font-bold uppercase tracking-wider text-secondary">Resultado</span>{resultadoOperador < 0 ? <TrendingDown className="w-4 h-4 text-alert-red" /> : <TrendingUp className="w-4 h-4 text-bank-truth-green" />}</div>
+                    <p className={`text-lg font-bold font-mono ${resultadoOperador < 0 ? 'text-alert-red' : 'text-bank-truth-green'}`}>{valueFormatter(resultadoOperador)}</p>
+                    <p className="text-[10px] text-secondary mt-1">Entradas − saídas criadas</p>
+                  </div>
+                  <div className="bg-white dark:bg-surface p-4 rounded-xl border border-surface-border shadow-sm">
+                    <div className="flex items-center justify-between mb-2"><span className="text-[10px] font-bold uppercase tracking-wider text-secondary">Baixas registradas</span><CheckCircle2 className="w-4 h-4 text-[#FFA000]" /></div>
+                    <p className="text-lg font-bold font-mono text-on-surface">{valueFormatter(resumoOperador?.baixas_valor ?? 0)}</p>
+                    <p className="text-[10px] text-secondary mt-1">{resumoOperador?.baixas_qtd ?? 0} baixa(s)</p>
+                  </div>
+                </section>
+
+                <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {([
+                    ['Conciliações', resumoOperador?.conciliacoes_qtd ?? 0],
+                    ['Aprovações Master', resumoOperador?.aprovacoes_qtd ?? 0],
+                    ['Ajustes', resumoOperador?.ajustes_qtd ?? 0],
+                    ['Estornos', resumoOperador?.estornos_qtd ?? 0],
+                    ['Outras ações', resumoOperador?.outras_qtd ?? 0],
+                    ['Total de ações', resumoOperador?.total_acoes ?? 0],
+                  ] as [string, number][]).map(([label, valor]) => (
+                    <div key={label} className="rounded-lg border border-surface-border bg-surface px-3 py-2">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-secondary">{label}</p>
+                      <p className="mt-1 text-sm font-bold text-on-surface">{valor}</p>
+                    </div>
+                  ))}
+                </section>
+
+                <section className="bg-white dark:bg-surface p-6 rounded-xl border border-surface-border shadow-sm">
+                  <div className="flex flex-wrap justify-between items-center gap-2 mb-1">
+                    <h4 className="text-sm font-bold uppercase tracking-wider text-on-surface">Movimentação de {operadorSelecionado.nome}</h4>
+                    <span className="text-[10px] font-bold text-secondary uppercase tracking-widest">{itensOperador.length} movimento(s)</span>
+                  </div>
+                  <p className="text-[10px] text-secondary mb-4">Títulos criados e ações executadas por este operador no período selecionado.</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-neutral-50 text-neutral-400 border-b border-neutral-100 text-[9px] font-black uppercase tracking-widest">
+                          <th className="py-3 px-4">Data/Hora</th>
+                          <th className="py-3 px-4">Ação</th>
+                          <th className="py-3 px-4">Tipo</th>
+                          <th className="py-3 px-4">Descrição</th>
+                          <th className="py-3 px-4 text-right">Valor</th>
+                          <th className="py-3 px-4">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-[11px] font-bold">
+                        {loadingMovimentacao && itensOperador.length === 0 ? (
+                          <tr><td colSpan={6} className="py-8 text-center text-secondary">Carregando...</td></tr>
+                        ) : itensOperador.length === 0 ? (
+                          <tr><td colSpan={6} className="py-8 text-center text-secondary">Nenhuma movimentação deste operador no período.</td></tr>
+                        ) : itensOperador.map((item, index) => (
+                          <tr key={`${item.lancamento_id ?? 'sem-titulo'}-${item.categoria}-${index}`} data-testid="dashboard-operator-movement" className="border-b border-neutral-50 hover:bg-neutral-50">
+                            <td className="py-3 px-4 font-mono text-secondary whitespace-nowrap">
+                              {new Date(item.data_hora).toLocaleDateString('pt-BR')} {new Date(item.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-1 rounded text-[9px] uppercase font-black ${COR_MOVIMENTACAO[item.categoria] ?? COR_MOVIMENTACAO.outro}`} title={item.acao}>
+                                {ROTULO_MOVIMENTACAO[item.categoria] ?? item.acao}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              {item.tipo === 'saida' ? <span className="text-alert-red">Saída</span> : item.tipo === 'entrada' ? <span className="text-bank-truth-green">Entrada</span> : '—'}
+                            </td>
+                            <td className="py-3 px-4 text-on-surface">
+                              <span className="block truncate max-w-[280px]" title={item.descricao ?? ''}>{item.descricao || '—'}</span>
+                              {item.codigo_sequencial ? <span className="text-[9px] text-secondary font-medium">#{item.codigo_sequencial}</span> : null}
+                            </td>
+                            <td className={`py-3 px-4 text-right font-black ${item.tipo === 'saida' ? 'text-alert-red' : 'text-bank-truth-green'}`}>{valueFormatter(item.valor)}</td>
+                            <td className="py-3 px-4 text-secondary">{item.status_pagamento ? (ROTULO_STATUS_PAGAMENTO[item.status_pagamento] ?? item.status_pagamento) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </>
+            )}
+          </div>
         )}
       </div>
     </div>

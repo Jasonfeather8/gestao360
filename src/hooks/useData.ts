@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { DashboardIndicadores, DashboardPerformance, DashboardStats, ImportacaoDados } from '../types';
+import { DashboardIndicadores, DashboardPerformance, DashboardStats, ImportacaoDados, MovimentacaoOperadores } from '../types';
 import type { TransferenciaBancaria, TransferenciaCandidataLinha } from '../types';
 import type { CriarTransferenciaParams } from '../services/transferenciasService';
 import { transferenciasService } from '../services/transferenciasService';
@@ -592,6 +592,30 @@ export function useDashboardPerformance(inicio?: string | null, fim?: string | n
       return data as DashboardPerformance;
     },
     enabled: !!user?.id,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    placeholderData: keepPreviousData,
+  });
+}
+
+// Movimentação por operador (aba exclusiva do Master no Dashboard). A RPC valida o
+// perfil no banco; o `enabled` evita a chamada — e o erro — para os demais perfis e
+// mantém a consulta parada enquanto a aba não é aberta.
+export function useDashboardMovimentacaoOperadores(inicio?: string | null, fim?: string | null, operadorId?: string | null, habilitado = true) {
+  const { user, role } = useAuth();
+
+  return useQuery({
+    queryKey: ['dashboardMovimentacaoOperadores', user?.id, inicio ?? null, fim ?? null, operadorId ?? null],
+    queryFn: async (): Promise<MovimentacaoOperadores> => {
+      const { data, error } = await supabase.rpc('get_movimentacao_operadores', {
+        p_inicio: inicio ?? null,
+        p_fim: fim ?? null,
+        p_operador_id: operadorId ?? null,
+      });
+      if (error) throw error;
+      return data as MovimentacaoOperadores;
+    },
+    enabled: !!user?.id && role === 'master' && habilitado,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
     placeholderData: keepPreviousData,

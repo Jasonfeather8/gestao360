@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS lancamentos_financeiros_criador_idx ON public.lancamentos_financeiros (usuario_criador_id, created_at DESC);

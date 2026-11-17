@@ -484,6 +484,65 @@ export interface DashboardIndicadores {
   meses: string[];
 }
 
+/** Natureza de uma movimentação do operador no rastro de auditoria. */
+export type MovimentacaoCategoria =
+  | 'criacao'
+  | 'baixa'
+  | 'conciliacao'
+  | 'aprovacao'
+  | 'reprovacao'
+  | 'ajuste'
+  | 'estorno'
+  | 'exclusao'
+  | 'outro';
+
+/** Operador disponível para seleção na aba de movimentação (Master não aparece). */
+export interface MovimentacaoOperadorPerfil {
+  id: string;
+  nome: string;
+  email: string | null;
+  role: UserPerfil;
+  criados: number;
+  entradas_valor: number;
+  saidas_valor: number;
+  acoes: number;
+}
+
+export interface MovimentacaoOperadorResumo {
+  entradas_valor: number;
+  entradas_qtd: number;
+  saidas_valor: number;
+  saidas_qtd: number;
+  baixas_valor: number;
+  baixas_qtd: number;
+  conciliacoes_qtd: number;
+  aprovacoes_qtd: number;
+  ajustes_qtd: number;
+  estornos_qtd: number;
+  outras_qtd: number;
+  total_acoes: number;
+  total_movimentos: number;
+}
+
+/** Um movimento do operador: um título que ele criou ou uma ação que ele executou. */
+export interface MovimentacaoOperadorItem {
+  categoria: MovimentacaoCategoria;
+  acao: string;
+  lancamento_id: string | null;
+  data_hora: string;
+  tipo: 'entrada' | 'saida' | null;
+  valor: number;
+  descricao: string | null;
+  status_pagamento: string | null;
+  codigo_sequencial: number | null;
+}
+
+export interface MovimentacaoOperadores {
+  operadores: MovimentacaoOperadorPerfil[];
+  resumo: MovimentacaoOperadorResumo | null;
+  itens: MovimentacaoOperadorItem[];
+}
+
 export type MigracaoCampo =
   | 'recebido'
   | 'data'
