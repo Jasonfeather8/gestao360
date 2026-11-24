@@ -88,6 +88,9 @@ export default function Dashboard() {
   // Filtro de período próprio da aba de movimentação ('' = todo o período).
   const [operadorMes, setOperadorMes] = useState('');
   const [operadorSelecionadoId, setOperadorSelecionadoId] = useState<string | null>(null);
+  // Paginação da tabela de movimentações: 50 por padrão, ajustável para 100.
+  const [paginaMovimentacao, setPaginaMovimentacao] = useState(1);
+  const [tamanhoPaginaMovimentacao, setTamanhoPaginaMovimentacao] = useState<50 | 100>(50);
   const [searchParams, setSearchParams] = useSearchParams();
   const periodFilter = searchParams.get('mes') || 'all';
   const selectedAccountId = searchParams.get('conta') || null;
@@ -136,6 +139,17 @@ export default function Dashboard() {
     : (operadoresMovimentacao[0]?.id ?? null);
   const operadorSelecionado = operadoresMovimentacao.find(operador => operador.id === operadorAtivoId) ?? null;
   const resultadoOperador = resumoOperador ? resumoOperador.entradas_valor - resumoOperador.saidas_valor : 0;
+
+  // Corte da listagem de movimentações em páginas. A RPC devolve todos os itens do operador,
+  // então a paginação é feita no cliente. A página exibida é sempre limitada ao total existente.
+  const totalMovimentacoes = itensOperador.length;
+  const totalPaginasMovimentacao = Math.max(Math.ceil(totalMovimentacoes / tamanhoPaginaMovimentacao), 1);
+  const paginaAtualMovimentacao = Math.min(paginaMovimentacao, totalPaginasMovimentacao);
+  const inicioPaginaMovimentacao = (paginaAtualMovimentacao - 1) * tamanhoPaginaMovimentacao;
+  const itensOperadorPaginados = itensOperador.slice(inicioPaginaMovimentacao, inicioPaginaMovimentacao + tamanhoPaginaMovimentacao);
+  // A janela de botões acompanha a página atual, mantendo-a sempre visível (5 botões no máximo).
+  const janelaPaginasMovimentacao = Math.min(Math.max(paginaAtualMovimentacao - 2, 1), Math.max(totalPaginasMovimentacao - 4, 1));
+  const paginasVisiveisMovimentacao = Array.from({ length: Math.min(5, totalPaginasMovimentacao) }, (_, index) => janelaPaginasMovimentacao + index);
 
   const contas = useMemo(() => {
     return rawContas
@@ -813,7 +827,7 @@ export default function Dashboard() {
                     type="month"
                     aria-label="Período da movimentação"
                     value={operadorMes}
-                    onChange={(e) => setOperadorMes(e.target.value)}
+                    onChange={(e) => { setOperadorMes(e.target.value); setPaginaMovimentacao(1); }}
                     className="bg-transparent border-none p-0 text-sm font-semibold focus:ring-0 text-on-surface outline-none cursor-pointer"
                   />
                 </div>
@@ -826,7 +840,7 @@ export default function Dashboard() {
                 )}
                 <button
                   type="button"
-                  onClick={() => setOperadorMes('')}
+                  onClick={() => { setOperadorMes(''); setPaginaMovimentacao(1); }}
                   disabled={!operadorMes}
                   className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -858,7 +872,7 @@ export default function Dashboard() {
                         key={operador.id}
                         data-testid="dashboard-operator-card"
                         aria-pressed={ativo}
-                        onClick={() => setOperadorSelecionadoId(operador.id)}
+                        onClick={() => { setOperadorSelecionadoId(operador.id); setPaginaMovimentacao(1); }}
                         className={`flex-shrink-0 w-64 bg-white dark:bg-surface p-4 border rounded-lg flex flex-col text-left transition-all ${
                           ativo ? 'border-primary ring-2 ring-primary/20 shadow-md scale-[1.02]' : 'border-surface-border hover:border-primary shadow-sm'
                         }`}
@@ -926,9 +940,24 @@ export default function Dashboard() {
                 </section>
 
                 <section className="bg-white dark:bg-surface p-6 rounded-xl border border-surface-border shadow-sm">
-                  <div className="flex flex-wrap justify-between items-center gap-2 mb-1">
+                  <div className="flex flex-wrap justify-between items-center gap-3 mb-1">
                     <h4 className="text-sm font-bold uppercase tracking-wider text-on-surface">Movimentação de {operadorSelecionado.nome}</h4>
-                    <span className="text-[10px] font-bold text-secondary uppercase tracking-widest">{itensOperador.length} movimento(s)</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] font-bold text-secondary uppercase tracking-widest">{totalMovimentacoes} movimento(s)</span>
+                      <select
+                        data-testid="dashboard-movimentacao-page-size"
+                        aria-label="Movimentos por página"
+                        value={tamanhoPaginaMovimentacao}
+                        onChange={(event) => {
+                          setTamanhoPaginaMovimentacao(event.target.value === '100' ? 100 : 50);
+                          setPaginaMovimentacao(1);
+                        }}
+                        className="h-9 rounded-xl border-2 border-surface-border bg-surface px-3 text-[10px] font-bold uppercase tracking-widest text-secondary outline-none transition-all hover:bg-neutral-50"
+                      >
+                        <option value="50">50 movimentos</option>
+                        <option value="100">100 movimentos</option>
+                      </select>
+                    </div>
                   </div>
                   <p className="text-[10px] text-secondary mb-4">Títulos criados e ações executadas por este operador no período selecionado.</p>
                   <div className="overflow-x-auto">
@@ -948,7 +977,7 @@ export default function Dashboard() {
                           <tr><td colSpan={6} className="py-8 text-center text-secondary">Carregando...</td></tr>
                         ) : itensOperador.length === 0 ? (
                           <tr><td colSpan={6} className="py-8 text-center text-secondary">Nenhuma movimentação deste operador no período.</td></tr>
-                        ) : itensOperador.map((item, index) => (
+                        ) : itensOperadorPaginados.map((item, index) => (
                           <tr key={`${item.lancamento_id ?? 'sem-titulo'}-${item.categoria}-${index}`} data-testid="dashboard-operator-movement" className="border-b border-neutral-50 hover:bg-neutral-50">
                             <td className="py-3 px-4 font-mono text-secondary whitespace-nowrap">
                               {new Date(item.data_hora).toLocaleDateString('pt-BR')} {new Date(item.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
@@ -972,6 +1001,51 @@ export default function Dashboard() {
                       </tbody>
                     </table>
                   </div>
+                  {totalMovimentacoes > 0 && (
+                    <div className="mt-4 flex flex-col gap-4 border-t border-surface-border pt-4 md:flex-row md:items-center md:justify-between">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-secondary">
+                        Exibindo {itensOperadorPaginados.length} de {totalMovimentacoes} registros
+                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          data-testid="dashboard-movimentacao-prev-page"
+                          disabled={paginaAtualMovimentacao === 1}
+                          onClick={() => setPaginaMovimentacao(prev => Math.max(prev - 1, 1))}
+                          className="h-10 px-4 rounded-xl border-2 border-surface-border text-secondary font-bold hover:bg-neutral-50 disabled:opacity-50 text-[10px] uppercase tracking-widest transition-all"
+                        >
+                          Anterior
+                        </button>
+                        <div className="flex gap-1">
+                          {janelaPaginasMovimentacao > 1 && <span className="flex items-end pb-2 text-secondary">...</span>}
+                          {paginasVisiveisMovimentacao.map(pageNum => (
+                            <button
+                              type="button"
+                              key={pageNum}
+                              onClick={() => setPaginaMovimentacao(pageNum)}
+                              className={`w-10 h-10 rounded-xl text-[10px] font-black transition-all ${
+                                paginaAtualMovimentacao === pageNum
+                                  ? 'bg-neutral-900 text-white shadow-md'
+                                  : 'border-2 border-surface-border text-secondary hover:bg-neutral-50'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          ))}
+                          {janelaPaginasMovimentacao + paginasVisiveisMovimentacao.length - 1 < totalPaginasMovimentacao && <span className="flex items-end pb-2 text-secondary">...</span>}
+                        </div>
+                        <button
+                          type="button"
+                          data-testid="dashboard-movimentacao-next-page"
+                          disabled={paginaAtualMovimentacao === totalPaginasMovimentacao}
+                          onClick={() => setPaginaMovimentacao(prev => Math.min(prev + 1, totalPaginasMovimentacao))}
+                          className="h-10 px-4 rounded-xl border-2 border-surface-border text-secondary font-bold hover:bg-neutral-50 disabled:opacity-50 text-[10px] uppercase tracking-widest transition-all"
+                        >
+                          Próximo
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </section>
               </>
             )}
