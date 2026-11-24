@@ -613,6 +613,8 @@ export default function NovoLancamentoDrawer() {
   const isApproved = editingItem?.status_aprovacao === 'confirmado_master';
   const isMaster = role === 'master';
   const shouldLockFields = !isAVREdit && isApproved && !isMaster;
+  const travarValoresAVR = Boolean(editingItem && avrPreset && avrPreset.lancamentoId === editingItem.id && avrPreset.travarValores);
+  const shouldLockCondition = shouldLockFields || travarValoresAVR;
   const shouldLockEntity = isAVREdit ? avrHasReceived : shouldLockFields;
 
   const handleClose = () => {
@@ -687,20 +689,24 @@ export default function NovoLancamentoDrawer() {
     const selectedStatus = selectedParcel?.status ?? editingItem.status_pagamento;
     const selectedReceived = Number(selectedParcel?.valor_recebido ?? editingItem.valor_recebido ?? 0);
 
-    if (selectedStatus !== 'aberto' || selectedReceived > 0) {
-      showToast('Somente parcelas abertas e sem valor recebido podem ser ajustadas.', 'warning');
-      setIsAVRConfirmationOpen(false);
-      return;
-    }
-    if (selectedValue <= 0) {
-      showToast('Informe um valor válido para a parcela.', 'warning');
-      setIsAVRConfirmationOpen(false);
-      return;
-    }
-    if (editingItem.recorrencia_id && avrParcels.length === 0) {
-      showToast('Gere as parcelas do AVR antes de salvar.', 'warning');
-      setIsAVRConfirmationOpen(false);
-      return;
+    // O AVR de dados (Master nas telas Financeiro/Extrato) não mexe em valor nem em
+    // parcela, então as travas de valor/parcela do AVR comum não se aplicam.
+    if (!travarValoresAVR) {
+      if (selectedStatus !== 'aberto' || selectedReceived > 0) {
+        showToast('Somente parcelas abertas e sem valor recebido podem ser ajustadas.', 'warning');
+        setIsAVRConfirmationOpen(false);
+        return;
+      }
+      if (selectedValue <= 0) {
+        showToast('Informe um valor válido para a parcela.', 'warning');
+        setIsAVRConfirmationOpen(false);
+        return;
+      }
+      if (editingItem.recorrencia_id && avrParcels.length === 0) {
+        showToast('Gere as parcelas do AVR antes de salvar.', 'warning');
+        setIsAVRConfirmationOpen(false);
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -709,8 +715,9 @@ export default function NovoLancamentoDrawer() {
         id: editingItem.id,
         data: {
           tipo_baixa: 'avr',
-          valor_pago: selectedValue,
-          parcela_valor: selectedValue,
+          ...(travarValoresAVR ? { avr_somente_dados: true } : {}),
+          valor_pago: travarValoresAVR ? 0 : selectedValue,
+          parcela_valor: travarValoresAVR ? 0 : selectedValue,
           data_pagamento: lancamentoFormDraft.data_pagamento,
           conta_bancaria_id: lancamentoFormDraft.conta_bancaria_id,
           centro_custo_id: lancamentoFormDraft.centro_custo_id,
@@ -719,15 +726,15 @@ export default function NovoLancamentoDrawer() {
           condicao: lancamentoFormDraft.condicao,
           data_competencia: lancamentoFormDraft.data_competencia,
           data_emissao: lancamentoFormDraft.data_emissao,
-          parcelas: editingItem.recorrencia_id ? avrParcels : undefined,
-          parcela_config: editingItem.recorrencia_id ? {
+          parcelas: !travarValoresAVR && editingItem.recorrencia_id ? avrParcels : undefined,
+          parcela_config: !travarValoresAVR && editingItem.recorrencia_id ? {
             quantidade: Math.max(1, parseInt(avrQuantity) || avrParcels.length || 1),
             periodicidade: avrPeriodicity,
             periodicidade_customizada_dias: avrPeriodicity === 'personalizado' ? parseInt(avrCustomDays) || 30 : undefined,
             com_entrada: avrWithEntry
           } : undefined,
           motivo_ajuste: (categoriasAjuste as any[]).find(reason => reason.id === avrReasonId)?.nome,
-          propagate_avr: propagationOverride ?? avrPropagation
+          propagate_avr: travarValoresAVR ? 'none' : (propagationOverride ?? avrPropagation)
         }
       });
       // O comprovante escolhido também precisa ser gravado no fluxo de AVR.
@@ -1145,10 +1152,10 @@ export default function NovoLancamentoDrawer() {
                   <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center">
                       <label className="text-[10px] font-black text-secondary uppercase tracking-widest">Condição <span className="text-alert-red">*</span></label>
-                      <label className={`flex items-center gap-2 cursor-pointer select-none ${shouldLockFields ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <label className={`flex items-center gap-2 cursor-pointer select-none ${shouldLockCondition ? 'opacity-50 pointer-events-none' : ''}`}>
                         <input
                           type="checkbox"
-                          disabled={shouldLockFields}
+                          disabled={shouldLockCondition}
                           checked={lancamentoFormDraft.recorrencia_repeat}
                           onChange={(e) => setLancamentoFormDraft({ recorrencia_repeat: e.target.checked })}
                           className="rounded-md border-neutral-300 text-primary focus:ring-primary w-4 h-4 transition-all"
@@ -1156,10 +1163,10 @@ export default function NovoLancamentoDrawer() {
                         <span className="text-[10px] font-black text-secondary uppercase tracking-widest">Repetir</span>
                       </label>
                     </div>
-                    <div className={`flex bg-neutral-100 dark:bg-surface-container border-2 border-neutral-100 dark:border-surface-border rounded-xl p-1 h-12 select-none ${shouldLockFields ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <div className={`flex bg-neutral-100 dark:bg-surface-container border-2 border-neutral-100 dark:border-surface-border rounded-xl p-1 h-12 select-none ${shouldLockCondition ? 'opacity-50 pointer-events-none' : ''}`}>
                       <button
                         type="button"
-                        disabled={shouldLockFields}
+                        disabled={shouldLockCondition}
                         onClick={() => setLancamentoFormDraft({ condicao: 'a_vista' })}
                         className={`flex-1 text-[10px] font-black rounded-lg transition-all uppercase tracking-tighter ${
                           lancamentoFormDraft.condicao === 'a_vista'
@@ -1171,7 +1178,7 @@ export default function NovoLancamentoDrawer() {
                       </button>
                       <button
                         type="button"
-                        disabled={shouldLockFields}
+                        disabled={shouldLockCondition}
                         onClick={() => setLancamentoFormDraft({ condicao: 'a_prazo' })}
                         className={`flex-1 text-[10px] font-black rounded-lg transition-all uppercase tracking-tighter ${
                           lancamentoFormDraft.condicao === 'a_prazo'
@@ -1606,8 +1613,9 @@ export default function NovoLancamentoDrawer() {
                       <button
                         type="button"
                         data-testid="avr-toggle"
+                        disabled={travarValoresAVR}
                         onClick={() => setIsAVREdit(!isAVREdit)}
-                        className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest ${isAVREdit ? 'bg-primary text-white' : 'bg-white text-primary border border-primary/20'}`}
+                        className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest ${isAVREdit ? 'bg-primary text-white' : 'bg-white text-primary border border-primary/20'} ${travarValoresAVR ? 'cursor-not-allowed opacity-50' : ''}`}
                       >
                         {isAVREdit ? 'AVR Ativo' : 'Usar AVR'}
                       </button>
@@ -1631,20 +1639,20 @@ export default function NovoLancamentoDrawer() {
                         {!editingItem.recorrencia_id && (
                           <div className="space-y-2 border-t border-primary/10 pt-4">
                             <label className="text-[9px] font-black uppercase text-primary tracking-widest">Novo valor da parcela *</label>
-                            <MoneyInput id="avr-valor-parcela" value={avrSingleParcelValue} onChange={setAvrSingleParcelValue} className="w-full h-10 bg-white border-2 border-primary/10 rounded-xl px-3 text-xs font-black outline-none focus:border-primary" />
+                            <MoneyInput id="avr-valor-parcela" value={avrSingleParcelValue} onChange={setAvrSingleParcelValue} disabled={travarValoresAVR} className={`w-full h-10 bg-white border-2 border-primary/10 rounded-xl px-3 text-xs font-black outline-none focus:border-primary ${travarValoresAVR ? 'cursor-not-allowed opacity-50' : ''}`} />
                           </div>
                         )}
 
                         {lancamentoFormDraft.condicao === 'a_prazo' && editingItem.recorrencia_id && (
                           <div className="space-y-3 border-t border-primary/10 pt-4">
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                              <label className="space-y-1.5"><span className="text-[9px] font-black uppercase text-secondary">Nº vezes</span><input type="number" min="1" max="120" value={avrQuantity} onChange={(e) => setAvrQuantity(e.target.value)} className="w-full h-10 bg-white border-2 border-primary/10 rounded-xl px-3 text-xs font-bold" /></label>
-                              <label className="space-y-1.5"><span className="text-[9px] font-black uppercase text-secondary">Intervalo</span><select value={avrPeriodicity} onChange={(e) => setAvrPeriodicity(e.target.value)} className="w-full h-10 bg-white border-2 border-primary/10 rounded-xl px-3 text-xs font-bold"><option value="diario">Diário</option><option value="semanal">Semanal</option><option value="quinzenal">Quinzenal</option><option value="mensal">Mensal</option><option value="bimestral">Bimestral</option><option value="trimestral">Trimestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option><option value="personalizado">Personalizado</option></select></label>
-                              {avrPeriodicity === 'personalizado' && <label className="space-y-1.5"><span className="text-[9px] font-black uppercase text-secondary">Qtd. dias</span><input type="number" min="1" value={avrCustomDays} onChange={(e) => setAvrCustomDays(e.target.value)} className="w-full h-10 bg-white border-2 border-primary/10 rounded-xl px-3 text-xs font-bold" /></label>}
+                              <label className="space-y-1.5"><span className="text-[9px] font-black uppercase text-secondary">Nº vezes</span><input type="number" min="1" max="120" disabled={travarValoresAVR} value={avrQuantity} onChange={(e) => setAvrQuantity(e.target.value)} className={`w-full h-10 bg-white border-2 border-primary/10 rounded-xl px-3 text-xs font-bold ${travarValoresAVR ? 'cursor-not-allowed opacity-50' : ''}`} /></label>
+                              <label className="space-y-1.5"><span className="text-[9px] font-black uppercase text-secondary">Intervalo</span><select disabled={travarValoresAVR} value={avrPeriodicity} onChange={(e) => setAvrPeriodicity(e.target.value)} className={`w-full h-10 bg-white border-2 border-primary/10 rounded-xl px-3 text-xs font-bold ${travarValoresAVR ? 'cursor-not-allowed opacity-50' : ''}`}><option value="diario">Diário</option><option value="semanal">Semanal</option><option value="quinzenal">Quinzenal</option><option value="mensal">Mensal</option><option value="bimestral">Bimestral</option><option value="trimestral">Trimestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option><option value="personalizado">Personalizado</option></select></label>
+                              {avrPeriodicity === 'personalizado' && <label className="space-y-1.5"><span className="text-[9px] font-black uppercase text-secondary">Qtd. dias</span><input type="number" min="1" disabled={travarValoresAVR} value={avrCustomDays} onChange={(e) => setAvrCustomDays(e.target.value)} className={`w-full h-10 bg-white border-2 border-primary/10 rounded-xl px-3 text-xs font-bold ${travarValoresAVR ? 'cursor-not-allowed opacity-50' : ''}`} /></label>}
                             </div>
-                            <label className="flex items-center gap-2 text-[9px] font-black uppercase text-secondary"><input type="checkbox" checked={avrWithEntry} onChange={(e) => setAvrWithEntry(e.target.checked)} className="rounded text-primary" /> Com entrada</label>
-                            <button type="button" onClick={generateAVRParcels} className="w-full h-10 bg-primary/10 text-primary rounded-xl text-[9px] font-black uppercase tracking-widest">Gerar / Atualizar Parcelas</button>
-                            {avrParcels.length > 0 && <div data-testid="avr-parcelas" className="border-2 border-primary/10 rounded-xl overflow-hidden bg-white"><table className="w-full"><tbody>{avrParcels.map((parcel, index) => { const parcelLocked = parcel.status !== 'aberto' || Number(parcel.valor_recebido) > 0; return <tr key={`${parcel.id || 'new'}-${parcel.numero}`} className="border-b border-primary/10"><td className="px-2 py-2 text-[10px] font-black">#{parcel.numero}</td><td className="px-1 py-1"><input type="date" disabled={parcelLocked} value={parcel.data} onChange={(e) => setAvrParcels(prev => prev.map((item, itemIndex) => itemIndex === index ? { ...item, data: e.target.value } : item))} className="w-full border-none text-[10px]" /></td><td className="px-1 py-1"><MoneyInput disabled={parcelLocked} value={parcel.valor} onChange={(value) => setAvrParcels(prev => prev.map((item, itemIndex) => itemIndex === index ? { ...item, valor: value } : item))} className="w-full border-none text-[10px] font-black" /></td></tr>; })}</tbody></table></div>}
+                            <label className={`flex items-center gap-2 text-[9px] font-black uppercase text-secondary ${travarValoresAVR ? 'cursor-not-allowed opacity-50' : ''}`}><input type="checkbox" disabled={travarValoresAVR} checked={avrWithEntry} onChange={(e) => setAvrWithEntry(e.target.checked)} className="rounded text-primary" /> Com entrada</label>
+                            <button type="button" disabled={travarValoresAVR} onClick={generateAVRParcels} className={`w-full h-10 bg-primary/10 text-primary rounded-xl text-[9px] font-black uppercase tracking-widest ${travarValoresAVR ? 'cursor-not-allowed opacity-50' : ''}`}>Gerar / Atualizar Parcelas</button>
+                            {avrParcels.length > 0 && <div data-testid="avr-parcelas" className="border-2 border-primary/10 rounded-xl overflow-hidden bg-white"><table className="w-full"><tbody>{avrParcels.map((parcel, index) => { const parcelLocked = travarValoresAVR || parcel.status !== 'aberto' || Number(parcel.valor_recebido) > 0; return <tr key={`${parcel.id || 'new'}-${parcel.numero}`} className="border-b border-primary/10"><td className="px-2 py-2 text-[10px] font-black">#{parcel.numero}</td><td className="px-1 py-1"><input type="date" disabled={parcelLocked} value={parcel.data} onChange={(e) => setAvrParcels(prev => prev.map((item, itemIndex) => itemIndex === index ? { ...item, data: e.target.value } : item))} className={`w-full border-none text-[10px] disabled:cursor-not-allowed disabled:opacity-50`} /></td><td className="px-1 py-1"><MoneyInput disabled={parcelLocked} value={parcel.valor} onChange={(value) => setAvrParcels(prev => prev.map((item, itemIndex) => itemIndex === index ? { ...item, valor: value } : item))} className="w-full border-none text-[10px] font-black disabled:cursor-not-allowed disabled:opacity-50" /></td></tr>; })}</tbody></table></div>}
                           </div>
                         )}
                       </>

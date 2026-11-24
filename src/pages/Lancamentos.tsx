@@ -75,6 +75,7 @@ export default function Lancamentos({
   const {
     setModalOpen,
     setSelectedLancamentoIdForModal,
+    setAvrPreset,
     selectedLancamentoIdsForBatch,
     setSelectedLancamentoIdsForBatch,
     setSelectedTransferenciaAprovacao,
@@ -699,6 +700,7 @@ export default function Lancamentos({
 
   const handleEdit = (l: LancamentoFinanceiro) => {
     setSelectedLancamentoIdForModal(l.id);
+    setAvrPreset(isOperationalView ? null : { lancamentoId: l.id, travarValores: true });
     setModalOpen('isNovoLancamentoOpen', true);
     setActiveMenuId(null);
   };

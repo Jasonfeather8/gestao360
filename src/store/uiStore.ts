@@ -39,7 +39,7 @@ interface UIState {
   lancamentoPreset: { dataExtrato: string; transacaoBancoId?: string } | null;
   conciliacaoPosLancamento: { lancamentoId: string; dataExtrato: string; transacaoBancoId?: string | null } | null;
   baixaPreset: { lancamentoId: string; dataPagamento: string; aprovarDepois: boolean } | null;
-  avrPreset: { lancamentoId: string; valor: string } | null;
+  avrPreset: { lancamentoId: string; valor?: string; travarValores?: boolean } | null;
 
   // Selected item contexts for modals
 
@@ -117,7 +117,7 @@ interface UIState {
   setLancamentoPreset: (preset: { dataExtrato: string; transacaoBancoId?: string } | null) => void;
   setConciliacaoPosLancamento: (pos: { lancamentoId: string; dataExtrato: string; transacaoBancoId?: string | null } | null) => void;
   setBaixaPreset: (preset: { lancamentoId: string; dataPagamento: string; aprovarDepois: boolean } | null) => void;
-  setAvrPreset: (preset: { lancamentoId: string; valor: string } | null) => void;
+  setAvrPreset: (preset: { lancamentoId: string; valor?: string; travarValores?: boolean } | null) => void;
   setEntidadeFormDraft: (draft: Partial<UIState['entidadeFormDraft']>) => void;
   setEntidadeEmEdicaoId: (id: string | null) => void;
   setScrollPosition: (key: string, position: number) => void;

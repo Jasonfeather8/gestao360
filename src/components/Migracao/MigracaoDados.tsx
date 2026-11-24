@@ -70,6 +70,26 @@ export default function MigracaoDados() {
   const podeDesfazer = hasRole(['master', 'gerente']);
   const queryClient = useQueryClient();
 
+  const limparImportacao = () => {
+    escolhasManuais.current.clear();
+    autorizacoesDuplicata.current.clear();
+    nomesOriginais.current = {};
+    setPlanilha(null);
+    setAba('');
+    setLinhaCabecalho(0);
+    setColunas({});
+    setNaoReconhecidas([]);
+    setLinhas([]);
+    setDuplicadosBanco(new Map());
+    setSomentePendencias(false);
+    setCadastroRapido(null);
+    setProgresso(0);
+    setErro('');
+    setResultado(null);
+    setConfirmarConciliacao(false);
+    if (inputRef.current) inputRef.current.value = '';
+  };
+
   useEffect(() => {
     const timer = window.setTimeout(() => setBuscaLotesAplicada(buscaLotes.trim()), 300);
     return () => window.clearTimeout(timer);
@@ -329,7 +349,7 @@ export default function MigracaoDados() {
         {lendo && <div className="rounded-xl border border-surface-border p-6"><div className="flex items-center gap-3 text-sm font-semibold text-on-surface"><LoaderCircle className="h-5 w-5 animate-spin text-primary" />Lendo e interpretando a planilha… {progresso}%</div><div className="mt-4 h-2 overflow-hidden rounded-full bg-surface-container-low"><div className="h-full bg-primary transition-all" style={{ width: `${progresso}%` }} /></div></div>}
         {erro && <p role="alert" className="mt-4 rounded-lg bg-alert-red/10 p-3 text-sm text-alert-red">{erro}</p>}
         {planilha && <div className="space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-container-low p-3"><div><p className="text-sm font-bold text-on-surface">{planilha.nome}</p><p className="text-xs text-on-surface-variant">{(planilha.tamanho / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} KB · {linhas.length} linhas</p></div><div className="flex gap-2"><button type="button" onClick={() => inputRef.current?.click()} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary">Trocar arquivo</button><button type="button" onClick={() => { escolhasManuais.current.clear(); autorizacoesDuplicata.current.clear(); setPlanilha(null); setLinhas([]); setResultado(null); setErro(''); }} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary">Limpar</button></div></div>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-container-low p-3"><div><p className="text-sm font-bold text-on-surface">{planilha.nome}</p><p className="text-xs text-on-surface-variant">{(planilha.tamanho / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} KB · {linhas.length} linhas</p></div><div className="flex gap-2"><button type="button" onClick={() => inputRef.current?.click()} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary">Trocar arquivo</button><button type="button" onClick={limparImportacao} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary">Limpar</button></div></div>
           {planilha.abas.length > 1 && <label className="flex flex-col gap-1 text-xs font-black uppercase tracking-widest text-secondary">Aba da planilha<select aria-label="Selecionar aba da planilha" value={aba} onChange={(event) => void selecionarAba(event.target.value)} className={`${classeCampo} max-w-sm text-sm font-normal`}>{planilha.abas.map((item) => <option key={item.nome} value={item.nome}>{item.nome}</option>)}</select></label>}
           <section className="rounded-xl border border-surface-border p-4"><h3 className="text-xs font-black uppercase tracking-widest text-secondary">Mapeamento de colunas</h3><p className="mt-1 text-xs text-on-surface-variant">Confira as colunas reconhecidas ou selecione outro cabeçalho. {naoReconhecidas.length > 0 && `Não reconhecidas: ${naoReconhecidas.join(', ')}`}</p><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{campos.map(({ campo, rotulo }) => { const headers = planilha.abas.find((item) => item.nome === aba)?.linhas[linhaCabecalho] ?? []; return <label key={campo} className="flex flex-col gap-1 text-xs font-bold text-on-surface-variant">{rotulo}<select aria-label={`Mapear coluna ${rotulo}`} value={colunas[campo] === undefined ? '' : String(colunas[campo])} onChange={(event) => void mapearColuna(campo, event.target.value)} className={classeCampo}><option value="">Não usar</option>{headers.map((head, index) => <option key={`${index}-${String(head)}`} value={index}>{String(head ?? '').trim() || `Coluna ${index + 1}`}</option>)}</select></label>; })}</div></section>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">{[['Total', contadores.total], ['Prontas', contadores.prontas], ['Pendentes', contadores.pendentes], ['Duplicadas', contadores.duplicadas], ['Canceladas', contadores.canceladas], ['Selecionadas', contadores.selecionadas], ['Valor selecionado', moeda.format(contadores.valor)]].map(([label, value]) => <div key={String(label)} className="rounded-xl border border-surface-border bg-white p-3 dark:bg-surface"><p className="text-[10px] font-black uppercase tracking-widest text-secondary">{label}</p><p className="mt-1 text-sm font-bold text-on-surface">{value}</p></div>)}</div>
@@ -343,7 +363,6 @@ export default function MigracaoDados() {
           </div>
           {remapeando && <p className="flex items-center gap-2 text-xs text-on-surface-variant"><LoaderCircle className="h-4 w-4 animate-spin" />Recalculando linhas…</p>}
           {importando && <div role="status" className="space-y-2 text-xs font-semibold text-on-surface-variant"><div className="flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin text-primary" />Importando linhas selecionadas…</div><div className="h-1.5 overflow-hidden rounded-full bg-surface-container-low"><div className="h-full w-1/3 animate-pulse rounded-full bg-primary" /></div></div>}
-          {resultado && <section role="status" className="rounded-xl border border-bank-truth-green/30 bg-bank-truth-green/10 p-4"><div className="flex items-center gap-2 font-bold text-bank-truth-green"><CheckCircle2 className="h-5 w-5" />Importação concluída</div><div className="mt-2 grid gap-2 text-sm text-on-surface sm:grid-cols-2"><p>Importadas: <strong>{resultado.importadas}</strong></p><p>Conciliadas: <strong>{resultado.conciliadas}</strong></p><p>Valor total: <strong>{moeda.format(resultado.valor_total)}</strong></p><p className="sm:col-span-2">ID do lote: <strong className="break-all">{resultado.lote_id}</strong></p></div>{resultado.erros.length > 0 && <div className="mt-3 text-sm text-alert-red"><p className="font-bold">Erros ({resultado.erros.length})</p><ul className="mt-1 list-inside list-disc">{resultado.erros.map((item, index) => <li key={`${item.linha}-${index}`}>Linha {item.linha}: {item.motivo}</li>)}</ul></div>}</section>}
           <div className="grade-rolagem max-h-[70vh] overflow-auto rounded-xl border border-surface-border">
             <table className="min-w-[1500px] w-full border-collapse text-left text-xs">
               <thead className="sticky top-0 z-10 bg-surface-container-low shadow-[0_1px_0_var(--color-surface-border)]"><tr>{['Incluir', 'Linha', 'Situação', 'Valor', 'Entrada/Saída', 'Vencimento', 'Cliente / Fornecedor', 'Conta', 'Categoria', 'Centro de Custo', 'Descrição', 'Resultado previsto'].map((title) => <th key={title} className="px-3 py-3 text-[10px] font-black uppercase tracking-widest text-secondary">{title}</th>)}</tr></thead>
@@ -428,6 +447,29 @@ export default function MigracaoDados() {
             <div className="mt-6 flex flex-wrap justify-end gap-2">
               <button type="button" data-testid="migracao-conciliar-nao" onClick={() => responderConciliacao(false)} className="rounded-xl border border-surface-border px-4 py-2.5 text-sm font-bold text-on-surface hover:bg-surface">Não</button>
               <button type="button" data-testid="migracao-conciliar-sim" onClick={() => responderConciliacao(true)} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-white transition hover:opacity-90">Sim, conciliar</button>
+            </div>
+          </motion.section>
+        </div>
+      )}
+
+      {resultado && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <motion.section
+            role="dialog" aria-modal="true" aria-labelledby="migracao-concluido-title"
+            data-testid="migracao-concluido-modal"
+            initial={{ opacity: 0, scale: 0.96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="w-full max-w-lg rounded-[28px] bg-white p-6 shadow-2xl dark:bg-surface sm:p-8"
+          >
+            <h2 id="migracao-concluido-title" className="flex items-center gap-2 text-lg font-black text-bank-truth-green"><CheckCircle2 className="h-5 w-5" />Importação concluída</h2>
+            <div className="mt-3 grid gap-2 text-sm text-on-surface sm:grid-cols-2">
+              <p>Importadas: <strong>{resultado.importadas}</strong></p>
+              <p>Conciliadas: <strong>{resultado.conciliadas}</strong></p>
+              <p>Valor total: <strong>{moeda.format(resultado.valor_total)}</strong></p>
+              <p className="sm:col-span-2">ID do lote: <strong className="break-all">{resultado.lote_id}</strong></p>
+            </div>
+            {resultado.erros.length > 0 && <div className="mt-3 text-sm text-alert-red"><p className="font-bold">Erros ({resultado.erros.length})</p><ul className="mt-1 list-inside list-disc">{resultado.erros.map((item, index) => <li key={`${item.linha}-${index}`}>Linha {item.linha}: {item.motivo}</li>)}</ul></div>}
+            <div className="mt-6 flex justify-end">
+              <button type="button" data-testid="migracao-concluido-fechar" onClick={limparImportacao} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-white transition hover:opacity-90">Concluir</button>
             </div>
           </motion.section>
         </div>

@@ -717,7 +717,9 @@ export const lancamentosService = {
    parcela_valor?: string | number,
    parcelas?: Array<{ id?: string; numero: number; data: string; valor: string; status: string; valor_recebido?: number | null }>,
    parcela_config?: { quantidade: number; periodicidade: string; periodicidade_customizada_dias?: number; com_entrada: boolean },
-   propagate_avr?: 'none' | 'open' | 'all'
+   propagate_avr?: 'none' | 'open' | 'all',
+   /** AVR de dados (Master nas telas Financeiro/Extrato): grava só as informações, sem tocar em valores. */
+   avr_somente_dados?: boolean
  }, isMaster: boolean = false): Promise<LancamentoFinanceiro> => {
     const { data: current, error: getError } = await supabase
       .from('lancamentos_financeiros')
@@ -729,13 +731,16 @@ export const lancamentosService = {
 
     const isBPI = data.tipo_baixa === 'bpi';
     const isAVR = data.tipo_baixa === 'avr';
+    // O AVR de dados não altera valor nenhum, então a trava de "título aberto e sem
+    // valor recebido" (que existe para proteger o valor já recebido) não se aplica.
+    const isAVRSomenteDados = isAVR && Boolean(data.avr_somente_dados);
     const isBaixaFinanceira = !isBPI && !isAVR;
-    if (isAVR && (current.status_pagamento !== 'aberto' || Number(current.valor_recebido) > 0)) {
+    if (isAVR && !isAVRSomenteDados && (current.status_pagamento !== 'aberto' || Number(current.valor_recebido) > 0)) {
       throw new Error('Somente parcelas abertas e sem valor recebido podem ser ajustadas.');
     }
     const valorPagoEfetivo = (isBPI || isAVR) ? (data.valor_pago > 0 ? data.valor_pago : (isBPI ? 0 : current.valor_previsto)) : (data.valor_pago > 0 ? data.valor_pago : current.valor_previsto);
     const parcelaSelecionadaAVR = data.parcelas?.find(parcela => parcela.id === id);
-    if (isAVR && current.recorrencia_id && !parcelaSelecionadaAVR) {
+    if (isAVR && !isAVRSomenteDados && current.recorrencia_id && !parcelaSelecionadaAVR) {
       throw new Error('A parcela selecionada não foi encontrada na grade AVR.');
     }
     const valorParcelaSelecionadaAVR = parcelaSelecionadaAVR
@@ -800,6 +805,31 @@ export const lancamentosService = {
    if (isAVR) {
      const now = new Date();
      const timestampStr = `${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+
+     // AVR de dados: o Master corrige as demais informações sem mexer em valor,
+     // status, parcela ou posição do título nas telas Financeiro e Extrato.
+     if (isAVRSomenteDados) {
+       const dadosPayload: any = {
+         motivo_ajuste: data.motivo_ajuste || current.motivo_ajuste || null,
+         ...(data.conta_bancaria_id ? { conta_bancaria_id: data.conta_bancaria_id } : {}),
+         ...(data.centro_custo_id ? { centro_custo_id: data.centro_custo_id } : {}),
+         ...(data.categoria_id ? { categoria_id: data.categoria_id } : {}),
+         ...(data.entidade_id ? { entidade_id: data.entidade_id } : {}),
+         ...(data.condicao ? { condicao: data.condicao } : {}),
+         ...(data.data_competencia ? { data_competencia: data.data_competencia } : {}),
+         ...(data.data_emissao ? { data_emissao: data.data_emissao } : {}),
+         observacoes: (current.observacoes || '') + `\n[AVR - Dados ajustados em ${timestampStr}] Motivo: ${data.motivo_ajuste || 'Não informado'}`,
+       };
+       const { data: dadosAtualizados, error: dadosError } = await supabase
+         .from('lancamentos_financeiros')
+         .update(dadosPayload)
+         .eq('id', id)
+         .select()
+         .single();
+       if (dadosError) throw dadosError;
+       return dadosAtualizados as LancamentoFinanceiro;
+     }
+
      // AVR é edição pura: nunca cria registro. A recorrência só é atualizada
      // quando o título já pertence a uma; título avulso continua avulso.
      const recurrenceId = current.recorrencia_id;

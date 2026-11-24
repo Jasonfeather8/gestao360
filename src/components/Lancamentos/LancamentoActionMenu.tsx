@@ -57,7 +57,9 @@ export default function LancamentoActionMenu({
       || item.status_pagamento === 'pago_parcial'
       || item.status_pagamento === 'quitação_pendente'
       || item.status_pagamento === 'bpi');
-  const mostrarAVR = !isTransferencia && isOperationalView && item.status_pagamento !== 'pago' && podeUsarAVR(role);
+  const mostrarAVR = !isTransferencia && (isOperationalView
+    ? item.status_pagamento !== 'pago' && podeUsarAVR(role)
+    : role === 'master');
   const mostrarExcluir = podeExcluir && !isTransferencia;
   const temAcoesDeCadastro = mostrarAVR || mostrarExcluir;
 
