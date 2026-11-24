@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { CheckCircle2, Clock, Loader2, X } from 'lucide-react';
+import { CheckCircle2, Clock, Loader2, Search, X } from 'lucide-react';
 import { mensagemDoErro } from '../../services/erros';
+import { normalizarNome } from '../../utils/validacaoNomes';
 import type { LinhaExtrato, TransferenciaCandidataLinha } from '../../types';
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -29,12 +30,22 @@ export default function ConciliarTransferenciaModal({
   isConciliando,
 }: ConciliarTransferenciaModalProps) {
   const [erro, setErro] = useState<string | null>(null);
+  // Busca pelo nome do par sugerido: filtra as transferências pelas contas de origem/destino.
+  const [busca, setBusca] = useState('');
 
   useEffect(() => {
     setErro(null);
+    setBusca('');
   }, [linha, aberto]);
 
   if (!aberto || !linha) return null;
+
+  const termoBusca = normalizarNome(busca);
+  const candidatasFiltradas = termoBusca
+    ? candidatas.filter(({ transferencia }) =>
+        normalizarNome(`${transferencia.conta_origem?.nome ?? ''} ${transferencia.conta_destino?.nome ?? ''}`).includes(termoBusca),
+      )
+    : candidatas;
 
   const confirmar = async (candidata: TransferenciaCandidataLinha) => {
     if (isConciliando) return;
@@ -75,17 +86,33 @@ export default function ConciliarTransferenciaModal({
         <section>
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="text-sm font-bold text-on-surface">Transferências compatíveis</h3>
-            {!carregando && !erroCarregamento && <span className="text-xs text-on-surface-variant">{candidatas.length} {candidatas.length === 1 ? 'candidata' : 'candidatas'}</span>}
+            {!carregando && !erroCarregamento && <span className="text-xs text-on-surface-variant">{candidatasFiltradas.length} {candidatasFiltradas.length === 1 ? 'candidata' : 'candidatas'}</span>}
           </div>
+          {!carregando && !erroCarregamento && candidatas.length > 0 && (
+            <div className="relative mb-3">
+              <Search aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+              <input
+                type="text"
+                data-testid="transferencia-busca"
+                aria-label="Pesquisar transferência"
+                placeholder="Pesquisar por conta de origem ou destino..."
+                value={busca}
+                onChange={(event) => setBusca(event.target.value)}
+                className="h-11 w-full rounded-2xl border-2 border-surface-border bg-surface-container-low pl-11 pr-4 text-sm font-semibold text-on-surface outline-none transition focus:border-primary"
+              />
+            </div>
+          )}
           {carregando ? (
             <p className="flex items-center gap-2 rounded-2xl border border-surface-border p-4 text-sm text-on-surface-variant"><Loader2 className="h-4 w-4 animate-spin" />Carregando transferências compatíveis...</p>
           ) : erroCarregamento ? (
             <p role="alert" className="rounded-2xl border border-alert-red/30 bg-alert-red/10 p-4 text-sm text-alert-red">{mensagemDoErro(erroCarregamento, 'Não foi possível carregar as transferências candidatas.')}</p>
           ) : candidatas.length === 0 ? (
             <p className="rounded-2xl border border-pending-amber/30 bg-pending-amber/10 p-4 text-sm text-pending-amber">Não há transferência compatível com esta linha do extrato.</p>
+          ) : candidatasFiltradas.length === 0 ? (
+            <p className="rounded-2xl border border-surface-border p-4 text-sm text-on-surface-variant">Nenhuma transferência encontrada para “{busca}”.</p>
           ) : (
             <ul className="max-h-72 space-y-2 overflow-y-auto">
-              {candidatas.map(({ transferencia, lado }) => (
+              {candidatasFiltradas.map(({ transferencia, lado }) => (
                 <li key={transferencia.id} className="rounded-2xl border border-surface-border p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">

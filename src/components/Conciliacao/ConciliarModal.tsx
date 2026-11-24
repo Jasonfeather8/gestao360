@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Loader2, PenLine, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Loader2, PenLine, Search, X } from 'lucide-react';
 import { dataReferenciaLancamento, direcaoLancamento, valorEfetivoLancamento } from '../../services/extrato/comparacao';
 import { mensagemDoErro } from '../../services/erros';
+import { normalizarNome } from '../../utils/validacaoNomes';
 import type { ItemComparacao, LancamentoFinanceiro, StatusPagamento } from '../../types';
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -51,11 +52,14 @@ export default function ConciliarModal({
   const [lancamentoSelecionadoId, setLancamentoSelecionadoId] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [mostrarOutrasDatas, setMostrarOutrasDatas] = useState(false);
+  // Busca pelo nome do par sugerido: filtra a lista de candidatos por descrição e entidade.
+  const [busca, setBusca] = useState('');
 
   useEffect(() => {
     setLancamentoSelecionadoId(item?.lancamento?.id ?? null);
     setErro(null);
     setMostrarOutrasDatas(false);
+    setBusca('');
   }, [item, aberto]);
 
   const { candidatosMesmaData, candidatosOutrasDatas } = useMemo(() => {
@@ -90,6 +94,14 @@ export default function ConciliarModal({
   const candidatos = mostrarOutrasDatas
     ? [...candidatosMesmaData, ...candidatosOutrasDatas]
     : candidatosMesmaData;
+
+  // Filtro de busca: casa por descrição (observações) e nome da entidade, sem acento e sem caixa.
+  const termoBusca = normalizarNome(busca);
+  const candidatosFiltrados = termoBusca
+    ? candidatos.filter((lancamento) =>
+        normalizarNome(`${lancamento.observacoes ?? ''} ${lancamento.entidades_negocio?.nome_razao_social ?? ''}`).includes(termoBusca),
+      )
+    : candidatos;
 
   if (!aberto || !item?.linhaExtrato) return null;
 
@@ -177,8 +189,22 @@ export default function ConciliarModal({
                 </div>
               )}
             </div>
-            <span className="text-xs text-on-surface-variant">{candidatos.length} {candidatos.length === 1 ? 'candidato' : 'candidatos'}</span>
+            <span className="text-xs text-on-surface-variant">{candidatosFiltrados.length} {candidatosFiltrados.length === 1 ? 'candidato' : 'candidatos'}</span>
           </div>
+          {candidatos.length > 0 && (
+            <div className="relative mb-3">
+              <Search aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+              <input
+                type="text"
+                data-testid="conciliar-busca"
+                aria-label="Pesquisar lançamento do ERP"
+                placeholder="Pesquisar por descrição ou entidade..."
+                value={busca}
+                onChange={(event) => setBusca(event.target.value)}
+                className="h-11 w-full rounded-2xl border-2 border-surface-border bg-surface-container-low pl-11 pr-4 text-sm font-semibold text-on-surface outline-none transition focus:border-primary"
+              />
+            </div>
+          )}
           {candidatos.length === 0 ? (
             <div className="rounded-2xl border border-pending-amber/30 bg-pending-amber/10 p-4 text-sm text-pending-amber">
               <p>Não há lançamentos do ERP na mesma data ({formatarData(linha.data)}) e natureza desta linha do extrato.</p>
@@ -188,9 +214,11 @@ export default function ConciliarModal({
                 </button>
               )}
             </div>
+          ) : candidatosFiltrados.length === 0 ? (
+            <p className="rounded-2xl border border-surface-border p-4 text-sm text-on-surface-variant">Nenhum lançamento encontrado para “{busca}”.</p>
           ) : (
             <ul className="max-h-60 space-y-2 overflow-y-auto">
-              {candidatos.map((lancamento) => {
+              {candidatosFiltrados.map((lancamento) => {
                 const conciliado = lancamentosConciliados.has(lancamento.id);
                 const elegivel = STATUS_CONCILIAVEIS.includes(lancamento.status_pagamento);
                 const desabilitado = conciliado || !elegivel || carregandoLancamentosConciliados;
