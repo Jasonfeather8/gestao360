@@ -218,6 +218,13 @@ export default function MigracaoDados() {
     atualizarLinha(linha.id, { duplicataAutorizada: autorizar, incluir: autorizar, incluirManual: false });
   };
 
+  /** Libera todas as duplicadas de uma vez: planilhas grandes podem ter centenas delas. */
+  const autorizarTodasDuplicadas = () => {
+    linhas
+      .filter((linha) => linha.situacao === 'duplicada' && !linha.duplicataAutorizada)
+      .forEach((linha) => autorizarDuplicata(linha, true));
+  };
+
   const mapearColuna = async (campo: MigracaoCampo, value: string) => {
     if (!planilha) return;
     const mapa: MigracaoColunas = { ...colunas };
@@ -358,6 +365,7 @@ export default function MigracaoDados() {
             <div className="flex flex-wrap gap-2">
               <button type="button" disabled={importando || remapeando} onClick={() => setLinhas((current) => current.map((linha) => (podeIncluir(linha) ? { ...linha, incluir: true, incluirManual: true } : linha)))} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">Selecionar todas</button>
               <button type="button" disabled={importando || remapeando} onClick={() => setLinhas((current) => current.map((linha) => ({ ...linha, incluir: false, incluirManual: true })))} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">Limpar seleção</button>
+              {contadores.duplicadas > 0 && <button type="button" data-testid="migracao-autorizar-duplicadas" disabled={importando || remapeando} onClick={autorizarTodasDuplicadas} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">Permitir todas as duplicadas</button>}
               <button type="button" disabled={contadores.selecionadas === 0 || remapeando || importando} onClick={() => void importar()} className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">{importando ? 'Importando…' : `Importar ${contadores.selecionadas}`}</button>
             </div>
           </div>
