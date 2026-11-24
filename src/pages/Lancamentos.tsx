@@ -89,6 +89,10 @@ export default function Lancamentos({
   const mirrorScrollRef = useRef<HTMLDivElement>(null);
   const [tableWidth, setTableWidth] = useState(0);
   const [columnWidths, setColumnWidths] = useState<number[]>([]);
+  // O Extrato tem tabela própria; ela também recebe uma barra horizontal fixa no rodapé.
+  const extratoScroll = useDragScroll();
+  const extratoMirrorRef = useRef<HTMLDivElement>(null);
+  const [extratoLargura, setExtratoLargura] = useState(0);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -381,6 +385,51 @@ export default function Lancamentos({
       if (frameId !== null) window.cancelAnimationFrame(frameId);
     };
   }, [allLancamentos, typeOverride, tableScroll.ref]);
+
+  // O Extrato usa uma tabela separada: mantém a barra horizontal do rodapé presa à tela
+  // e sincronizada com a rolagem lateral da listagem.
+  useEffect(() => {
+    if (!isExtratoView) return;
+    const lista = extratoScroll.ref.current;
+    const barra = extratoMirrorRef.current;
+    if (!lista || !barra) return;
+
+    const handleListaScroll = () => {
+      if (Math.abs(barra.scrollLeft - lista.scrollLeft) > 1) {
+        barra.scrollLeft = lista.scrollLeft;
+      }
+    };
+
+    const handleBarraScroll = () => {
+      if (Math.abs(lista.scrollLeft - barra.scrollLeft) > 1) {
+        lista.scrollLeft = barra.scrollLeft;
+      }
+    };
+
+    let frameId: number | null = null;
+    const measureLista = () => {
+      if (frameId !== null) return;
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        setExtratoLargura(lista.scrollWidth);
+      });
+    };
+
+    lista.addEventListener('scroll', handleListaScroll);
+    barra.addEventListener('scroll', handleBarraScroll);
+    measureLista();
+
+    const observer = new ResizeObserver(measureLista);
+    observer.observe(lista);
+
+    return () => {
+      lista.removeEventListener('scroll', handleListaScroll);
+      barra.removeEventListener('scroll', handleBarraScroll);
+      observer.disconnect();
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+    };
+  }, [isExtratoView, extratoScroll.ref, allLancamentos]);
 
   const totalPages = pageSize === 'all' ? 1 : Math.max(Math.ceil(totalCount / pageSize), 1);
 
@@ -1297,7 +1346,12 @@ export default function Lancamentos({
           showBalances={podeVerSaldos(role)}
         />
 
-        <div className="bg-white border-2 border-neutral-100 rounded-[32px] shadow-sm overflow-hidden">
+        <div className="bg-white border-2 border-neutral-100 rounded-[32px] shadow-sm relative">
+          <div
+            ref={extratoScroll.ref}
+            {...extratoScroll.props}
+            className="overflow-x-auto scrollbar-none select-none rounded-t-[32px]"
+          >
           {isLoading ? (
             <div className="py-24 text-center">
               <div className="flex flex-col items-center gap-3 opacity-40">
@@ -1319,7 +1373,7 @@ export default function Lancamentos({
               </div>
             </div>
           ) : (
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[1200px]">
               <thead>
                 <tr className="border-b border-neutral-100 bg-neutral-50/60">
                   <th className="py-4 px-5 w-10 text-center">
@@ -1455,7 +1509,7 @@ export default function Lancamentos({
                               onToggle={() => setActiveMenuId(activeMenuId === item.id ? null : item.id)}
                               onBaixa={() => {}}
                               onEstornar={handleEstornarExtrato}
-                              onEdit={() => {}}
+                              onEdit={handleEdit}
                               onDelete={() => {}}
                               onVerTransferencia={() => navigate('/conciliacao?aba=transferencias')}
                             />
@@ -1468,6 +1522,17 @@ export default function Lancamentos({
               </tbody>
             </table>
           )}
+          </div>
+
+          {/* Barra de rolagem horizontal fixa: fica presa no rodapé da tela para não ser
+              preciso descer a lista inteira só para andar para o lado. */}
+          <div
+            ref={extratoMirrorRef}
+            className="sticky bottom-0 z-[60] overflow-x-auto scrollbar-thin bg-neutral-50/90 backdrop-blur-md border-y border-neutral-200 flex h-5"
+            style={{ marginBottom: '-1px' }}
+          >
+            <div className="h-full shrink-0" style={{ width: `${Math.max(extratoLargura, 1)}px` }} />
+          </div>
 
           {!isLoading && allLancamentos.length > 0 && (
             <p className="px-5 md:px-8 py-3 text-[9px] font-bold uppercase tracking-wider text-neutral-400">
@@ -1530,7 +1595,7 @@ export default function Lancamentos({
         {selectedExtratoLancamentos.length > 0 && (
           <div
             data-testid="extrato-total-selecao"
-            className="sticky bottom-0 z-[60] flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-neutral-200 bg-neutral-50/95 px-5 py-3 shadow-[0_-2px_10px_rgba(0,0,0,0.10)] backdrop-blur-md"
+            className="sticky bottom-5 z-[60] flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-neutral-200 bg-neutral-50/95 px-5 py-3 shadow-[0_-2px_10px_rgba(0,0,0,0.10)] backdrop-blur-md"
           >
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[10px] font-black uppercase tracking-widest text-neutral-900">
