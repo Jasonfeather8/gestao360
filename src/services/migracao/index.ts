@@ -103,6 +103,8 @@ export async function prepararMigracao(
 export interface ResultadoImportacao {
   lote_id: string;
   importadas: number;
+  /** Linhas que entraram já conciliadas (quando a conciliação foi solicitada na importação). */
+  conciliadas: number;
   erros: { linha: number; motivo: string }[];
   valor_total: number;
 }
@@ -148,7 +150,8 @@ export async function remontarLinhas(entrada: {
 export async function importarLinhas(
   arquivo: string,
   linhas: MigracaoLinha[],
-  arquivoHash?: string
+  arquivoHash?: string,
+  conciliar = false
 ): Promise<ResultadoImportacao> {
   const payload = linhas.map(linha => ({
     linha: linha.linhaOrigem,
@@ -170,6 +173,7 @@ export async function importarLinhas(
 
   const { data, error } = await supabase.rpc('importar_lancamentos', {
     p_lote: { arquivo_nome: arquivo, arquivo_hash: arquivoHash ?? null, linhas: payload },
+    p_conciliar: conciliar,
   });
   if (error) throw error;
 
@@ -179,6 +183,7 @@ export async function importarLinhas(
   return {
     lote_id: resultado.lote_id,
     importadas: resultado.importadas ?? 0,
+    conciliadas: resultado.conciliadas ?? 0,
     erros: Array.isArray(resultado.erros) ? resultado.erros : [],
     valor_total: resultado.valor_total ?? 0,
   };

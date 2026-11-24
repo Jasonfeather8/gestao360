@@ -55,6 +55,8 @@ export default function MigracaoDados() {
   const [somentePendencias, setSomentePendencias] = useState(false);
   const [resultado, setResultado] = useState<Awaited<ReturnType<typeof importarLinhas>> | null>(null);
   const [remapeando, setRemapeando] = useState(false);
+  // Modal que pergunta se as linhas devem entrar já conciliadas (planilhas que são o extrato).
+  const [confirmarConciliacao, setConfirmarConciliacao] = useState(false);
   const { data: contas = [] } = useContas();
   const { data: categorias = [], createCategory } = useCategorias();
   const { data: centrosCusto = [], createCC } = useCentrosCusto();
@@ -271,15 +273,13 @@ export default function MigracaoDados() {
     }
   };
 
-  const importar = async () => {
+  const executarImportacao = async (conciliar: boolean) => {
     const selecionadas = linhas.filter((linha) => linha.incluir);
     if (!planilha || selecionadas.length === 0) return;
-    const autorizadas = selecionadas.filter((linha) => linha.duplicataAutorizada).length;
-    if (autorizadas > 0 && !window.confirm(`Você autorizou ${autorizadas} linha(s) duplicada(s). Deseja importar mesmo assim?`)) return;
     setImportando(true);
     setErro('');
     try {
-      const resposta = await importarLinhas(planilha.nome, selecionadas);
+      const resposta = await importarLinhas(planilha.nome, selecionadas, undefined, conciliar);
       setResultado(resposta);
       for (const key of ['lancamentos', 'contasSaldos', 'dashboardStats', 'dashboardIndicadores', 'importacoesDados', 'auditoriaLogs', 'notifications']) {
         await queryClient.invalidateQueries({ queryKey: [key] });
@@ -289,6 +289,20 @@ export default function MigracaoDados() {
     } finally {
       setImportando(false);
     }
+  };
+
+  // Antes de importar, pergunta se as linhas devem entrar já conciliadas.
+  const importar = () => {
+    const selecionadas = linhas.filter((linha) => linha.incluir);
+    if (!planilha || selecionadas.length === 0) return;
+    const autorizadas = selecionadas.filter((linha) => linha.duplicataAutorizada).length;
+    if (autorizadas > 0 && !window.confirm(`Você autorizou ${autorizadas} linha(s) duplicada(s). Deseja importar mesmo assim?`)) return;
+    setConfirmarConciliacao(true);
+  };
+
+  const responderConciliacao = (conciliar: boolean) => {
+    setConfirmarConciliacao(false);
+    void executarImportacao(conciliar);
   };
 
   const undo = async (id: string) => {
@@ -329,7 +343,7 @@ export default function MigracaoDados() {
           </div>
           {remapeando && <p className="flex items-center gap-2 text-xs text-on-surface-variant"><LoaderCircle className="h-4 w-4 animate-spin" />Recalculando linhas…</p>}
           {importando && <div role="status" className="space-y-2 text-xs font-semibold text-on-surface-variant"><div className="flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin text-primary" />Importando linhas selecionadas…</div><div className="h-1.5 overflow-hidden rounded-full bg-surface-container-low"><div className="h-full w-1/3 animate-pulse rounded-full bg-primary" /></div></div>}
-          {resultado && <section role="status" className="rounded-xl border border-bank-truth-green/30 bg-bank-truth-green/10 p-4"><div className="flex items-center gap-2 font-bold text-bank-truth-green"><CheckCircle2 className="h-5 w-5" />Importação concluída</div><div className="mt-2 grid gap-2 text-sm text-on-surface sm:grid-cols-2"><p>Importadas: <strong>{resultado.importadas}</strong></p><p>Valor total: <strong>{moeda.format(resultado.valor_total)}</strong></p><p className="sm:col-span-2">ID do lote: <strong className="break-all">{resultado.lote_id}</strong></p></div>{resultado.erros.length > 0 && <div className="mt-3 text-sm text-alert-red"><p className="font-bold">Erros ({resultado.erros.length})</p><ul className="mt-1 list-inside list-disc">{resultado.erros.map((item, index) => <li key={`${item.linha}-${index}`}>Linha {item.linha}: {item.motivo}</li>)}</ul></div>}</section>}
+          {resultado && <section role="status" className="rounded-xl border border-bank-truth-green/30 bg-bank-truth-green/10 p-4"><div className="flex items-center gap-2 font-bold text-bank-truth-green"><CheckCircle2 className="h-5 w-5" />Importação concluída</div><div className="mt-2 grid gap-2 text-sm text-on-surface sm:grid-cols-2"><p>Importadas: <strong>{resultado.importadas}</strong></p><p>Conciliadas: <strong>{resultado.conciliadas}</strong></p><p>Valor total: <strong>{moeda.format(resultado.valor_total)}</strong></p><p className="sm:col-span-2">ID do lote: <strong className="break-all">{resultado.lote_id}</strong></p></div>{resultado.erros.length > 0 && <div className="mt-3 text-sm text-alert-red"><p className="font-bold">Erros ({resultado.erros.length})</p><ul className="mt-1 list-inside list-disc">{resultado.erros.map((item, index) => <li key={`${item.linha}-${index}`}>Linha {item.linha}: {item.motivo}</li>)}</ul></div>}</section>}
           <div className="grade-rolagem max-h-[70vh] overflow-auto rounded-xl border border-surface-border">
             <table className="min-w-[1500px] w-full border-collapse text-left text-xs">
               <thead className="sticky top-0 z-10 bg-surface-container-low shadow-[0_1px_0_var(--color-surface-border)]"><tr>{['Incluir', 'Linha', 'Situação', 'Valor', 'Entrada/Saída', 'Vencimento', 'Cliente / Fornecedor', 'Conta', 'Categoria', 'Centro de Custo', 'Descrição', 'Resultado previsto'].map((title) => <th key={title} className="px-3 py-3 text-[10px] font-black uppercase tracking-widest text-secondary">{title}</th>)}</tr></thead>
@@ -399,6 +413,25 @@ export default function MigracaoDados() {
           </div>}
         </footer>}
       </section>
+
+      {confirmarConciliacao && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <motion.section
+            role="dialog" aria-modal="true" aria-labelledby="migracao-conciliar-title"
+            initial={{ opacity: 0, scale: 0.96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="w-full max-w-md rounded-[28px] bg-white p-6 shadow-2xl dark:bg-surface sm:p-8"
+          >
+            <h2 id="migracao-conciliar-title" className="text-lg font-black text-on-surface">Você já quer conciliar?</h2>
+            <p className="mt-2 text-sm text-on-surface-variant">
+              As {contadores.selecionadas} linha(s) selecionada(s) entram no Financeiro confirmadas e com baixa. Ao escolher <strong>Sim</strong>, elas também entram <strong>conciliadas</strong> (com o selo “Conciliado”), criando a transação bancária correspondente.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button type="button" data-testid="migracao-conciliar-nao" onClick={() => responderConciliacao(false)} className="rounded-xl border border-surface-border px-4 py-2.5 text-sm font-bold text-on-surface hover:bg-surface">Não</button>
+              <button type="button" data-testid="migracao-conciliar-sim" onClick={() => responderConciliacao(true)} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-white transition hover:opacity-90">Sim, conciliar</button>
+            </div>
+          </motion.section>
+        </div>
+      )}
     </div>
   );
 }

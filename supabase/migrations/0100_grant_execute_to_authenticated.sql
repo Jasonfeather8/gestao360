@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.importar_lancamentos(jsonb, boolean) TO authenticated;
