@@ -1,0 +1,1 @@
+ALTER FUNCTION public.importar_lancamentos(jsonb, boolean) SET statement_timeout = '60s';

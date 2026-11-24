@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS lancamentos_financeiros_conta_venc_valor_idx ON public.lancamentos_financeiros (conta_bancaria_id, data_vencimento, valor_previsto);

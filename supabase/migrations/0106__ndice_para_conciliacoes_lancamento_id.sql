@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS conciliacoes_lancamento_id_idx ON public.conciliacoes (lancamento_id);

@@ -9,6 +9,7 @@ import type { MigracaoEscolhasManuais } from '../../services/migracao';
 import type { OrigemDuplicata } from '../../services/migracao/duplicatas';
 import type { MigracaoCadastros, MigracaoCampo, MigracaoColunas, MigracaoLinha, PlanilhaMigracao } from '../../types';
 import { podeSalvarNome } from '../../utils/validacaoNomes';
+import { mensagemDoErro } from '../../services/erros';
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const campos: { campo: MigracaoCampo; rotulo: string }[] = [
@@ -18,13 +19,6 @@ const campos: { campo: MigracaoCampo; rotulo: string }[] = [
   { campo: 'ref', rotulo: 'Ref.' }, { campo: 'anotacoes', rotulo: 'Anotações' }, { campo: 'recebido', rotulo: 'Recebido' },
 ];
 const classeCampo = 'rounded-lg border border-surface-border bg-white px-2 py-1.5 text-xs text-on-surface outline-none transition focus-visible:ring-2 focus-visible:ring-primary dark:bg-surface';
-/** O PostgrestError do Supabase nem sempre é um Error, então o `instanceof Error`
- * trocava a mensagem real devolvida pelo banco por um texto genérico. */
-const mensagemDoErro = (cause: unknown, reserva: string): string => {
-  if (cause instanceof Error && cause.message) return cause.message;
-  const mensagem = (cause as { message?: unknown } | null)?.message;
-  return typeof mensagem === 'string' && mensagem.trim() ? mensagem : reserva;
-};
 /** Entram na importação as linhas "Pronta" e as duplicatas autorizadas pelo operador. */
 const podeIncluir = (linha: MigracaoLinha) => linha.situacao === 'pronta'
   || (linha.situacao === 'duplicada' && linha.duplicataAutorizada === true);
@@ -51,6 +45,7 @@ export default function MigracaoDados() {
   const [importando, setImportando] = useState(false);
   const [progresso, setProgresso] = useState(0);
   const [erro, setErro] = useState('');
+  const [avisos, setAvisos] = useState<string[]>([]);
   const [arrastando, setArrastando] = useState(false);
   const [somentePendencias, setSomentePendencias] = useState(false);
   const [resultado, setResultado] = useState<Awaited<ReturnType<typeof importarLinhas>> | null>(null);
@@ -85,6 +80,7 @@ export default function MigracaoDados() {
     setCadastroRapido(null);
     setProgresso(0);
     setErro('');
+    setAvisos([]);
     setResultado(null);
     setConfirmarConciliacao(false);
     if (inputRef.current) inputRef.current.value = '';
@@ -144,6 +140,7 @@ export default function MigracaoDados() {
         linhas: selecionada.linhas, linhaCabecalho: cabecalho, colunas: mapaColunas, cadastros,
         nomesTipo: [selecionada.nome, raw.nome],
       });
+      setAvisos(reconstruidas.avisos);
       nomesOriginais.current = Object.fromEntries(reconstruidas.linhas.flatMap((linha) => [
         [`${linha.id}:cliente`, linha.clienteNome], [`${linha.id}:conta`, linha.contaNome],
         [`${linha.id}:categoria`, linha.categoriaNome], [`${linha.id}:centroCusto`, linha.centroCustoNome],
@@ -159,7 +156,7 @@ export default function MigracaoDados() {
       setLinhas(linhasComEscolhas);
       setDuplicadosBanco(reconstruidas.duplicados);
     } catch (cause) {
-      setErro(cause instanceof Error ? cause.message : 'Não foi possível montar as linhas da planilha.');
+      setErro(mensagemDoErro(cause, 'Não foi possível montar as linhas da planilha.'));
     } finally {
       setRemapeando(false);
     }
@@ -186,10 +183,11 @@ export default function MigracaoDados() {
       setPlanilha(lida);
       const primeiraAba = lida.abas[0]?.nome ?? '';
       setAba(primeiraAba);
+      setAvisos([]);
       await montar(lida, primeiraAba);
       setProgresso(100);
     } catch (cause) {
-      setErro(cause instanceof Error ? cause.message : 'Não foi possível ler o arquivo.');
+      setErro(mensagemDoErro(cause, 'Não foi possível ler o arquivo.'));
     } finally {
       setLendo(false);
     }
@@ -355,6 +353,7 @@ export default function MigracaoDados() {
         <input ref={inputRef} type="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="Selecionar planilha para migração" className="hidden" onChange={(event) => { void carregarArquivo(event.target.files?.[0]); event.currentTarget.value = ''; }} />
         {lendo && <div className="rounded-xl border border-surface-border p-6"><div className="flex items-center gap-3 text-sm font-semibold text-on-surface"><LoaderCircle className="h-5 w-5 animate-spin text-primary" />Lendo e interpretando a planilha… {progresso}%</div><div className="mt-4 h-2 overflow-hidden rounded-full bg-surface-container-low"><div className="h-full bg-primary transition-all" style={{ width: `${progresso}%` }} /></div></div>}
         {erro && <p role="alert" className="mt-4 rounded-lg bg-alert-red/10 p-3 text-sm text-alert-red">{erro}</p>}
+        {avisos.length > 0 && <div role="status" className="mt-4 rounded-lg bg-pending-amber/10 p-3 text-sm text-pending-amber"><p className="font-bold">Avisos</p><ul className="mt-1 list-inside list-disc">{avisos.map((aviso, index) => <li key={`${aviso}-${index}`}>{aviso}</li>)}</ul></div>}
         {planilha && <div className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-container-low p-3"><div><p className="text-sm font-bold text-on-surface">{planilha.nome}</p><p className="text-xs text-on-surface-variant">{(planilha.tamanho / 1024).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} KB · {linhas.length} linhas</p></div><div className="flex gap-2"><button type="button" onClick={() => inputRef.current?.click()} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary">Trocar arquivo</button><button type="button" onClick={limparImportacao} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary">Limpar</button></div></div>
           {planilha.abas.length > 1 && <label className="flex flex-col gap-1 text-xs font-black uppercase tracking-widest text-secondary">Aba da planilha<select aria-label="Selecionar aba da planilha" value={aba} onChange={(event) => void selecionarAba(event.target.value)} className={`${classeCampo} max-w-sm text-sm font-normal`}>{planilha.abas.map((item) => <option key={item.nome} value={item.nome}>{item.nome}</option>)}</select></label>}
