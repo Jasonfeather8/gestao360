@@ -30,6 +30,8 @@ interface IndicesCadastros {
   centrosCustoLista: CadastroSemelhanca[];
 }
 
+const cacheIndicesCadastros = new WeakMap<MigracaoCadastros, IndicesCadastros>();
+
 export function sugerirTipoPorNomes(nomes: (string | null | undefined)[]): 'entrada' | 'saida' | null {
   const entradas = new Set(['entrada', 'entradas', 'receita', 'receitas', 'recebimento', 'recebimentos', 'credito', 'creditos']);
   const saidas = new Set(['saida', 'saidas', 'despesa', 'despesas', 'debito', 'debitos']);
@@ -49,6 +51,9 @@ export function sugerirTipoPorNomes(nomes: (string | null | undefined)[]): 'entr
 export type MigracaoEscolhasManuais = Partial<Record<'tipo' | 'cliente' | 'conta' | 'categoria' | 'centroCusto', string>>;
 
 export function indexarCadastros(cadastros: MigracaoCadastros): IndicesCadastros {
+  const indicesExistentes = cacheIndicesCadastros.get(cadastros);
+  if (indicesExistentes) return indicesExistentes;
+
   const montarIndice = (itens: { id: string; nome: string }[]) => {
     const mapa = new Map<string, string>();
     for (const item of itens) {
@@ -79,7 +84,7 @@ export function indexarCadastros(cadastros: MigracaoCadastros): IndicesCadastros
   const categoriasLista = prepararListaSemelhanca(cadastros.categorias);
   const centrosCustoLista = prepararListaSemelhanca(cadastros.centrosCusto);
 
-  return {
+  const indices: IndicesCadastros = {
     contas: montarIndice(cadastros.contas),
     contasLista: cadastros.contas,
     clientes: montarIndiceNormalizado(clientesLista),
@@ -89,6 +94,8 @@ export function indexarCadastros(cadastros: MigracaoCadastros): IndicesCadastros
     centrosCusto: montarIndiceNormalizado(centrosCustoLista),
     centrosCustoLista,
   };
+  cacheIndicesCadastros.set(cadastros, indices);
+  return indices;
 }
 
 function contaPorContencao(texto: string, contas: { id: string; nome: string }[]): string | null {

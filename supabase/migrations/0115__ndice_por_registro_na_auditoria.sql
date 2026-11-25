@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS auditoria_logs_registro_id_idx ON public.auditoria_logs (registro_id);

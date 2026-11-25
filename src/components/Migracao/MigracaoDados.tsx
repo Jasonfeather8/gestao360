@@ -12,6 +12,7 @@ import { podeSalvarNome } from '../../utils/validacaoNomes';
 import { mensagemDoErro } from '../../services/erros';
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const LINHAS_POR_PAGINA = 100;
 const campos: { campo: MigracaoCampo; rotulo: string }[] = [
   { campo: 'valor', rotulo: 'Valor' }, { campo: 'data', rotulo: 'Data' }, { campo: 'competencia', rotulo: 'Data de Competência' },
   { campo: 'vencimento', rotulo: 'Data de Vencimento' }, { campo: 'descricao', rotulo: 'Descrição' }, { campo: 'cliente', rotulo: 'Cliente' },
@@ -44,6 +45,8 @@ export default function MigracaoDados() {
   const [lendo, setLendo] = useState(false);
   const [importando, setImportando] = useState(false);
   const [progresso, setProgresso] = useState(0);
+  const [progressoImportacao, setProgressoImportacao] = useState<{ enviadas: number; total: number } | null>(null);
+  const [paginaRevisao, setPaginaRevisao] = useState(0);
   const [erro, setErro] = useState('');
   const [avisos, setAvisos] = useState<string[]>([]);
   const [arrastando, setArrastando] = useState(false);
@@ -79,6 +82,8 @@ export default function MigracaoDados() {
     setSomentePendencias(false);
     setCadastroRapido(null);
     setProgresso(0);
+    setProgressoImportacao(null);
+    setPaginaRevisao(0);
     setErro('');
     setAvisos([]);
     setResultado(null);
@@ -128,6 +133,7 @@ export default function MigracaoDados() {
   const montar = async (raw: PlanilhaMigracao, nomeAba: string, header?: number, mapa?: MigracaoColunas) => {
     const selecionada = raw.abas.find((item) => item.nome === nomeAba) ?? raw.abas[0];
     if (!selecionada) return;
+    setPaginaRevisao(0);
     const deteccao = detectarColunas(selecionada.linhas);
     const cabecalho = header ?? deteccao.linhaCabecalho;
     const mapaColunas = mapa ?? deteccao.colunas;
@@ -173,6 +179,8 @@ export default function MigracaoDados() {
     if (linhas.some((linha) => linha.situacao === 'pendente') && !window.confirm('Há linhas pendentes nesta grade. Deseja substituir a planilha atual?')) return;
     setLendo(true);
     setProgresso(15);
+    setProgressoImportacao(null);
+    setPaginaRevisao(0);
     setErro('');
     setResultado(null);
     try {
@@ -218,9 +226,20 @@ export default function MigracaoDados() {
 
   /** Libera todas as duplicadas de uma vez: planilhas grandes podem ter centenas delas. */
   const autorizarTodasDuplicadas = () => {
-    linhas
-      .filter((linha) => linha.situacao === 'duplicada' && !linha.duplicataAutorizada)
-      .forEach((linha) => autorizarDuplicata(linha, true));
+    setLinhas((atuais) => {
+      const repetidas = chavesRepetidas(atuais);
+      return atuais.map((linha) => {
+        if (linha.situacao !== 'duplicada' || linha.duplicataAutorizada === true) return linha;
+        autorizacoesDuplicata.current.add(linha.linhaOrigem);
+        return recalcularLinha(
+          { ...linha, duplicataAutorizada: true, incluir: true, incluirManual: false },
+          cadastros,
+          duplicadosBanco,
+          repetidas,
+          escolhasDaLinha(linha)
+        );
+      });
+    });
   };
 
   const mapearColuna = async (campo: MigracaoCampo, value: string) => {
@@ -302,9 +321,12 @@ export default function MigracaoDados() {
     const selecionadas = linhas.filter((linha) => linha.incluir);
     if (!planilha || selecionadas.length === 0) return;
     setImportando(true);
+    setProgressoImportacao({ enviadas: 0, total: selecionadas.length });
     setErro('');
     try {
-      const resposta = await importarLinhas(planilha.nome, selecionadas, undefined, conciliar);
+      const resposta = await importarLinhas(planilha.nome, selecionadas, undefined, conciliar, (enviadas, total) => {
+        setProgressoImportacao({ enviadas, total });
+      });
       setResultado(resposta);
       for (const key of ['lancamentos', 'contasSaldos', 'dashboardStats', 'dashboardIndicadores', 'importacoesDados', 'auditoriaLogs', 'notifications']) {
         await queryClient.invalidateQueries({ queryKey: [key] });
@@ -337,7 +359,13 @@ export default function MigracaoDados() {
   };
 
   const opcoesCampo = (campo: 'cliente' | 'conta' | 'categoria' | 'centroCusto') => campo === 'cliente' ? cadastros.clientes : campo === 'conta' ? cadastros.contas : campo === 'categoria' ? cadastros.categorias : cadastros.centrosCusto;
-  const linhasVisiveis = somentePendencias ? linhas.filter((linha) => linha.situacao === 'pendente') : linhas;
+  const linhasFiltradas = somentePendencias ? linhas.filter((linha) => linha.situacao === 'pendente') : linhas;
+  const totalPaginasRevisao = Math.max(1, Math.ceil(linhasFiltradas.length / LINHAS_POR_PAGINA));
+  const paginaRevisaoAtual = Math.min(paginaRevisao, totalPaginasRevisao - 1);
+  const linhasVisiveis = linhasFiltradas.slice(paginaRevisaoAtual * LINHAS_POR_PAGINA, (paginaRevisaoAtual + 1) * LINHAS_POR_PAGINA);
+  useEffect(() => {
+    if (paginaRevisao !== paginaRevisaoAtual) setPaginaRevisao(paginaRevisaoAtual);
+  }, [paginaRevisao, paginaRevisaoAtual]);
   const labelSituacao: Record<string, string> = { pronta: 'Pronta', pendente: 'Pendente', duplicada: 'Duplicada', cancelada: 'Cancelada', erro: 'Erro' };
   const corSituacao: Record<string, string> = { pronta: 'text-bank-truth-green', pendente: 'text-pending-amber', duplicada: 'text-alert-red', cancelada: 'text-secondary', erro: 'text-alert-red' };
   /** Duplicata que o operador autorizou deixa de ser alerta: vira confirmação verde. */
@@ -360,7 +388,7 @@ export default function MigracaoDados() {
           <section className="rounded-xl border border-surface-border p-4"><h3 className="text-xs font-black uppercase tracking-widest text-secondary">Mapeamento de colunas</h3><p className="mt-1 text-xs text-on-surface-variant">Confira as colunas reconhecidas ou selecione outro cabeçalho. {naoReconhecidas.length > 0 && `Não reconhecidas: ${naoReconhecidas.join(', ')}`}</p><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{campos.map(({ campo, rotulo }) => { const headers = planilha.abas.find((item) => item.nome === aba)?.linhas[linhaCabecalho] ?? []; return <label key={campo} className="flex flex-col gap-1 text-xs font-bold text-on-surface-variant">{rotulo}<select aria-label={`Mapear coluna ${rotulo}`} value={colunas[campo] === undefined ? '' : String(colunas[campo])} onChange={(event) => void mapearColuna(campo, event.target.value)} className={classeCampo}><option value="">Não usar</option>{headers.map((head, index) => <option key={`${index}-${String(head)}`} value={index}>{String(head ?? '').trim() || `Coluna ${index + 1}`}</option>)}</select></label>; })}</div></section>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">{[['Total', contadores.total], ['Prontas', contadores.prontas], ['Pendentes', contadores.pendentes], ['Duplicadas', contadores.duplicadas], ['Canceladas', contadores.canceladas], ['Selecionadas', contadores.selecionadas], ['Valor selecionado', moeda.format(contadores.valor)]].map(([label, value]) => <div key={String(label)} className="rounded-xl border border-surface-border bg-white p-3 dark:bg-surface"><p className="text-[10px] font-black uppercase tracking-widest text-secondary">{label}</p><p className="mt-1 text-sm font-bold text-on-surface">{value}</p></div>)}</div>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <label className="flex items-center gap-2 text-sm font-semibold text-on-surface"><input type="checkbox" checked={somentePendencias} onChange={(event) => setSomentePendencias(event.target.checked)} className="h-4 w-4 accent-primary focus-visible:ring-2 focus-visible:ring-primary" />Somente pendências</label>
+            <label className="flex items-center gap-2 text-sm font-semibold text-on-surface"><input type="checkbox" checked={somentePendencias} onChange={(event) => { setSomentePendencias(event.target.checked); setPaginaRevisao(0); }} className="h-4 w-4 accent-primary focus-visible:ring-2 focus-visible:ring-primary" />Somente pendências</label>
             <div className="flex flex-wrap gap-2">
               <button type="button" disabled={importando || remapeando} onClick={() => setLinhas((current) => current.map((linha) => (podeIncluir(linha) ? { ...linha, incluir: true, incluirManual: true } : linha)))} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">Selecionar todas</button>
               <button type="button" disabled={importando || remapeando} onClick={() => setLinhas((current) => current.map((linha) => ({ ...linha, incluir: false, incluirManual: true })))} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">Limpar seleção</button>
@@ -369,7 +397,7 @@ export default function MigracaoDados() {
             </div>
           </div>
           {remapeando && <p className="flex items-center gap-2 text-xs text-on-surface-variant"><LoaderCircle className="h-4 w-4 animate-spin" />Recalculando linhas…</p>}
-          {importando && <div role="status" className="space-y-2 text-xs font-semibold text-on-surface-variant"><div className="flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin text-primary" />Importando linhas selecionadas…</div><div className="h-1.5 overflow-hidden rounded-full bg-surface-container-low"><div className="h-full w-1/3 animate-pulse rounded-full bg-primary" /></div></div>}
+          {importando && <div role="status" className="space-y-2 text-xs font-semibold text-on-surface-variant"><div className="flex items-center gap-2"><LoaderCircle className="h-4 w-4 animate-spin text-primary" />Importando {progressoImportacao?.enviadas ?? 0} de {progressoImportacao?.total ?? contadores.selecionadas} linhas…</div><div className="h-1.5 overflow-hidden rounded-full bg-surface-container-low"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progressoImportacao ? progressoImportacao.total ? (progressoImportacao.enviadas / progressoImportacao.total) * 100 : 100 : 0}%` }} /></div></div>}
           <div className="grade-rolagem max-h-[70vh] overflow-auto rounded-xl border border-surface-border">
             <table className="min-w-[1500px] w-full border-collapse text-left text-xs">
               <thead className="sticky top-0 z-10 bg-surface-container-low shadow-[0_1px_0_var(--color-surface-border)]"><tr>{['Incluir', 'Linha', 'Situação', 'Valor', 'Entrada/Saída', 'Vencimento', 'Cliente / Fornecedor', 'Conta', 'Categoria', 'Centro de Custo', 'Descrição', 'Resultado previsto'].map((title) => <th key={title} className="px-3 py-3 text-[10px] font-black uppercase tracking-widest text-secondary">{title}</th>)}</tr></thead>
@@ -420,6 +448,13 @@ export default function MigracaoDados() {
             </table>
             {linhasVisiveis.length === 0 && <p className="p-6 text-center text-sm text-on-surface-variant">{somentePendencias ? 'Nenhuma linha pendente.' : 'Nenhuma linha encontrada na aba selecionada.'}</p>}
           </div>
+          <footer className="flex flex-wrap items-center justify-between gap-3 text-xs text-on-surface-variant">
+            <span>Página {paginaRevisaoAtual + 1} de {totalPaginasRevisao}</span>
+            {totalPaginasRevisao > 1 && <div className="flex gap-2">
+              <button type="button" disabled={paginaRevisaoAtual === 0} onClick={() => setPaginaRevisao((pagina) => Math.max(0, pagina - 1))} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40">Anterior</button>
+              <button type="button" disabled={paginaRevisaoAtual >= totalPaginasRevisao - 1} onClick={() => setPaginaRevisao((pagina) => Math.min(totalPaginasRevisao - 1, pagina + 1))} className="rounded-lg border border-surface-border px-3 py-2 text-xs font-bold text-on-surface focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-40">Próxima</button>
+            </div>}
+          </footer>
         </div>}
       </motion.section>
       <section className="rounded-xl border border-surface-border bg-white p-5 dark:bg-surface">

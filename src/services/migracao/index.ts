@@ -8,6 +8,7 @@ import { lerPlanilha } from './leituraPlanilha';
 import { montarLinhas, montarObservacoes } from './montarLinhas';
 
 export const LOTES_POR_PAGINA = 6;
+export const LINHAS_POR_LOTE = 500;
 
 function chavesDasLinhas(linhas: MigracaoLinha[]): ChaveDuplicata[] {
   return linhas.map(linha => ({
@@ -151,42 +152,65 @@ export async function importarLinhas(
   arquivo: string,
   linhas: MigracaoLinha[],
   arquivoHash?: string,
-  conciliar = false
+  conciliar = false,
+  aoProgredir?: (enviadas: number, total: number) => void
 ): Promise<ResultadoImportacao> {
-  const payload = linhas.map(linha => ({
-    linha: linha.linhaOrigem,
-    tipo: linha.tipo,
-    valor: linha.valor,
-    vencimento: linha.vencimento,
-    emissao: linha.data ?? linha.vencimento,
-    competencia: linha.competencia,
-    descricao: linha.descricao,
-    anotacoes: linha.anotacoes,
-    ref: linha.ref,
-    entidade_id: linha.clienteId,
-    conta_id: linha.contaId,
-    categoria_id: linha.categoriaId,
-    centro_custo_id: linha.centroCustoId,
-    recebido: linha.recebido,
-    data_pagamento: linha.recebido ? linha.data ?? linha.vencimento : null,
-  }));
-
-  const { data, error } = await supabase.rpc('importar_lancamentos', {
-    p_lote: { arquivo_nome: arquivo, arquivo_hash: arquivoHash ?? null, linhas: payload },
-    p_conciliar: conciliar,
-  });
-  if (error) throw error;
-
-  const resultado = data as ResultadoImportacao | null;
-  if (!resultado) throw new Error('O banco não retornou o resultado da importação.');
-
-  return {
-    lote_id: resultado.lote_id,
-    importadas: resultado.importadas ?? 0,
-    conciliadas: resultado.conciliadas ?? 0,
-    erros: Array.isArray(resultado.erros) ? resultado.erros : [],
-    valor_total: resultado.valor_total ?? 0,
+  let loteId: string | null = null;
+  let enviadas = 0;
+  const acumulado: ResultadoImportacao = {
+    lote_id: '',
+    importadas: 0,
+    conciliadas: 0,
+    erros: [],
+    valor_total: 0,
   };
+
+  for (let inicio = 0; inicio < Math.max(1, linhas.length); inicio += LINHAS_POR_LOTE) {
+    const lote = linhas.slice(inicio, inicio + LINHAS_POR_LOTE);
+    const payload = lote.map(linha => ({
+      linha: linha.linhaOrigem,
+      tipo: linha.tipo,
+      valor: linha.valor,
+      vencimento: linha.vencimento,
+      emissao: linha.data ?? linha.vencimento,
+      competencia: linha.competencia,
+      descricao: linha.descricao,
+      anotacoes: linha.anotacoes,
+      ref: linha.ref,
+      entidade_id: linha.clienteId,
+      conta_id: linha.contaId,
+      categoria_id: linha.categoriaId,
+      centro_custo_id: linha.centroCustoId,
+      recebido: linha.recebido,
+      data_pagamento: linha.recebido ? linha.data ?? linha.vencimento : null,
+    }));
+
+    const { data, error } = await supabase.rpc('importar_lancamentos', {
+      p_lote: {
+        arquivo_nome: arquivo,
+        arquivo_hash: arquivoHash ?? null,
+        lote_id: loteId,
+        finalizar: inicio + lote.length === linhas.length,
+        linhas: payload,
+      },
+      p_conciliar: conciliar,
+    });
+    if (error) throw error;
+
+    const resultado = data as ResultadoImportacao | null;
+    if (!resultado) throw new Error('O banco não retornou o resultado da importação.');
+    loteId ??= resultado.lote_id;
+    acumulado.lote_id = loteId;
+    acumulado.importadas += resultado.importadas ?? 0;
+    acumulado.conciliadas += resultado.conciliadas ?? 0;
+    acumulado.erros.push(...(Array.isArray(resultado.erros) ? resultado.erros : []));
+    acumulado.valor_total += resultado.valor_total ?? 0;
+
+    enviadas += lote.length;
+    aoProgredir?.(enviadas, linhas.length);
+  }
+
+  return acumulado;
 }
 
 /** Desfaz um lote importado (Master). */

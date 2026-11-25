@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS auditoria_logs_data_hora_idx ON public.auditoria_logs (data_hora DESC);

@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS notifications_origem_link_idx ON public.notifications (origem, link);
