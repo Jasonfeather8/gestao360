@@ -653,6 +653,8 @@ export function useDesfazerImportacao() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['importacoesDados'] });
       queryClient.invalidateQueries({ queryKey: ['lancamentos'] });
+      queryClient.invalidateQueries({ queryKey: ['conciliacoes'] });
+      queryClient.invalidateQueries({ queryKey: ['transacoesBanco'] });
       queryClient.invalidateQueries({ queryKey: ['contasSaldos'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardIndicadores'] });
