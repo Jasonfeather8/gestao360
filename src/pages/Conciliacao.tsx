@@ -15,7 +15,6 @@ import {
   HelpCircle,
   Landmark,
   Loader2,
-  Lock,
   PlusCircle,
   Sparkles,
   Trash2,
@@ -34,7 +33,7 @@ import { compararExtrato, valorPrevistoParaConciliar } from '../services/extrato
 import { lerExtrato } from '../services/extrato/motorLeitura';
 import { reaproveitarExtratoImportado } from '../services/extrato/persistencia';
 import { mensagemDoErro } from '../services/erros';
-import type { DiaComparacao, ExtratoLido, ItemComparacao, LancamentoFinanceiro, LinhaExtrato, ProgressoLeituraExtrato, StatusPagamento, TransferenciaCandidataLinha } from '../types';
+import type { DiaComparacao, ExtratoLido, ItemComparacao, LancamentoFinanceiro, ProgressoLeituraExtrato, StatusPagamento, TransferenciaCandidataLinha } from '../types';
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const dataFormatada = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
@@ -175,59 +174,6 @@ export default function Conciliacao() {
     () => (extrato ? compararExtrato(extrato, lancamentos) : null),
     [extrato, lancamentos],
   );
-
-  // Ordem cronológica de cada linha (já normalizada pela comparação, que inverte extratos
-  // decrescentes como o do Stone): define a sequência de liberação dentro do dia.
-  const ordemPorLinhaId = useMemo(() => {
-    const mapa = new Map<string, number>();
-    resultado?.dias.forEach((dia) => {
-      [...dia.entradas, ...dia.saidas].forEach((item) => {
-        if (item.linhaExtrato && item.ordemExtrato !== null) mapa.set(item.linhaExtrato.id, item.ordemExtrato);
-      });
-    });
-    return mapa;
-  }, [resultado]);
-
-  /**
-   * Regra de ordem: o operador concilia o extrato em ordem cronológica (mais antiga primeiro).
-   * - Um dia só abre quando todos os itens do dia anterior estão resolvidos.
-   * - Dentro do dia ativo, cada linha só libera depois que as linhas anteriores (na ordem
-   *   cronológica) estiverem resolvidas.
-   * Só contam as linhas do extrato com transação persistida (conciliaveis); linhas não
-   * persistidas e títulos do ERP sem linha no extrato não bloqueiam nada.
-   */
-  const { diasBloqueados, linhasBloqueadas } = useMemo(() => {
-    const dias = new Set<string>();
-    const linhas = new Set<string>();
-    if (!resultado || !extrato) return { diasBloqueados: dias, linhasBloqueadas: linhas };
-
-    const linhaResolvida = (linha: LinhaExtrato) =>
-      Boolean(linha.transacaoBancoId && statusConciliacao[linha.transacaoBancoId]);
-
-    let diaAnteriorConcluido = true;
-    for (const dia of resultado.dias) {
-      const conciliaveis = extrato.linhas
-        .filter((linha) => linha.data === dia.data && Boolean(linha.transacaoBancoId))
-        .sort((a, b) => (ordemPorLinhaId.get(a.id) ?? 0) - (ordemPorLinhaId.get(b.id) ?? 0));
-      const diaConcluido = conciliaveis.every(linhaResolvida);
-
-      if (!diaAnteriorConcluido) {
-        // Dia ainda inacessível: todo o bloco fica travado.
-        dias.add(dia.data);
-        conciliaveis.forEach((linha) => linhas.add(linha.id));
-      } else if (!diaConcluido) {
-        // Dia ativo: libera linha a linha, na ordem cronológica.
-        let liberar = true;
-        for (const linha of conciliaveis) {
-          if (!liberar) linhas.add(linha.id);
-          if (!linhaResolvida(linha)) liberar = false;
-        }
-      }
-
-      diaAnteriorConcluido = diaAnteriorConcluido && diaConcluido;
-    }
-    return { diasBloqueados: dias, linhasBloqueadas: linhas };
-  }, [resultado, extrato, statusConciliacao, ordemPorLinhaId]);
 
   const linhasNaoPersistiveis = extrato
     ? extrato.linhas.filter((linha) =>
@@ -412,13 +358,12 @@ export default function Conciliacao() {
   };
 
   // Conciliação em lote: entram só os pares sugeridos com valor exatamente igual (status
-  // "conciliado"), ainda não conciliados e liberados pela ordem do extrato. Pares divergentes
-  // continuam sendo corrigidos pelo modal, pois a diferença precisa ser classificada.
+  // "conciliado") e ainda não conciliados. Pares divergentes continuam sendo corrigidos pelo
+  // modal, pois a diferença precisa ser classificada.
   const idsElegiveis = useMemo(() => {
     const ids: string[] = [];
     if (!podeAgirNaConciliacao) return ids;
     resultado?.dias.forEach((dia) => {
-      const diaBloqueado = diasBloqueados.has(dia.data);
       itensNaOrdemDoExtrato(dia).forEach((item) => {
         const transacaoId = item.linhaExtrato?.transacaoBancoId;
         if (
@@ -426,17 +371,15 @@ export default function Conciliacao() {
           && item.status === 'conciliado'
           && item.lancamento
           && !statusConciliacao[transacaoId]
-          && !diaBloqueado
-          && !(item.linhaExtrato && linhasBloqueadas.has(item.linhaExtrato.id))
           && STATUS_CONCILIAVEIS.includes(item.lancamento.status_pagamento)
         ) ids.push(item.id);
       });
     });
     return ids;
-  }, [resultado, diasBloqueados, statusConciliacao, linhasBloqueadas, podeAgirNaConciliacao]);
+  }, [resultado, statusConciliacao, podeAgirNaConciliacao]);
   const idsElegiveisSet = useMemo(() => new Set(idsElegiveis), [idsElegiveis]);
 
-  // A seleção acompanha a lista: itens que deixaram de ser elegíveis (conciliados ou bloqueados)
+  // A seleção acompanha a lista: itens que deixaram de ser elegíveis (já conciliados)
   // saem sozinhos da marcação.
   useEffect(() => {
     setSelecionados((anterior) => {
@@ -487,7 +430,7 @@ export default function Conciliacao() {
     else showToast(`${concluidas} conciliada(s) e ${falhas} não puderam ser conciliadas.`, 'error');
   };
 
-  const renderItem = (item: ItemComparacao, diaBloqueado: boolean) => {
+  const renderItem = (item: ItemComparacao) => {
     const status = {
       conciliado: { label: 'Par sugerido', icon: CheckCircle2, className: 'bg-bank-truth-green/10 text-bank-truth-green' },
       divergente: { label: 'Valor divergente', icon: AlertTriangle, className: 'bg-alert-red/10 text-alert-red' },
@@ -499,18 +442,11 @@ export default function Conciliacao() {
     const StatusIcon = conciliadaDeVerdade ? CheckCircle2 : status.icon;
     const selecionado = selecionados.has(item.id);
     const selecionavel = idsElegiveisSet.has(item.id);
-    const linhaBloqueada = Boolean(
-      item.linhaExtrato && (diaBloqueado || linhasBloqueadas.has(item.linhaExtrato.id)),
-    );
-    const motivoBloqueio = diaBloqueado
-      ? 'Conclua o dia anterior do extrato antes de movimentar esta linha'
-      : 'Conclua as linhas anteriores do extrato para liberar esta linha';
-
     return (
       <div
         key={item.id}
         onClick={selecionavel ? () => alternarSelecao(item.id) : undefined}
-        className={`grid gap-4 border-b border-surface-border/70 py-4 last:border-b-0 lg:grid-cols-2 lg:gap-6 ${linhaBloqueada ? 'opacity-60' : ''} ${selecionavel ? 'cursor-pointer transition-colors hover:bg-surface-container-low/60' : ''} ${selecionado ? 'bg-primary/5' : ''}`}
+        className={`grid gap-4 border-b border-surface-border/70 py-4 last:border-b-0 lg:grid-cols-2 lg:gap-6 ${selecionavel ? 'cursor-pointer transition-colors hover:bg-surface-container-low/60' : ''} ${selecionado ? 'bg-primary/5' : ''}`}
       >
         {/* Coluna esquerda: a linha do extrato (entradas e saídas, na ordem do extrato). */}
         <div className="flex min-w-0 items-start gap-3">
@@ -554,11 +490,6 @@ export default function Conciliacao() {
             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${conciliadaDeVerdade ? 'bg-bank-truth-green/10 text-bank-truth-green' : status.className}`}>
               <StatusIcon className="h-3 w-3" />{conciliadaDeVerdade ? 'Conciliado' : status.label}
             </span>
-            {linhaBloqueada && !conciliadaDeVerdade && (
-              <span title={motivoBloqueio} className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-2 py-1 text-[10px] font-bold text-secondary">
-                <Lock className="h-3 w-3" />bloqueado
-              </span>
-            )}
           </div>
           {item.lancamento ? (
             <div className="min-w-0">
@@ -579,8 +510,8 @@ export default function Conciliacao() {
               <button
                 type="button"
                 onClick={() => setConciliarItem(item)}
-                disabled={!item.linhaExtrato.transacaoBancoId || linhaBloqueada}
-                title={!item.linhaExtrato.transacaoBancoId ? 'Importe o extrato para conciliação antes de conciliar' : linhaBloqueada ? motivoBloqueio : 'Vincular esta transação bancária a um lançamento do ERP'}
+                disabled={!item.linhaExtrato.transacaoBancoId}
+                title={!item.linhaExtrato.transacaoBancoId ? 'Importe o extrato para conciliação antes de conciliar' : 'Vincular esta transação bancária a um lançamento do ERP'}
                 className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />Conciliar
@@ -588,8 +519,8 @@ export default function Conciliacao() {
               <button
                 type="button"
                 onClick={() => setTransferenciaItem(item)}
-                disabled={!item.linhaExtrato.transacaoBancoId || linhaBloqueada}
-                title={!item.linhaExtrato.transacaoBancoId ? 'Importe o extrato para conciliação antes de conciliar' : linhaBloqueada ? motivoBloqueio : 'Vincular esta transação bancária a uma transferência aprovada'}
+                disabled={!item.linhaExtrato.transacaoBancoId}
+                title={!item.linhaExtrato.transacaoBancoId ? 'Importe o extrato para conciliação antes de conciliar' : 'Vincular esta transação bancária a uma transferência aprovada'}
                 data-testid="action-transferencia"
                 className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -598,8 +529,7 @@ export default function Conciliacao() {
               {(item.status === 'pendente_banco' || item.status === 'divergente') && <button
                 type="button"
                 onClick={() => abrirLancamentoDoExtrato(item)}
-                disabled={linhaBloqueada}
-                title={linhaBloqueada ? motivoBloqueio : 'Criar um novo lançamento no ERP com os dados desta linha do extrato'}
+                title="Criar um novo lançamento no ERP com os dados desta linha do extrato"
                 className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <PlusCircle className="h-3.5 w-3.5" />Lançar
@@ -909,17 +839,14 @@ export default function Conciliacao() {
               {resultado.dias.length === 0 ? (
                 <div className="rounded-[28px] border border-surface-border bg-white p-10 text-center text-sm text-on-surface-variant dark:bg-surface">Nenhuma movimentação encontrada no período do extrato</div>
               ) : resultado.dias.map((dia) => {
-                const diaBloqueado = diasBloqueados.has(dia.data);
                 const itensDoDia = itensNaOrdemDoExtrato(dia);
                 return (
-                  <section key={dia.data} className={`overflow-hidden rounded-[28px] border border-surface-border bg-white transition dark:bg-surface ${diaBloqueado ? 'opacity-60 grayscale' : ''}`}>
+                  <section key={dia.data} className="overflow-hidden rounded-[28px] border border-surface-border bg-white transition dark:bg-surface">
                     <header className="flex flex-col justify-between gap-3 border-b border-surface-border bg-surface-container-low px-5 py-4 sm:flex-row sm:items-center">
                       <h3 className="flex items-center gap-2 font-bold capitalize text-on-surface">
-                        {diaBloqueado && <Lock aria-hidden="true" className="h-4 w-4 shrink-0 text-secondary" />}
                         {dataComDia.format(dataUtc(dia.data))}
                       </h3>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-on-surface-variant">
-                        {diaBloqueado && <span className="inline-flex items-center gap-1 rounded-full bg-secondary/10 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-secondary">Conclua o dia anterior</span>}
                         <span className="text-bank-truth-green">Entradas {moeda.format(dia.totalEntradas)}</span>
                         <span className="text-alert-red">Saídas {moeda.format(dia.totalSaidas)}</span>
                         <span>{dia.conciliados} conciliados</span><span>{dia.divergentes} divergentes</span><span>{dia.pendentes} pendentes</span>
@@ -930,7 +857,7 @@ export default function Conciliacao() {
                         <h4 className="text-[10px] font-black uppercase tracking-wider text-secondary">Movimentações do extrato</h4>
                         <h4 className="text-[10px] font-black uppercase tracking-wider text-secondary">Par sugerido do ERP</h4>
                       </div>
-                      {itensDoDia.length ? itensDoDia.map((item) => renderItem(item, diaBloqueado)) : <p className="py-4 text-sm text-on-surface-variant">Nenhuma movimentação</p>}
+                      {itensDoDia.length ? itensDoDia.map((item) => renderItem(item)) : <p className="py-4 text-sm text-on-surface-variant">Nenhuma movimentação</p>}
                     </div>
                   </section>
                 );
