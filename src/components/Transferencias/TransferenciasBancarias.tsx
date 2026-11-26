@@ -133,7 +133,7 @@ export default function TransferenciasBancarias() {
   const { decidirTransferencia, isDecidindo } = useDecidirTransferencia();
   const { estornarTransferencia, isEstornando } = useEstornarTransferencia();
   const contas = useMemo(() => contasData.filter((conta) => !('status' in conta) || conta.status !== 'excluido'), [contasData]);
-  const categorias = useMemo(() => categoriasData.filter((categoria) => !('status' in categoria) || categoria.status !== 'excluido'), [categoriasData]);
+  const categorias = useMemo(() => categoriasData.filter((categoria) => categoria.tipo === 'saida' && (!('status' in categoria) || categoria.status !== 'excluido')), [categoriasData]);
   const centros = useMemo(() => centrosData.filter((centro) => !('status' in centro) || centro.status !== 'excluido'), [centrosData]);
   const accountCardsData = useMemo(() => contas.map((conta) => {
     const saldo = contasSaldos.find((item) => item.conta_id === conta.id);

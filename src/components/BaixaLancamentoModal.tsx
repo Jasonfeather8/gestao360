@@ -206,6 +206,12 @@ export default function BaixaLancamentoModal() {
   }, [contas, contaId, isBaixaLancamentoOpen]);
 
   useEffect(() => {
+    if (!lancamento || !categoriaId) return;
+    const categoria = categorias.find(c => c.id === categoriaId);
+    if (categoria && categoria.tipo !== lancamento.tipo) setCategoriaId('');
+  }, [categorias, lancamento, categoriaId]);
+
+  useEffect(() => {
     if (!lancamento) return;
 
     const loadParcelas = async () => {

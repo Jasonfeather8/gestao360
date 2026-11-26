@@ -103,7 +103,7 @@ export default function MigracaoDados() {
   const cadastros = useMemo<MigracaoCadastros>(() => ({
     contas: contas.filter((item) => !('status' in item) || item.status !== 'excluido').map((item) => ({ id: item.id, nome: item.nome })),
     clientes: entidades.map((item) => ({ id: item.id, nome: item.nome_razao_social })),
-    categorias: categorias.filter((item) => !('status' in item) || item.status !== 'excluido').map((item) => ({ id: item.id, nome: item.nome })),
+    categorias: categorias.filter((item) => !('status' in item) || item.status !== 'excluido').map((item) => ({ id: item.id, nome: item.nome, tipo: item.tipo as 'entrada' | 'saida' })),
     centrosCusto: centrosCusto.filter((item) => !('status' in item) || item.status !== 'excluido').map((item) => ({ id: item.id, nome: item.nome })),
   }), [contas, entidades, categorias, centrosCusto]);
   const cadastrosAnteriores = useRef(cadastros);
@@ -358,7 +358,7 @@ export default function MigracaoDados() {
     catch (cause) { setErro(mensagemDoErro(cause, 'Não foi possível desfazer o lote.')); }
   };
 
-  const opcoesCampo = (campo: 'cliente' | 'conta' | 'categoria' | 'centroCusto') => campo === 'cliente' ? cadastros.clientes : campo === 'conta' ? cadastros.contas : campo === 'categoria' ? cadastros.categorias : cadastros.centrosCusto;
+  const opcoesCampo = (campo: 'cliente' | 'conta' | 'categoria' | 'centroCusto', linha: MigracaoLinha) => campo === 'cliente' ? cadastros.clientes : campo === 'conta' ? cadastros.contas : campo === 'categoria' ? cadastros.categorias.filter((categoria) => !linha.tipo || categoria.tipo === linha.tipo) : cadastros.centrosCusto;
   const linhasFiltradas = somentePendencias ? linhas.filter((linha) => linha.situacao === 'pendente') : linhas;
   const totalPaginasRevisao = Math.max(1, Math.ceil(linhasFiltradas.length / LINHAS_POR_PAGINA));
   const paginaRevisaoAtual = Math.min(paginaRevisao, totalPaginasRevisao - 1);
@@ -408,10 +408,10 @@ export default function MigracaoDados() {
                   <td className="px-3 py-3 text-on-surface">{linha.linhaOrigem}</td>
                   <td className={`px-3 py-3 font-bold ${corSituacaoLinha(linha)}`}>{rotuloSituacao(linha)}</td>
                   <td className="px-3 py-3"><input aria-label={`Valor da linha ${linha.linhaOrigem}`} type="number" min="0" step="0.01" value={linha.valor ?? ''} onChange={(event) => { const valor = event.target.value === '' ? null : Math.abs(Number(event.target.value)); atualizarLinha(linha.id, { valor }); }} className={`${classeCampo} w-28 ${pendente && linha.valor === null ? 'border-pending-amber ring-1 ring-pending-amber' : ''}`} /></td>
-                  <td className="px-3 py-3"><select aria-label={`Entrada ou saída da linha ${linha.linhaOrigem}`} value={linha.tipo ?? ''} onChange={(event) => { const tipo = event.target.value as 'entrada' | 'saida' | ''; registrarEscolha(linha, 'tipo', tipo); atualizarLinha(linha.id, { tipo: tipo || null }); }} className={`${classeCampo} w-24 ${pendente && !linha.tipo ? 'border-pending-amber ring-1 ring-pending-amber' : ''}`}><option value="">Definir…</option><option value="entrada">Entrada</option><option value="saida">Saída</option></select></td>
+                  <td className="px-3 py-3"><select aria-label={`Entrada ou saída da linha ${linha.linhaOrigem}`} value={linha.tipo ?? ''} onChange={(event) => { const tipo = event.target.value as 'entrada' | 'saida' | ''; registrarEscolha(linha, 'tipo', tipo); registrarEscolha(linha, 'categoria', ''); atualizarLinha(linha.id, { tipo: tipo || null, categoriaId: null }); }} className={`${classeCampo} w-24 ${pendente && !linha.tipo ? 'border-pending-amber ring-1 ring-pending-amber' : ''}`}><option value="">Definir…</option><option value="entrada">Entrada</option><option value="saida">Saída</option></select></td>
                   <td className="px-3 py-3"><input aria-label={`Data de vencimento da linha ${linha.linhaOrigem}`} type="date" value={linha.vencimento ?? ''} onChange={(event) => atualizarLinha(linha.id, { vencimento: event.target.value || null })} className={`${classeCampo} w-36 ${pendente && !linha.vencimento ? 'border-pending-amber ring-1 ring-pending-amber' : ''}`} /></td>
                   {([['cliente', 'clienteId'], ['conta', 'contaId'], ['categoria', 'categoriaId'], ['centroCusto', 'centroCustoId']] as const).map(([field, idField]) => {
-                    const options = opcoesCampo(field);
+                    const options = opcoesCampo(field, linha);
                     const currentId = linha[idField] ?? '';
                     const nomeOriginal = nomesOriginais.current[`${linha.id}:${field}`] ?? '';
                     const formularioAberto = cadastroRapido?.linhaId === linha.id && cadastroRapido.campo === field;

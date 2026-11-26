@@ -40,6 +40,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { acessoPadraoDoPerfil, usuarioTemAcessoAConta } from '../config/permissions';
 import type { UserProfile } from '../types';
 import { mensagemErroNomeDuplicado, podeSalvarNome } from '../utils/validacaoNomes';
+import { mensagemDoErro } from '../services/erros';
 
 type SubTabType = 'contas' | 'centros' | 'categorias' | 'ajustes';
 
@@ -290,7 +291,9 @@ export default function Cadastros() {
       setIsNewCatOpen(false);
       setEditingCat(null);
       setCatName('');
-    } catch (err) { alert(mensagemErroNomeDuplicado(err) ?? 'Erro ao salvar categoria'); }
+      // A troca de fluxo é barrada pelo banco quando a categoria já está em uso; a
+      // mensagem do gatilho precisa chegar ao usuário em vez do texto genérico.
+    } catch (err) { alert(mensagemErroNomeDuplicado(err) ?? mensagemDoErro(err, 'Erro ao salvar categoria')); }
   };
 
   const handleAjusteSubmit = async (e: React.FormEvent) => {

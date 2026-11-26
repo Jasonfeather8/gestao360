@@ -14,6 +14,7 @@ function dataDaOrigem(valor: string | null): string {
 type CadastroSemelhanca = {
   id: string;
   nome: string;
+  tipo?: 'entrada' | 'saida';
   nomeNormalizado: string;
   tokens: string[];
   tamanhoSemEspacos: number;
@@ -24,7 +25,6 @@ interface IndicesCadastros {
   contasLista: { id: string; nome: string }[];
   clientes: Map<string, string>;
   clientesLista: CadastroSemelhanca[];
-  categorias: Map<string, string>;
   categoriasLista: CadastroSemelhanca[];
   centrosCusto: Map<string, string>;
   centrosCustoLista: CadastroSemelhanca[];
@@ -62,7 +62,7 @@ export function indexarCadastros(cadastros: MigracaoCadastros): IndicesCadastros
     }
     return mapa;
   };
-  const prepararListaSemelhanca = (itens: { id: string; nome: string }[]): CadastroSemelhanca[] =>
+  const prepararListaSemelhanca = (itens: { id: string; nome: string; tipo?: 'entrada' | 'saida' }[]): CadastroSemelhanca[] =>
     itens.map(item => {
       const nomeNormalizado = normalizarChave(item.nome);
       return {
@@ -89,7 +89,6 @@ export function indexarCadastros(cadastros: MigracaoCadastros): IndicesCadastros
     contasLista: cadastros.contas,
     clientes: montarIndiceNormalizado(clientesLista),
     clientesLista,
-    categorias: montarIndiceNormalizado(categoriasLista),
     categoriasLista,
     centrosCusto: montarIndiceNormalizado(centrosCustoLista),
     centrosCustoLista,
@@ -199,21 +198,34 @@ function avaliar(
   atualizada.clienteId = indices.clientes.get(normalizarChave(atualizada.clienteNome))
     ?? casarPorSemelhanca(atualizada.clienteNome, indices.clientesLista);
   atualizada.contaId = indices.contas.get(normalizarChave(atualizada.contaNome)) ?? contaPorContencao(atualizada.contaNome, indices.contasLista);
-  atualizada.categoriaId = indices.categorias.get(normalizarChave(atualizada.categoriaNome))
-    ?? casarPorSemelhanca(atualizada.categoriaNome, indices.categoriasLista);
   atualizada.centroCustoId = indices.centrosCusto.get(normalizarChave(atualizada.centroCustoNome))
     ?? casarPorSemelhanca(atualizada.centroCustoNome, indices.centrosCustoLista);
 
   if (escolhasManuais.tipo) atualizada.tipo = escolhasManuais.tipo as 'entrada' | 'saida';
+
+  const categoriasCompativeis = atualizada.tipo
+    ? indices.categoriasLista.filter(cadastro => cadastro.tipo === atualizada.tipo)
+    : indices.categoriasLista;
+  const chaveCategoria = normalizarChave(atualizada.categoriaNome);
+  atualizada.categoriaId = categoriasCompativeis.find(cadastro => cadastro.nomeNormalizado === chaveCategoria)?.id
+    ?? casarPorSemelhanca(atualizada.categoriaNome, categoriasCompativeis);
+
+  let categoriaIncompativel = false;
+  if (escolhasManuais.categoria) {
+    const escolhida = categoriasCompativeis.find(cadastro => cadastro.id === escolhasManuais.categoria);
+    atualizada.categoriaId = escolhida?.id ?? null;
+    categoriaIncompativel = !escolhida;
+  }
+
   if (escolhasManuais.cliente) atualizada.clienteId = escolhasManuais.cliente;
   if (escolhasManuais.conta) atualizada.contaId = escolhasManuais.conta;
-  if (escolhasManuais.categoria) atualizada.categoriaId = escolhasManuais.categoria;
   if (escolhasManuais.centroCusto) atualizada.centroCustoId = escolhasManuais.centroCusto;
 
   const pendencias: string[] = [];
   if (!atualizada.clienteId) pendencias.push('Selecione o cliente / fornecedor');
   if (!atualizada.contaId) pendencias.push('Selecione a conta');
-  if (!atualizada.categoriaId) pendencias.push('Selecione a categoria');
+  if (categoriaIncompativel) pendencias.push('Categoria incompatível com o tipo da linha');
+  else if (!atualizada.categoriaId) pendencias.push('Selecione a categoria');
   if (!atualizada.centroCustoId) pendencias.push('Selecione o centro de custo');
   if (!atualizada.vencimento) pendencias.push('Informe a data de vencimento');
   if (atualizada.valor === null || atualizada.valor === 0) pendencias.push('Valor não informado');

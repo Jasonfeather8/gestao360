@@ -1,0 +1,3 @@
+CREATE TRIGGER trg_proteger_fluxo_categoria_financeira
+BEFORE UPDATE ON public.categorias_financeiras
+FOR EACH ROW EXECUTE FUNCTION public.proteger_fluxo_categoria_financeira()

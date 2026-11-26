@@ -1,0 +1,1 @@
+DROP FUNCTION public.corrigir_categoria_tarifa_entrada()

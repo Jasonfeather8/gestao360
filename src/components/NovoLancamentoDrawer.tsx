@@ -416,6 +416,14 @@ export default function NovoLancamentoDrawer() {
     return categorias.filter(c => c.tipo === lancamentoFormDraft.tipo);
   }, [categorias, lancamentoFormDraft.tipo]);
 
+  useEffect(() => {
+    if (!isNovoLancamentoOpen || !isEditing) return;
+    const categoria = categorias.find(c => c.id === lancamentoFormDraft.categoria_id);
+    if (categoria && categoria.tipo !== lancamentoFormDraft.tipo) {
+      setLancamentoFormDraft({ categoria_id: '' });
+    }
+  }, [categorias, isNovoLancamentoOpen, isEditing, lancamentoFormDraft.categoria_id, lancamentoFormDraft.tipo]);
+
   // Regra do seletor de Entidade / Destinatário: Receita/Entrada aceita apenas
   // Cliente, Despesa/Saída aceita apenas Fornecedor, e quem é do tipo "Ambos"
   // atende às duas direções. A direção manda no filtro.

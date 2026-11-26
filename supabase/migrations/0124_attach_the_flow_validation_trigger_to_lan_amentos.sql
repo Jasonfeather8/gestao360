@@ -1,0 +1,3 @@
+CREATE TRIGGER trg_validar_fluxo_categoria_lancamento
+BEFORE INSERT OR UPDATE ON public.lancamentos_financeiros
+FOR EACH ROW EXECUTE FUNCTION public.validar_fluxo_categoria_lancamento()

@@ -596,7 +596,7 @@ export interface MigracaoLinha {
 export interface MigracaoCadastros {
   contas: { id: string; nome: string }[];
   clientes: { id: string; nome: string }[];
-  categorias: { id: string; nome: string }[];
+  categorias: { id: string; nome: string; tipo: 'entrada' | 'saida' }[];
   centrosCusto: { id: string; nome: string }[];
 }
 
