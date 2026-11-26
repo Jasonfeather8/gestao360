@@ -31,7 +31,7 @@ const statusTransferencia: Record<TransferenciaStatus, { label: string; cor: str
   aberta: { label: 'Aberta', cor: 'text-secondary' },
   aguardando_destino: { label: 'Aguardando destino', cor: 'text-pending-amber' },
   conciliada_pendente_master: { label: 'Conciliada — aguardando Financeiro', cor: 'text-primary' },
-  conciliada: { label: 'Conciliada', cor: 'text-bank-truth-green' },
+  conciliada: { label: 'Concluída', cor: 'text-bank-truth-green' },
   estornada: { label: 'Estornada', cor: 'text-alert-red' },
 };
 const gruposSituacao = [

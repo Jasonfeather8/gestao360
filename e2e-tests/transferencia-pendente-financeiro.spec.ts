@@ -123,5 +123,5 @@ test("Master confirma os dados da transferência e aprova os dois títulos pelo 
   await page.goto("/conciliacao?aba=transferencias", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await expect(page.getByRole("heading", { name: "Transferências registradas" })).toBeVisible({ timeout: 30_000 });
   const cardConciliado = page.getByTestId(`transferencia-${transferenciaIds[0]}`);
-  await expect(cardConciliado.getByText("Conciliada", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(cardConciliado.getByText("Concluída", { exact: true })).toBeVisible({ timeout: 30_000 });
 });
