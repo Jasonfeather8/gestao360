@@ -98,9 +98,8 @@ export default function Lancamentos({
 
   const isMaster = role === 'master';
   const isColaborador = role === 'colaborador';
-  // Master e Gerente podem marcar títulos na listagem (relatório em PDF do filtro);
-  // a aprovação em lote continua exclusiva do Master.
-  const podeSelecionarLancamentos = role === 'master' || role === 'gerente';
+  // Qualquer perfil que abra a tela pode marcar linhas (cálculo da seleção e relatório em
+  // PDF do filtro); a aprovação em lote continua exclusiva do Master.
   // Em Contas a Pagar/Receber o Gerente tem acesso total: excluir título é
   // liberado para Master e Gerente. O estorno continua sendo ação do Financeiro,
   // exclusiva do Master.
@@ -118,6 +117,8 @@ export default function Lancamentos({
     const proximosParametros = new URLSearchParams(searchParams);
     if (aba === 'extrato') proximosParametros.set('aba', 'extrato');
     else proximosParametros.delete('aba');
+    // As abas mostram listas diferentes: a seleção de uma não vale para a outra.
+    setSelectedLancamentoIdsForBatch([]);
     setSearchParams(proximosParametros, { replace: true });
   };
   const abasFinanceiroExtrato = (
@@ -519,10 +520,10 @@ export default function Lancamentos({
       return { ...representante, transferenciaEspelhoIds: grupo.map(titulo => titulo.id) };
     });
   }, [allLancamentos]);
-  const selectableLancamentos = useMemo(
-    () => allLancamentos.filter(item => item.transferencia_lado !== 'origem' && item.transferencia_lado !== 'destino'),
-    [allLancamentos]
-  );
+  // Toda linha exibida pode ser marcada — inclusive a de transferência entre contas. No
+  // Extrato as linhas são as da lista do extrato; no Financeiro/Pagar/Receber são as linhas
+  // exibidas (a transferência aparece uma única vez, como espelho das duas pontas).
+  const selectableLancamentos: LancamentoFinanceiro[] = isExtratoView ? lancamentosExtrato : displayedLancamentos;
 
   const financeiroStatusFilters = useMemo(() => ({
     searchTerm: debouncedSearchTerm,
@@ -661,7 +662,6 @@ export default function Lancamentos({
   };
 
   const toggleSelectAll = () => {
-    if (!podeSelecionarLancamentos) return;
     if (selectedLancamentoIdsForBatch.length === selectableLancamentos.length) {
       setSelectedLancamentoIdsForBatch([]);
     } else {
@@ -670,7 +670,6 @@ export default function Lancamentos({
   };
 
   const toggleSelectOne = (id: string) => {
-    if (!podeSelecionarLancamentos) return;
     setSelectedLancamentoIdsForBatch(
       selectedLancamentoIdsForBatch.includes(id)
         ? selectedLancamentoIdsForBatch.filter(i => i !== id)
@@ -678,14 +677,21 @@ export default function Lancamentos({
     );
   };
 
-  const handleBatchApprove = () => {
-    if (!isMaster) return;
-    const eligibleIds = allLancamentos
+  // A aprovação em lote continua sendo do Master e considera apenas títulos comuns: a
+  // transferência entre contas tem fluxo próprio (o selo da linha aprova as duas pontas) e
+  // aprovar um único lado deixaria a transferência pela metade.
+  const aprovaveisEmLote = useMemo(() => {
+    if (!isMaster) return [] as string[];
+    return displayedLancamentos
       .filter(item => selectedLancamentoIdsForBatch.includes(item.id))
+      .filter(item => item.transferencia_lado !== 'origem' && item.transferencia_lado !== 'destino')
       .filter(item => item.status_aprovacao !== 'confirmado_master' || item.status_pagamento === 'quitação_pendente')
       .map(item => item.id);
-    if (eligibleIds.length === 0) return;
-    setSelectedLancamentoIdsForBatch(eligibleIds);
+  }, [displayedLancamentos, isMaster, selectedLancamentoIdsForBatch]);
+
+  const handleBatchApprove = () => {
+    if (!isMaster || aprovaveisEmLote.length === 0) return;
+    setSelectedLancamentoIdsForBatch(aprovaveisEmLote);
     setSelectedTransferenciaAprovacao(null);
     setModalOpen('isAprovacaoModalOpen', true);
   };
@@ -805,7 +811,10 @@ export default function Lancamentos({
     setCurrentPage(1);
   }, [isExtratoView, contaExtratoId]);
 
-  const selectedPrintLancamentos = displayedLancamentos.filter(item => selectedLancamentoIdsForBatch.includes(item.id));
+  // Linhas marcadas na tela atual: no Extrato são as linhas do extrato e, nas demais telas,
+  // as linhas exibidas (a transferência aparece uma única vez).
+  const selectedPrintLancamentos: LancamentoFinanceiro[] = (isExtratoView ? lancamentosExtrato : displayedLancamentos)
+    .filter(item => selectedLancamentoIdsForBatch.includes(item.id));
   const selectedOperationalLancamentos = isOperationalView ? selectedPrintLancamentos : [];
   const operationalDocumentCodes = new Set<number>();
   const operationalTotals = selectedOperationalLancamentos.reduce(
@@ -852,10 +861,24 @@ export default function Lancamentos({
     { valorPrevisto: 0, desconto: 0, acrescimo: 0, valorPago: 0, liquido: 0, aPagar: 0, entradas: 0, saidas: 0 }
   );
 
-  // Cálculo do Extrato: acompanha a seleção feita nas caixinhas da listagem. A regra é a
-  // mesma do Financeiro — entradas somam e saídas subtraem.
-  const selectedExtratoLancamentos = lancamentosExtrato.filter(item => selectedLancamentoIdsForBatch.includes(item.id));
-  const extratoTotais = selectedExtratoLancamentos.reduce(
+  // Cálculo da seleção, compartilhado pelo Financeiro e pelo Extrato: entradas somam e
+  // saídas subtraem (líquido = entradas − saídas). No Extrato cada ponta da transferência é
+  // uma linha própria; no Financeiro a transferência aparece como uma única linha e por isso
+  // vale pelas duas pontas (saída na origem e entrada no destino), para o líquido não
+  // distorcer o caixa.
+  const lancamentosDaSelecao = useMemo(() => {
+    if (isExtratoView) {
+      return lancamentosExtrato.filter(item => selectedLancamentoIdsForBatch.includes(item.id));
+    }
+    const porId = new Map(allLancamentos.map(item => [item.id, item]));
+    return displayedLancamentos
+      .filter(item => selectedLancamentoIdsForBatch.includes(item.id))
+      .flatMap(item => (item.transferenciaEspelhoIds ?? [item.id])
+        .map(id => porId.get(id))
+        .filter((lancamento): lancamento is LancamentoFinanceiro => Boolean(lancamento)));
+  }, [allLancamentos, displayedLancamentos, isExtratoView, lancamentosExtrato, selectedLancamentoIdsForBatch]);
+
+  const totaisDaSelecao = lancamentosDaSelecao.reduce(
     (totals, item) => {
       const liquido = getValorLiquido(item);
       if (item.tipo === 'entrada') {
@@ -908,6 +931,17 @@ export default function Lancamentos({
     const diffTime = todayAtMidnight.getTime() - dueAtMidnight.getTime();
     return Math.floor(diffTime / (1000 * 3600 * 24));
   };
+
+  const ehTransferenciaEspelho = (item: LancamentoFinanceiro) => Boolean(item.transferencia_id)
+    && (item.transferencia_lado === 'origem' || item.transferencia_lado === 'destino');
+  // A linha de transferência não é entrada nem saída isolada: o relatório mostra a natureza
+  // dela e as contas envolvidas em vez do fluxo e da entidade.
+  const rotuloFluxoImpressao = (item: LancamentoFinanceiro) => ehTransferenciaEspelho(item)
+    ? 'Transferência entre contas'
+    : item.tipo === 'entrada' ? 'Entrada' : 'Saída';
+  const rotuloEntidadeImpressao = (item: LancamentoFinanceiro) => ehTransferenciaEspelho(item)
+    ? getTransferenciaContasLabel(item)
+    : entidades.find(entidade => entidade.id === item.entidade_id)?.nome_razao_social || 'N/A';
 
   const renderStatusBadge = (item: LancamentoFinanceiro) => {
    const isTransferenciaEspelho = Boolean(item.transferencia_id)
@@ -1285,20 +1319,208 @@ export default function Lancamentos({
     </>
   );
 
+  // Documento de impressão da seleção: o mesmo relatório é usado pelas abas Financeiro e
+  // Extrato e pelas telas de Pagar/Receber, cada uma com o seu título e o seu resumo.
+  const relatorioImpressao = (
+        <div className="lancamentos-print-report" aria-label="Relatório dos lançamentos selecionados">
+          <div className="lancamentos-print-report__sheet">
+            <header className="lancamentos-print-report__header">
+              <div>
+                <h1>{isExtratoView ? 'Extrato' : (titleOverride || 'Financeiro')}</h1>
+                <p>Relatório dos lançamentos selecionados</p>
+              </div>
+              <div className="lancamentos-print-report__meta">
+                <strong>Emissão: {new Date().toLocaleDateString('pt-BR')}</strong>
+                <span>{selectedPrintLancamentos.length} lançamento{selectedPrintLancamentos.length === 1 ? '' : 's'}</span>
+              </div>
+            </header>
+
+            <section className="lancamentos-print-report__summary" aria-label="Resultado do cálculo">
+              <strong>Resultado do cálculo</strong>
+              {isOperationalView ? (
+                <div className="lancamentos-print-report__grid lancamentos-print-report__grid--operational-summary">
+                  <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Valor documento original</span><span className="lancamentos-print-report__value">{valueFormatter(operationalTotals.valorDocOriginal)}</span></div>
+                  <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Valor parcela original</span><span className="lancamentos-print-report__value">{valueFormatter(operationalTotals.valorParcOriginal)}</span></div>
+                  <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Desconto</span><span className="lancamentos-print-report__value">{valueFormatter(operationalTotals.desconto)}</span></div>
+                  <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Acréscimo</span><span className="lancamentos-print-report__value">{valueFormatter(operationalTotals.acrescimo)}</span></div>
+                  <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Valor pago</span><span className="lancamentos-print-report__value">{valueFormatter(operationalTotals.valorPago)}</span></div>
+                  <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">A pagar</span><span className="lancamentos-print-report__value">{valueFormatter(operationalTotals.aPagar)}</span></div>
+                </div>
+              ) : (
+                <div className="lancamentos-print-report__grid lancamentos-print-report__grid--financial-summary">
+                  <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Valor previsto</span><span className="lancamentos-print-report__value">{valueFormatter(printTotals.valorPrevisto)}</span></div>
+                  <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Desconto</span><span className="lancamentos-print-report__value">{valueFormatter(printTotals.desconto)}</span></div>
+                  <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Acréscimo</span><span className="lancamentos-print-report__value">{valueFormatter(printTotals.acrescimo)}</span></div>
+                  <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Valor exibido</span><span className="lancamentos-print-report__value">{valueFormatter(printTotals.liquido)}</span></div>
+                  <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Entradas</span><span className="lancamentos-print-report__value">{valueFormatter(totaisDaSelecao.entradas)}</span></div>
+                  <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Saídas</span><span className="lancamentos-print-report__value">{valueFormatter(totaisDaSelecao.saidas)}</span></div>
+                  <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Valor líquido exibido</span><span className="lancamentos-print-report__value">{valueFormatter(totaisDaSelecao.liquido)}</span></div>
+                </div>
+              )}
+            </section>
+
+            {isOperationalView ? (
+              <section className="lancamentos-print-report__items" aria-label="Lançamentos operacionais">
+                {selectedPrintLancamentos.map(item => (
+                  <article className="lancamentos-print-report__item" key={`print-${item.id}`}>
+                    <section className="lancamentos-print-report__block">
+                      <h2>Identificação</h2>
+                      <div className="lancamentos-print-report__grid lancamentos-print-report__grid--operational-identification">
+                        <div className="lancamentos-print-report__cell">
+                          <span className="lancamentos-print-report__label">Documento</span>
+                          <span className="lancamentos-print-report__value">{item.codigo_sequencial ? `${item.codigo_sequencial}${item.numero_parcela ? `-${item.numero_parcela}` : ''}` : '-'}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell">
+                          <span className="lancamentos-print-report__label">Entidade</span>
+                          <span className="lancamentos-print-report__value">{entidades.find(entidade => entidade.id === item.entidade_id)?.nome_razao_social || 'N/A'}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell">
+                          <span className="lancamentos-print-report__label">Vencimento / referência</span>
+                          <span className="lancamentos-print-report__value">
+                            {formatPrintDate(item.data_vencimento)}
+                            <small>{getDaysOverdue(item.data_vencimento) > 0 ? `${getDaysOverdue(item.data_vencimento)} dia(s)` : getDaysOverdue(item.data_vencimento) === 0 ? 'Hoje' : '-'}</small>
+                          </span>
+                        </div>
+                        <div className="lancamentos-print-report__cell">
+                          <span className="lancamentos-print-report__label">Data do documento</span>
+                          <span className="lancamentos-print-report__value">{formatPrintDate(item.data_emissao)}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell">
+                          <span className="lancamentos-print-report__label">Status</span>
+                          <span className="lancamentos-print-report__value">{getPrintStatus(item)}</span>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="lancamentos-print-report__block">
+                      <h2>Memória do cálculo</h2>
+                      <div className="lancamentos-print-report__grid lancamentos-print-report__grid--operational-values">
+                        <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
+                          <span className="lancamentos-print-report__label">Valor documento original</span>
+                          <span className="lancamentos-print-report__value">{valueFormatter(item.valor_original || item.valor_previsto)}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
+                          <span className="lancamentos-print-report__label">Valor parcela original</span>
+                          <span className="lancamentos-print-report__value">{valueFormatter(item.valor_previsto)}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
+                          <span className="lancamentos-print-report__label">Desconto</span>
+                          <span className="lancamentos-print-report__value">{valueFormatter(calculateAdjustmentAmount(item.desconto_valor, item.desconto_tipo, item.valor_previsto))}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
+                          <span className="lancamentos-print-report__label">Acréscimo</span>
+                          <span className="lancamentos-print-report__value">{valueFormatter(calculateAdjustmentAmount(item.acrescimo_valor, item.acrescimo_tipo, item.valor_previsto))}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
+                          <span className="lancamentos-print-report__label">Valor pago</span>
+                          <span className="lancamentos-print-report__value">{valueFormatter(item.valor_recebido || 0)}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
+                          <span className="lancamentos-print-report__label">A pagar</span>
+                          <span className="lancamentos-print-report__value">{valueFormatter(getSaldoAPagar(item))}</span>
+                        </div>
+                      </div>
+                    </section>
+                  </article>
+                ))}
+              </section>
+            ) : (
+              <section className="lancamentos-print-report__items" aria-label="Lançamentos financeiros">
+                {selectedPrintLancamentos.map(item => (
+                  <article className="lancamentos-print-report__item" key={`print-${item.id}`}>
+                    <section className="lancamentos-print-report__block">
+                      <h2>Identificação</h2>
+                      <div className="lancamentos-print-report__grid lancamentos-print-report__grid--financial-identification">
+                        <div className="lancamentos-print-report__cell">
+                          <span className="lancamentos-print-report__label">Documento</span>
+                          <span className="lancamentos-print-report__value">{item.codigo_sequencial ? `${item.codigo_sequencial}${item.numero_parcela ? `-${item.numero_parcela}` : ''}` : '-'}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell">
+                          <span className="lancamentos-print-report__label">Fluxo</span>
+                          <span className="lancamentos-print-report__value">{rotuloFluxoImpressao(item)}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell">
+                          <span className="lancamentos-print-report__label">Entidade</span>
+                          <span className="lancamentos-print-report__value">{rotuloEntidadeImpressao(item)}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell">
+                          <span className="lancamentos-print-report__label">Vencimento</span>
+                          <span className="lancamentos-print-report__value">{formatPrintDate(item.data_vencimento)}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell">
+                          <span className="lancamentos-print-report__label">Pagamento</span>
+                          <span className="lancamentos-print-report__value">{formatPrintDate(item.data_pagamento)}</span>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="lancamentos-print-report__block">
+                      <h2>Valores</h2>
+                      <div className="lancamentos-print-report__grid lancamentos-print-report__grid--financial-values">
+                        <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
+                          <span className="lancamentos-print-report__label">Valor previsto</span>
+                          <span className="lancamentos-print-report__value">{valueFormatter(item.valor_previsto)}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
+                          <span className="lancamentos-print-report__label">Desconto</span>
+                          <span className="lancamentos-print-report__value">{valueFormatter(calculateAdjustmentAmount(item.desconto_valor, item.desconto_tipo, item.valor_previsto))}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
+                          <span className="lancamentos-print-report__label">Acréscimo</span>
+                          <span className="lancamentos-print-report__value">{valueFormatter(calculateAdjustmentAmount(item.acrescimo_valor, item.acrescimo_tipo, item.valor_previsto))}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
+                          <span className="lancamentos-print-report__label">Valor exibido</span>
+                          <span className="lancamentos-print-report__value">{valueFormatter(getValorLiquido(item))}</span>
+                        </div>
+                        <div className="lancamentos-print-report__cell">
+                          <span className="lancamentos-print-report__label">Status</span>
+                          <span className="lancamentos-print-report__value">{getPrintStatus(item)}</span>
+                        </div>
+                      </div>
+                    </section>
+                  </article>
+                ))}
+              </section>
+            )}
+
+          </div>
+        </div>
+  );
+
   // Aplica à lista do Extrato a mesma normalização cronológica usada pela Conciliação.
   if (isExtratoView) {
     return (
       <div className="lancamentos-page space-y-6 animate-fade-in" onClick={() => setActiveMenuId(null)}>
         {abasFinanceiroExtrato}
 
-        <div>
-          <h1 className="text-2xl font-black uppercase tracking-tighter text-neutral-900 flex items-center gap-3">
-            <Receipt className="w-8 h-8 text-primary" />
-            Extrato
-          </h1>
-          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mt-1">
-            Títulos confirmados e conciliados, na ordem cronológica do extrato
-          </p>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-black uppercase tracking-tighter text-neutral-900 flex items-center gap-3">
+              <Receipt className="w-8 h-8 text-primary" />
+              Extrato
+            </h1>
+            <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mt-1">
+              Títulos confirmados e conciliados, na ordem cronológica do extrato
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              onClick={handlePrintSelected}
+              disabled={selectedLancamentoIdsForBatch.length === 0 || selectedPrintLancamentos.length === 0}
+              title="Imprimir relatório somente dos lançamentos selecionados"
+            >
+              <Download className="w-4 h-4" />
+              Gerar PDF do Filtro
+            </Button>
+            {selectedPrintLancamentos.length > 0 && (
+              <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">
+                {selectedPrintLancamentos.length} selecionado{selectedPrintLancamentos.length === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
         </div>
 
         <label className="flex flex-col gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-secondary">
@@ -1377,7 +1599,7 @@ export default function Lancamentos({
               <thead>
                 <tr className="border-b border-neutral-100 bg-neutral-50/60">
                   <th className="py-4 px-5 w-10 text-center">
-                    {podeSelecionarLancamentos && selectableLancamentos.length > 0 && (
+                    {selectableLancamentos.length > 0 && (
                       <input
                         type="checkbox"
                         checked={selectedLancamentoIdsForBatch.length === selectableLancamentos.length}
@@ -1419,14 +1641,12 @@ export default function Lancamentos({
                       className={`border-b border-neutral-50 hover:bg-neutral-50/50 transition-all cursor-pointer ${isSelected ? 'bg-primary/5' : ''}`}
                     >
                       <td className="py-3 px-5 text-center" onClick={(event) => event.stopPropagation()}>
-                        {podeSelecionarLancamentos && !isTransferenciaEspelho && (
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelectOne(item.id)}
-                            className="rounded-md border-neutral-300 text-primary focus:ring-primary w-4 h-4 transition-all"
-                          />
-                        )}
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectOne(item.id)}
+                          className="rounded-md border-neutral-300 text-primary focus:ring-primary w-4 h-4 transition-all"
+                        />
                       </td>
                       <td className="py-3 px-5 font-mono text-xs text-neutral-900 whitespace-nowrap">
                         <div>{formatPrintDate(item.data_pagamento)}</div>
@@ -1592,23 +1812,24 @@ export default function Lancamentos({
         </div>
 
         {/* Cálculo da seleção: barra flutuante fixa no rodapé da tela, como no Financeiro. */}
-        {selectedExtratoLancamentos.length > 0 && (
+        {selectedPrintLancamentos.length > 0 && (
           <div
             data-testid="extrato-total-selecao"
             className="sticky bottom-5 z-[60] flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-neutral-200 bg-neutral-50/95 px-5 py-3 shadow-[0_-2px_10px_rgba(0,0,0,0.10)] backdrop-blur-md"
           >
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[10px] font-black uppercase tracking-widest text-neutral-900">
-                Total ({selectedExtratoLancamentos.length} selecionado{selectedExtratoLancamentos.length === 1 ? '' : 's'})
+                Total ({selectedPrintLancamentos.length} selecionado{selectedPrintLancamentos.length === 1 ? '' : 's'})
               </span>
               <span className="text-[9px] font-bold uppercase tracking-widest text-neutral-400">
-                Entradas {valueFormatter(extratoTotais.entradas)} · Saídas {valueFormatter(extratoTotais.saidas)}
+                Entradas {valueFormatter(totaisDaSelecao.entradas)} · Saídas {valueFormatter(totaisDaSelecao.saidas)}
               </span>
             </div>
-            <span className="font-black font-mono text-sm text-neutral-900">{valueFormatter(extratoTotais.liquido)}</span>
+            <span className="font-black font-mono text-sm text-neutral-900">{valueFormatter(totaisDaSelecao.liquido)}</span>
           </div>
         )}
 
+        {relatorioImpressao}
         {modalLogsCompletos}
       </div>
     );
@@ -1657,10 +1878,10 @@ export default function Lancamentos({
           {isFinanceiroView && isMaster && (
             <Button
               onClick={() => handleBatchApprove()}
-              disabled={selectedLancamentoIdsForBatch.length === 0 || isBatchApproving}
+              disabled={aprovaveisEmLote.length === 0 || isBatchApproving}
             >
               <ShieldCheck className="w-4 h-4" />
-              Aprovar ({selectedLancamentoIdsForBatch.length})
+              Aprovar ({aprovaveisEmLote.length})
             </Button>
           )}
 
@@ -1679,7 +1900,7 @@ export default function Lancamentos({
             <thead>
               <tr className="bg-neutral-50/50 text-neutral-400 border-b border-neutral-100 text-[9px] font-black uppercase tracking-widest select-none">
                 <th className="py-5 px-4 w-10 text-center">
-                  {podeSelecionarLancamentos && selectableLancamentos.length > 0 && (
+                  {selectableLancamentos.length > 0 && (
                     <input
                       type="checkbox"
                       checked={selectedLancamentoIdsForBatch.length === selectableLancamentos.length}
@@ -1750,14 +1971,12 @@ export default function Lancamentos({
                       className={`border-b border-neutral-50 hover:bg-neutral-50/50 transition-all cursor-pointer group ${isSelected ? 'bg-primary/5 border-primary/10' : ''}`}
                     >
                       <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        {podeSelecionarLancamentos && !isTransferenciaEspelho && (
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelectOne(item.id)}
-                            className="rounded-md border-neutral-300 text-primary focus:ring-primary w-4 h-4 transition-all"
-                          />
-                        )}
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectOne(item.id)}
+                          className="rounded-md border-neutral-300 text-primary focus:ring-primary w-4 h-4 transition-all"
+                        />
                       </td>
 
                       <td className="py-3 px-4 whitespace-nowrap">
@@ -2098,170 +2317,26 @@ export default function Lancamentos({
         </div>
       </div>
 
-      <div className="lancamentos-print-report" aria-label="Relatório dos lançamentos selecionados">
-        <div className="lancamentos-print-report__sheet">
-          <header className="lancamentos-print-report__header">
-            <div>
-              <h1>{titleOverride || 'Financeiro'}</h1>
-              <p>Relatório dos lançamentos selecionados</p>
-            </div>
-            <div className="lancamentos-print-report__meta">
-              <strong>Emissão: {new Date().toLocaleDateString('pt-BR')}</strong>
-              <span>{selectedPrintLancamentos.length} lançamento{selectedPrintLancamentos.length === 1 ? '' : 's'}</span>
-            </div>
-          </header>
-
-          <section className="lancamentos-print-report__summary" aria-label="Resultado do cálculo">
-            <strong>Resultado do cálculo</strong>
-            {isOperationalView ? (
-              <div className="lancamentos-print-report__grid lancamentos-print-report__grid--operational-summary">
-                <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Valor documento original</span><span className="lancamentos-print-report__value">{valueFormatter(operationalTotals.valorDocOriginal)}</span></div>
-                <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Valor parcela original</span><span className="lancamentos-print-report__value">{valueFormatter(operationalTotals.valorParcOriginal)}</span></div>
-                <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Desconto</span><span className="lancamentos-print-report__value">{valueFormatter(operationalTotals.desconto)}</span></div>
-                <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Acréscimo</span><span className="lancamentos-print-report__value">{valueFormatter(operationalTotals.acrescimo)}</span></div>
-                <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Valor pago</span><span className="lancamentos-print-report__value">{valueFormatter(operationalTotals.valorPago)}</span></div>
-                <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">A pagar</span><span className="lancamentos-print-report__value">{valueFormatter(operationalTotals.aPagar)}</span></div>
-              </div>
-            ) : (
-              <div className="lancamentos-print-report__grid lancamentos-print-report__grid--financial-summary">
-                <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Valor previsto</span><span className="lancamentos-print-report__value">{valueFormatter(printTotals.valorPrevisto)}</span></div>
-                <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Desconto</span><span className="lancamentos-print-report__value">{valueFormatter(printTotals.desconto)}</span></div>
-                <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Acréscimo</span><span className="lancamentos-print-report__value">{valueFormatter(printTotals.acrescimo)}</span></div>
-                <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Valor exibido</span><span className="lancamentos-print-report__value">{valueFormatter(printTotals.liquido)}</span></div>
-                <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Entradas</span><span className="lancamentos-print-report__value">{valueFormatter(printTotals.entradas)}</span></div>
-                <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Saídas</span><span className="lancamentos-print-report__value">{valueFormatter(printTotals.saidas)}</span></div>
-                <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number"><span className="lancamentos-print-report__label">Valor líquido exibido</span><span className="lancamentos-print-report__value">{valueFormatter(printTotals.liquido)}</span></div>
-              </div>
-            )}
-          </section>
-
-          {isOperationalView ? (
-            <section className="lancamentos-print-report__items" aria-label="Lançamentos operacionais">
-              {selectedPrintLancamentos.map(item => (
-                <article className="lancamentos-print-report__item" key={`print-${item.id}`}>
-                  <section className="lancamentos-print-report__block">
-                    <h2>Identificação</h2>
-                    <div className="lancamentos-print-report__grid lancamentos-print-report__grid--operational-identification">
-                      <div className="lancamentos-print-report__cell">
-                        <span className="lancamentos-print-report__label">Documento</span>
-                        <span className="lancamentos-print-report__value">{item.codigo_sequencial ? `${item.codigo_sequencial}${item.numero_parcela ? `-${item.numero_parcela}` : ''}` : '-'}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell">
-                        <span className="lancamentos-print-report__label">Entidade</span>
-                        <span className="lancamentos-print-report__value">{entidades.find(entidade => entidade.id === item.entidade_id)?.nome_razao_social || 'N/A'}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell">
-                        <span className="lancamentos-print-report__label">Vencimento / referência</span>
-                        <span className="lancamentos-print-report__value">
-                          {formatPrintDate(item.data_vencimento)}
-                          <small>{getDaysOverdue(item.data_vencimento) > 0 ? `${getDaysOverdue(item.data_vencimento)} dia(s)` : getDaysOverdue(item.data_vencimento) === 0 ? 'Hoje' : '-'}</small>
-                        </span>
-                      </div>
-                      <div className="lancamentos-print-report__cell">
-                        <span className="lancamentos-print-report__label">Data do documento</span>
-                        <span className="lancamentos-print-report__value">{formatPrintDate(item.data_emissao)}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell">
-                        <span className="lancamentos-print-report__label">Status</span>
-                        <span className="lancamentos-print-report__value">{getPrintStatus(item)}</span>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="lancamentos-print-report__block">
-                    <h2>Memória do cálculo</h2>
-                    <div className="lancamentos-print-report__grid lancamentos-print-report__grid--operational-values">
-                      <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
-                        <span className="lancamentos-print-report__label">Valor documento original</span>
-                        <span className="lancamentos-print-report__value">{valueFormatter(item.valor_original || item.valor_previsto)}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
-                        <span className="lancamentos-print-report__label">Valor parcela original</span>
-                        <span className="lancamentos-print-report__value">{valueFormatter(item.valor_previsto)}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
-                        <span className="lancamentos-print-report__label">Desconto</span>
-                        <span className="lancamentos-print-report__value">{valueFormatter(calculateAdjustmentAmount(item.desconto_valor, item.desconto_tipo, item.valor_previsto))}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
-                        <span className="lancamentos-print-report__label">Acréscimo</span>
-                        <span className="lancamentos-print-report__value">{valueFormatter(calculateAdjustmentAmount(item.acrescimo_valor, item.acrescimo_tipo, item.valor_previsto))}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
-                        <span className="lancamentos-print-report__label">Valor pago</span>
-                        <span className="lancamentos-print-report__value">{valueFormatter(item.valor_recebido || 0)}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
-                        <span className="lancamentos-print-report__label">A pagar</span>
-                        <span className="lancamentos-print-report__value">{valueFormatter(getSaldoAPagar(item))}</span>
-                      </div>
-                    </div>
-                  </section>
-                </article>
-              ))}
-            </section>
-          ) : (
-            <section className="lancamentos-print-report__items" aria-label="Lançamentos financeiros">
-              {selectedPrintLancamentos.map(item => (
-                <article className="lancamentos-print-report__item" key={`print-${item.id}`}>
-                  <section className="lancamentos-print-report__block">
-                    <h2>Identificação</h2>
-                    <div className="lancamentos-print-report__grid lancamentos-print-report__grid--financial-identification">
-                      <div className="lancamentos-print-report__cell">
-                        <span className="lancamentos-print-report__label">Documento</span>
-                        <span className="lancamentos-print-report__value">{item.codigo_sequencial ? `${item.codigo_sequencial}${item.numero_parcela ? `-${item.numero_parcela}` : ''}` : '-'}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell">
-                        <span className="lancamentos-print-report__label">Fluxo</span>
-                        <span className="lancamentos-print-report__value">{item.tipo === 'entrada' ? 'Entrada' : 'Saída'}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell">
-                        <span className="lancamentos-print-report__label">Entidade</span>
-                        <span className="lancamentos-print-report__value">{entidades.find(entidade => entidade.id === item.entidade_id)?.nome_razao_social || 'N/A'}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell">
-                        <span className="lancamentos-print-report__label">Vencimento</span>
-                        <span className="lancamentos-print-report__value">{formatPrintDate(item.data_vencimento)}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell">
-                        <span className="lancamentos-print-report__label">Pagamento</span>
-                        <span className="lancamentos-print-report__value">{formatPrintDate(item.data_pagamento)}</span>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="lancamentos-print-report__block">
-                    <h2>Valores</h2>
-                    <div className="lancamentos-print-report__grid lancamentos-print-report__grid--financial-values">
-                      <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
-                        <span className="lancamentos-print-report__label">Valor previsto</span>
-                        <span className="lancamentos-print-report__value">{valueFormatter(item.valor_previsto)}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
-                        <span className="lancamentos-print-report__label">Desconto</span>
-                        <span className="lancamentos-print-report__value">{valueFormatter(calculateAdjustmentAmount(item.desconto_valor, item.desconto_tipo, item.valor_previsto))}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
-                        <span className="lancamentos-print-report__label">Acréscimo</span>
-                        <span className="lancamentos-print-report__value">{valueFormatter(calculateAdjustmentAmount(item.acrescimo_valor, item.acrescimo_tipo, item.valor_previsto))}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell lancamentos-print-report__cell--number">
-                        <span className="lancamentos-print-report__label">Valor exibido</span>
-                        <span className="lancamentos-print-report__value">{valueFormatter(getValorLiquido(item))}</span>
-                      </div>
-                      <div className="lancamentos-print-report__cell">
-                        <span className="lancamentos-print-report__label">Status</span>
-                        <span className="lancamentos-print-report__value">{getPrintStatus(item)}</span>
-                      </div>
-                    </div>
-                  </section>
-                </article>
-              ))}
-            </section>
-          )}
-
+      {/* Cálculo da seleção: mesma barra flutuante do Extrato — entradas somam, saídas
+          subtraem e o líquido é o resultado. */}
+      {isFinanceiroView && !isExtratoView && selectedPrintLancamentos.length > 0 && (
+        <div
+          data-testid="financeiro-total-selecao"
+          className="sticky bottom-5 z-[60] flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-neutral-200 bg-neutral-50/95 px-5 py-3 shadow-[0_-2px_10px_rgba(0,0,0,0.10)] backdrop-blur-md"
+        >
+          <div className="flex flex-wrap items-center gap-4">
+            <span className="text-[10px] font-black uppercase tracking-widest text-neutral-900">
+              Total ({selectedPrintLancamentos.length} selecionado{selectedPrintLancamentos.length === 1 ? '' : 's'})
+            </span>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-neutral-400">
+              Entradas {valueFormatter(totaisDaSelecao.entradas)} · Saídas {valueFormatter(totaisDaSelecao.saidas)}
+            </span>
+          </div>
+          <span className="font-black font-mono text-sm text-neutral-900">{valueFormatter(totaisDaSelecao.liquido)}</span>
         </div>
-      </div>
+      )}
+
+      {relatorioImpressao}
 
       {modalLogsCompletos}
 
