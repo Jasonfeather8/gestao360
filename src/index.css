@@ -179,6 +179,12 @@ body {
     visibility: hidden !important;
   }
 
+  /* O relatório é portalado direto no <body>: esconde a casca do app e deixa só o
+     relatório, em fluxo normal, para o navegador paginar o documento inteiro. */
+  body.printing-lancamentos-report > *:not(.lancamentos-print-report) {
+    display: none !important;
+  }
+
   body.printing-lancamentos-report .lancamentos-print-report,
   body.printing-lancamentos-report .lancamentos-print-report * {
     visibility: visible !important;
@@ -186,12 +192,9 @@ body {
 
   body.printing-lancamentos-report .lancamentos-print-report {
     display: block !important;
-    position: absolute !important;
-    top: 0 !important;
-    right: 0 !important;
-    bottom: auto !important;
-    left: 0 !important;
-    z-index: 2147483647;
+    /* Em fluxo normal o relatório não fica preso ao bloco de contenção da casca do app
+       (posicionada e com overflow hidden), que limitava a impressão a uma única página. */
+    position: static !important;
     width: auto !important;
     max-width: none !important;
     min-width: 0 !important;

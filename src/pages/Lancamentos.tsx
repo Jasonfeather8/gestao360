@@ -36,6 +36,7 @@ import {
   Link2
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { useLancamentos, useContas, useEntidades, useCategorias, useUsuarios, useCentrosCusto, useCategoriasAjuste, useContasSaldos, useSaldosLancamentos, useReordenarExtratoDia, useLancamentoAnexosByIds, useTransferencias } from '../hooks/useData';
 import { useAuth } from '../hooks/useAuth';
 import { useUIStore } from '../store/uiStore';
@@ -1321,7 +1322,10 @@ export default function Lancamentos({
 
   // Documento de impressão da seleção: o mesmo relatório é usado pelas abas Financeiro e
   // Extrato e pelas telas de Pagar/Receber, cada uma com o seu título e o seu resumo.
-  const relatorioImpressao = (
+  // Fica em um portal no <body>, fora da casca do app (posicionada e com overflow hidden),
+  // senão o conteúdo que passa da altura da tela é recortado na impressão.
+  const relatorioImpressao = createPortal(
+    (
         <div className="lancamentos-print-report" aria-label="Relatório dos lançamentos selecionados">
           <div className="lancamentos-print-report__sheet">
             <header className="lancamentos-print-report__header">
@@ -1486,6 +1490,8 @@ export default function Lancamentos({
 
           </div>
         </div>
+    ),
+    document.body,
   );
 
   // Aplica à lista do Extrato a mesma normalização cronológica usada pela Conciliação.
